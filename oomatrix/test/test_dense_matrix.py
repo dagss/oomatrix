@@ -22,6 +22,9 @@ def test_repr():
     
     yield eq_, '10x10 matrix: A + B', repr(A + B)
     yield eq_, '10x10 matrix: A + A + A + B', repr(A + A + A + B)
+    yield eq_, '10x10 matrix: A * A * A * B', repr(A * A * A * B)
+    yield eq_, '10x10 matrix: (A * A) + (A * B)', repr(A * A + A * B)
+    yield eq_, '10x10 matrix: ((A * A) + A) * B', repr((A * A + A) * B)
 
     
     
