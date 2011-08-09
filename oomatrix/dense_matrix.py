@@ -1,3 +1,4 @@
+import numpy as np
 
 class Matrix(object):
     def __add__(self, other):
@@ -9,6 +10,8 @@ class Matrix(object):
     def __mul__(self, other):
         if isinstance(other, Matrix):
             return MultipliedMatrices([self, other])
+        elif isinstance(other, np.ndarray):
+            return self.apply(other)
         else:
             raise NotImplementedError()
 
@@ -17,6 +20,14 @@ class Matrix(object):
         if expr[0] == '(':
             expr = expr[1:-1]
         return "%dx%d matrix: %s" % (self.shape[0], self.shape[1], expr)
+
+    def apply(self, other):
+        #TODO: Check for compatibility
+        return self._apply(other)
+    
+    def _apply(self, other):
+        raise NotImplementedError()
+        
 
 class AddedMatrices(Matrix):
     def __init__(self, matrices):
@@ -32,11 +43,16 @@ class AddedMatrices(Matrix):
         elif isinstance(other, Matrix):
             return AddedMatrices(self.matrices + [other])
         else:
-            return Matrix.__add__(other)
+            return Matrix.__add__(self, other)
 
     def expression_string(self):
         return "(%s)" % " + ".join(x.expression_string() for x in self.matrices)
 
+    def _apply(self, vec):
+        sum = 0
+        for M in self.matrices:
+            sum += M._apply(vec)
+        return sum
 
 class MultipliedMatrices(Matrix):
     def __init__(self, matrices):
@@ -52,12 +68,15 @@ class MultipliedMatrices(Matrix):
         elif isinstance(other, Matrix):
             return MultipliedMatrices(self.matrices + [other])
         else:
-            return Matrix.__add__(other)
+            return Matrix.__mul__(self, other)
 
     def expression_string(self):
         return "(%s)" % " * ".join(x.expression_string() for x in self.matrices)
 
-
+    def _apply(self, vec):
+        for M in self.matrices[::-1]:
+            vec = M._apply(vec)
+        return vec
 
 class DenseMatrix(Matrix):
     def __init__(self, array, name):
@@ -68,3 +87,8 @@ class DenseMatrix(Matrix):
     def expression_string(self):
         return "%s" % self.name
 
+    def _apply(self, other):
+        #TODO: Check for compatibility
+        if other.ndim > 2:
+            raise NotImplementedError()
+        return np.dot(self.array, other)
