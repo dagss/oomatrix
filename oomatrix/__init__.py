@@ -1,1 +1,1 @@
-from dense_matrix import DenseMatrix
+from .matrix import Matrix
