@@ -12,13 +12,10 @@ class BinaryOperationCollection(object):
 class MatrixRepresentation(object):
     left_shape = None
     right_shape = None
+    dtype = None
 
-
-    def symbolic_add(self, other):
-        return AddedMatrices([self, other])
-
-    def symbolic_mul(self, other):
-        return MultipliedMatrices([self, other])
+    def get_type(self):
+        return type(self)
 
     #TODO: Nice idea, not needed now
     ## def memory_use(self):
@@ -56,37 +53,6 @@ def conversion_cost(target_cls):
 #        super(MatrixRepresentationMetaclass, cls).__init__(name, bases, dct)
         
     
-
-
-class ExpressionNode(MatrixRepresentation):
-    pass
-
-class AddedMatrices(ExpressionNode):
-    def __init__(self, matrices):
-        self.matrices = matrices
-        if len(matrices) == 0:
-            raise ValueError()
-        self.left_shape = matrices[0].left_shape
-        self.right_shape = matrices[0].right_shape
-
-    def symbolic_add(self, other):
-        if isinstance(other, AddedMatrices):
-            return AddedMatrices(self.matrices + other.matrices)
-        else:
-            return AddedMatrices(self.matrices + [other])
-
-
-class MultipliedMatrices(ExpressionNode):
-    def __init__(self, matrices):
-        self.matrices = matrices
-        if len(matrices) == 0:
-            raise ValueError()
-        self.left_shape = matrices[0].left_shape
-        self.right_shape = matrices[-1].right_shape
-
-    def symbolic_mul(self, other):
-        if isinstance(other, MultipliedMatrices):
-            return MultipliedMatrices(self.matrices + other.matrices)
-        else:
-            return MultipliedMatrices(self.matrices + [other])
+class TODO:
+    name = 'todo'
 
