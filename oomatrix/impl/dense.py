@@ -9,6 +9,9 @@ class NumPyWrapper(object):
         self.right_shape = (array.shape[1],)
         self.dtype = array.dtype
 
+    def get_element(self, i, j):
+        return self.array[i, j]
+
 class ColumnMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'column-major'
 

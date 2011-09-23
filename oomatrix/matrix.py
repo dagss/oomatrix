@@ -158,14 +158,34 @@ class Matrix(ExpressionNode):
             namestr,
             dtypestr)
 
+    def format_contents_brief(self):
+        """
+        Give a representation of the contents
+        """
+        # TODO: Actually make this brief. This is the
+        # reason for the ackward way of fetching elements:
+        # Normally only the corners are fetched
+        (m,), (n,) = self.left_shape, self.right_shape
+        lines = []
+        for i in range(m):
+            elems = [str(self[i, j]) for j in range(n)]
+            s = ' '.join(elems)
+            lines.append('[%s]' % s)
+        return '\n'.join(lines)
+
+    def __getitem__(self, index):
+        i, j = index # todo: support slices etc.
+        return self._impl.get_element(i, j)
+
     def __repr__(self):
         assert len(self.left_shape) == 1
         assert len(self.right_shape) == 1
 
+        lines = []
         if not self.is_expression():
-            return self.single_line_description()
+            lines.append(self.single_line_description())
+            lines.append(self.format_contents_brief())
         else:
-            lines = []
             lines.append('%s given by:' % self.single_line_description())
             lines.append('')
             expression, matrices = self.format_expression()
@@ -177,7 +197,7 @@ class Matrix(ExpressionNode):
 #                assert not matrix.is_expression()
                 lines.append('    %s: %s' %
                              (name, matrix.single_line_description(skip_name=True)))
-            return '\n'.join(lines)
+        return '\n'.join(lines)
             
     def _format_expression(self, name_to_matrix):
         if self._expr is not None:
