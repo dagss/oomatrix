@@ -94,13 +94,13 @@ class Matrix(ExpressionNode):
             if diagonal:
                 if obj.ndim != 1:
                     raise ValueError()
-                from .repr import diagonal
+                from .impl import diagonal
                 r = diagonal.DiagonalMatrixRepresentation(obj)
             else:
                 if obj.ndim != 2:
                     raise ValueError()
 
-                from .repr import dense
+                from .impl import dense
                 if obj.flags.c_contiguous:
                     r = dense.RowMajorMatrixRepresentation(obj)
                 elif obj.flags.f_contiguous:
