@@ -13,63 +13,67 @@ def test_find_shortest_path():
     f = 'f'
     g = 'g'
     h = 'h'
-    graph = {a : [(b, 1), (c, 2)], b : [(a, 1), (d, 1)], c : [(a, 2), (d, 2)],
-             d : [(c, 2), (b, 1)]}
-    path = find_shortest_path(graph, a, [d])
-    yield eq_, path, [a, b, d]
 
-    graph = {a : [(b, 2), (c, 1)], b : [(a, 2), (d, 2)], c : [(a, 1), (d, 1)],
-             d : [(c, 1), (b, 2)]}
+    graph = {a : [(b, 1, 'ab'), (c, 2, 'ac')], b : [(a, 1, 'ba'), 
+            (d, 1, 'bd')], c : [(a, 2, 'ca'), (d, 2, 'cd')], d : [(c, 2, 'dc'), 
+            (b, 1, 'db')]}
     path = find_shortest_path(graph, a, [d])
-    yield eq_, path, [a, c, d]
+    yield eq_, path, ['ab', 'bd']
 
-    paths = [[a, c, d], [a, b, d]]
-    graph = {a : [(b, 1), (c, 1)], b : [(a, 1), (d, 1)], c : [(a, 1), (d, 1)],
-             d : [(c, 1), (b, 1)]}
+    graph = {a : [(b, 2, 'ab'), (c, 1, 'ac')], b : [(a, 2, 'ba'), (d, 2, 'bd')],
+            c : [(a, 1, 'ca'), (d, 1, 'cd')], d : [(c, 1, 'dc'), (b, 2, 'db')]}
+    path = find_shortest_path(graph, a, [d])
+    yield eq_, path, ['ac', 'cd']
+
+    paths = [['ac', 'cd'], ['ab', 'bd']]
+    graph = {a : [(b, 1, 'ab'), (c, 1, 'ac')], b : [(a, 1, 'ba'), (d, 1, 'bd')],
+            c : [(a, 1, 'ca'), (d, 1, 'cd')], d : [(c, 1, 'dc'), (b, 1, 'db')]}
     path = find_shortest_path(graph, a, [d])
     yield ok_, path in paths
 
-    graph = {a : [(b, 1), (c, 10)], b : [(a, 1), (c, 1), (d, 10)], 
-            c : [(a, 10), (b, 1), (d, 1)], d : [(c, 1), (b, 10)]}
+    graph = {a : [(b, 1, 'ab'), (c, 10, 'ac')], b : [(a, 1, 'ba'), (c, 1, 'bc'),
+        (d, 10, 'bd')], c : [(a, 10, 'ca'), (b, 1, 'cb'), (d, 1, 'cd')], 
+        d : [(c, 1, 'dc'), (b, 10, 'db')]}
     path = find_shortest_path(graph, a, [d])
-    yield eq_, path, [a, b, c, d]
+    yield eq_, path, ['ab', 'bc', 'cd']
 
-    graph = {a : [(b, 1), (c, 2)], b : [(d, 1)], c : [(d, 2)],
-            d : []}
+    graph = {a : [(b, 1, 'ab'), (c, 2, 'ac')], b : [(d, 1, 'bd')], 
+            c : [(d, 2, 'cd')], d : []}
     path = find_shortest_path(graph, a, [d])
-    yield eq_, path, [a, b, d]
+    yield eq_, path, ['ab', 'bd']
 
     graph = {a : []}
     path = find_shortest_path(graph, a, [a])
-    yield eq_, path, [a]
+    yield eq_, path, [None]
 
-    graph = {a : [(b, 1), (c, 2)], b : [(a, 1), (d, 1)], c : [(a, 2), (d, 2)],
-             d : [(c, 2), (b, 1)]}
+    graph = {a : [(b, 1, 'ab'), (c, 2, 'ac')], b : [(a, 1, 'ba'), (d, 1, 'bd')],
+            c : [(a, 2, 'ca'), (d, 2, 'cd')], d : [(c, 2, 'dc'), (b, 1, 'db')]}
     path = find_shortest_path(graph, a, [c])
-    yield eq_, path, [a, c]
+    yield eq_, path, ['ac']
 
-    graph = {a : [(b, 1), (c, 10)], b : [(a, 1), (c, 1), (d, 10)], 
-            c : [(a, 10), (b, 1), (d, 1)], d : [(c, 1), (b, 10)]}
+    graph = {a : [(b, 1, 'ab'), (c, 10, 'ac')], b : [(a, 1, 'ba'), (c, 1, 'bc'),
+        (d, 10, 'bd')], c : [(a, 10, 'ca'), (b, 1, 'cb'), (d, 1, 'cd')], 
+        d : [(c, 1, 'dc'), (b, 10, 'db')]}
     path = find_shortest_path(graph, a, [c])
-    yield eq_, path, [a, b, c]
+    yield eq_, path, ['ab', 'bc']
 
     def func():
-        graph = {a : [(b, 1), (c, 1)], b : [], c : []}
+        graph = {a : [(b, 1, 'ab'), (c, 1, 'ac')], b : [], c : []}
         path = find_shortest_path(graph, a, [b, c])
     yield assert_raises, ValueError, func
 
-    graph = {a : [(b, 1), (c, 2)], b : [], c : []}
+    graph = {a : [(b, 1, 'ab'), (c, 2, 'ac')], b : [], c : []}
     path = find_shortest_path(graph, a, [b, c])
-    yield eq_, path, [a, b]
+    yield eq_, path, ['ab']
 
     def func():
         #No way to get to c - can only get *from* c
-        graph = {a : [(b, 1)], b : [], c : [(a, 1)]}
+        graph = {a : [(b, 1, 'ab')], b : [], c : [(a, 1, 'ca')]}
         path = find_shortest_path(graph, a, [c])
     yield assert_raises, ValueError, func
 
-    graph = {a : [(b, 1), (c, 2), (d, 1)], b : [(a, 1), (e, 1)], 
-            c : [(a, 1), (e, 1)], d : [(a, 1), (e, 1)], e : [(b, 1), (c, 1), 
-                (d, 1)]}
+    graph = {a : [(b, 1, 'ab'), (c, 2, 'ac'), (d, 1, 'ad')], b : [(a, 1, 'ba'),
+            (e, 1, 'be')], c : [(a, 1, 'ca'), (e, 1, 'ce')], d : [(a, 1, 'da'),
+            (e, 1, 'de')], e : [(b, 1, 'eb'), (c, 1, 'ec'), (d, 1, 'ed')]}
     path = find_shortest_path(graph, a, [b, c])
-    yield eq_, path, [a, b]
+    yield eq_, path, ['ab']
