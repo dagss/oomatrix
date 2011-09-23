@@ -66,7 +66,6 @@ def find_shortest_path(get_edges, start, stops):
                     costheap.remove((considered[n_vertex], n_vertex))
                 considered[n_vertex] = considered[curr_vertex] + cost
                 previous[n_vertex] = curr_vertex
-                prior_ind += 1
                 heapq.heappush(costheap, (considered[n_vertex], n_vertex))
         currcost, curr_vertex = heapq.heappop(costheap)
 
