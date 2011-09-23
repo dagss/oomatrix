@@ -47,6 +47,8 @@ def find_shortest_path(get_edges, start, stops):
         path.reverse()
         return path
 
+    stops = set(stops)
+
     if start in stops:
         return [start]
 
