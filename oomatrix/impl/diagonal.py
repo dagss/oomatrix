@@ -1,12 +1,12 @@
 import numpy as np
 
-from ..core import MatrixRepresentation, AddAction, conversion
+from ..core import MatrixImpl, AddAction, conversion
 from ..cost import FLOP, MEM
-from .dense import SymmetricContiguousMatrixRepresentation
+from .dense import SymmetricContiguousImpl
 
-__all__ = ['DiagonalMatrixRepresentation']
+__all__ = ['DiagonalImpl']
 
-class DiagonalMatrixRepresentation(MatrixRepresentation):
+class DiagonalImpl(MatrixImpl):
     name = 'diagonal'
     prose = ('the diagonal matrix', 'a diagonal matrix')
 
@@ -20,25 +20,25 @@ class DiagonalMatrixRepresentation(MatrixRepresentation):
         self.dtype = array.dtype
 
     def as_dtype(self, dtype):
-        return DiagonalMatrixRepresentation(self.array.astype(dtype))
+        return DiagonalImpl(self.array.astype(dtype))
 
-    @conversion(SymmetricContiguousMatrixRepresentation)
+    @conversion(SymmetricContiguousImpl)
     def to_dense(self):
         n = self._n
         i = np.arange(n)
         out = np.zeros((n, n), dtype=self.array.dtype)
         out[i, i] = self.array
-        return SymmetricContiguousMatrixRepresentation(out)
+        return SymmetricContiguousImpl(out)
 
 
 class DiagonalPlusDiagonal(AddAction):
-    in_types = [DiagonalMatrixRepresentation] * 2
-    out_type = DiagonalMatrixRepresentation
+    in_types = [DiagonalImpl] * 2
+    out_type = DiagonalImpl
     description = 'Sum diagonal elements of {0} and {1}.'
 
     @staticmethod
     def perform(A, B):
-        return DiagonalMatrixRepresentation(A.array + B.array)
+        return DiagonalImpl(A.array + B.array)
 
     @staticmethod
     def cost(A, B):

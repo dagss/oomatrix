@@ -1,6 +1,6 @@
 import numpy as np
 
-from .core import MatrixRepresentation
+from .core import MatrixImpl
 
 __all__ = ['Matrix']
 
@@ -87,7 +87,7 @@ class Matrix(ExpressionNode):
             self.right_shape = obj.right_shape
             return
         
-        if isinstance(obj, MatrixRepresentation):
+        if isinstance(obj, MatrixImpl):
             r = obj
         else:
             obj = np.asarray(obj)
@@ -95,18 +95,18 @@ class Matrix(ExpressionNode):
                 if obj.ndim != 1:
                     raise ValueError()
                 from .impl import diagonal
-                r = diagonal.DiagonalMatrixRepresentation(obj)
+                r = diagonal.DiagonalImpl(obj)
             else:
                 if obj.ndim != 2:
                     raise ValueError()
 
                 from .impl import dense
                 if obj.flags.c_contiguous:
-                    r = dense.RowMajorMatrixRepresentation(obj)
+                    r = dense.RowMajorImpl(obj)
                 elif obj.flags.f_contiguous:
-                    r = dense.ColMajorMatrixRepresentation(obj)
+                    r = dense.ColMajorImpl(obj)
                 else:
-                    r = dense.StridedMatrixRepresentation(obj)
+                    r = dense.StridedImpl(obj)
             
         self.name = name
         self._expression = None

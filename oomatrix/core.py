@@ -9,7 +9,7 @@ class BinaryOperationCollection(object):
     pass
 
 
-class MatrixRepresentation(object):
+class MatrixImpl(object):
     left_shape = None
     right_shape = None
     dtype = None
@@ -48,9 +48,9 @@ def conversion_cost(target_cls):
         return func
     return dec
 
-#class MatrixRepresentationMetaclass(type):
+#class MatrixImplMetaclass(type):
 #    def __init__(cls, name, bases, dct):
-#        super(MatrixRepresentationMetaclass, cls).__init__(name, bases, dct)
+#        super(MatrixImplMetaclass, cls).__init__(name, bases, dct)
         
     
 class TODO:

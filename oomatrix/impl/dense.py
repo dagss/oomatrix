@@ -1,4 +1,4 @@
-from ..core import MatrixRepresentation, AddAction, conversion, conversion_cost
+from ..core import MatrixImpl, AddAction, conversion, conversion_cost
 
 class NumPyWrapper(object):
     # Mix-in for dense matrix represenations
@@ -9,19 +9,19 @@ class NumPyWrapper(object):
         self.right_shape = (array.shape[1],)
         self.dtype = array.dtype
 
-class ColumnMajorMatrixRepresentation(MatrixRepresentation, NumPyWrapper):
+class ColumnMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'column-major'
 
 
-class RowMajorMatrixRepresentation(MatrixRepresentation, NumPyWrapper):
+class RowMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'row-major'
 
 
-class StridedMatrixRepresentation(MatrixRepresentation, NumPyWrapper):
+class StridedImpl(MatrixImpl, NumPyWrapper):
     name = 'strided'
 
 
-class SymmetricContiguousMatrixRepresentation(MatrixRepresentation, NumPyWrapper):
+class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
     """
     Matrices that are symmetric and contiguous, and stored in the full
     format, are contiguous in both column-major and row-major format.
@@ -29,19 +29,19 @@ class SymmetricContiguousMatrixRepresentation(MatrixRepresentation, NumPyWrapper
     name = 'symmetric contiguous'
     prose = ('the symmetrix contiguous', 'a symmetric contiguous')
 
-    @conversion(ColumnMajorMatrixRepresentation)
+    @conversion(ColumnMajorImpl)
     def to_column_major(self):
-        return ColumnMajorMatrixRepresentation(self.array)
+        return ColumnMajorImpl(self.array)
 
-    @conversion_cost(ColumnMajorMatrixRepresentation)
+    @conversion_cost(ColumnMajorImpl)
     def to_column_major_cost(self):
         return 0
 
-    @conversion(RowMajorMatrixRepresentation)
+    @conversion(RowMajorImpl)
     def to_row_major(self):
-        return RowMajorMatrixRepresentation(self.array)
+        return RowMajorImpl(self.array)
 
-    @conversion_cost(RowMajorMatrixRepresentation)
+    @conversion_cost(RowMajorImpl)
     def to_row_major_cost(self):
         return 0
 
