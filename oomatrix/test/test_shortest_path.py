@@ -2,7 +2,7 @@ from nose.tools import ok_, eq_, assert_raises
 from numpy.testing import assert_almost_equal
 import numpy as np
 
-from shortest_path import find_shortest_path
+from ..shortest_path import find_shortest_path
 
 def test_find_shortest_path():
     a = 'a'
