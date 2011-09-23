@@ -22,14 +22,19 @@ class DiagonalImpl(MatrixImpl):
     def as_dtype(self, dtype):
         return DiagonalImpl(self.array.astype(dtype))
 
-@conversion(DiagonalImpl, SymmetricContiguousImpl)
-def diagonal_to_dense(self):
-    n = D._n
-    i = np.arange(n)
-    out = np.zeros((n, n), dtype=D.dtype)
-    out[i, i] = D.array
-    return SymmetricContiguousImpl(out)
+    @conversion(SymmetricContiguousImpl)
+    def diagonal_to_dense(D):
+        n = D._n
+        i = np.arange(n)
+        out = np.zeros((n, n), dtype=D.dtype)
+        out[i, i] = D.array
+        return SymmetricContiguousImpl(out)
 
+    def get_element(self, i, j):
+        if i != j:
+            return 0
+        else:
+            return self.array[i]
 
 @add_operation((DiagonalImpl, DiagonalImpl), DiagonalImpl)
 def diagonal_plus_diagonal(A, B):

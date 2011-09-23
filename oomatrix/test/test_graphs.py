@@ -18,6 +18,9 @@ def test_shortest():
                               set([DiagonalImpl]))
     r = addition_conversion_graph.perform((Di._impl, Di._impl))
     print Matrix('R', r)
-    print r.array
+
+    r = addition_conversion_graph.perform((Di._impl, De._impl))
+    print Matrix('R', r)
+
     # TODO...
     

@@ -16,6 +16,12 @@ class ColumnMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'column-major'
 
 
+@add_operation((ColumnMajorImpl, ColumnMajorImpl), ColumnMajorImpl)
+def diagonal_plus_diagonal(A, B):
+    return ColumnMajorImpl(A.array + B.array)
+
+
+
 class RowMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'row-major'
 
