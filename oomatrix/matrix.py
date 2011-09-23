@@ -79,9 +79,9 @@ class MultipliedMatrices(ExpressionNode):
 class Matrix(ExpressionNode):
     def __init__(self, name, obj, diagonal=False):
         if isinstance(obj, ExpressionNode):
-            self._expression = obj
+            self._expr = obj
             self.name = name
-            self._representation = None
+            self._impl = None
             self.dtype = None
             self.left_shape = obj.left_shape
             self.right_shape = obj.right_shape
@@ -109,8 +109,8 @@ class Matrix(ExpressionNode):
                     r = dense.StridedImpl(obj)
             
         self.name = name
-        self._expression = None
-        self._representation = r
+        self._expr = None
+        self._impl = r
         self.left_shape = r.left_shape
         self.right_shape = r.right_shape
         self.dtype = r.dtype
@@ -119,14 +119,14 @@ class Matrix(ExpressionNode):
         """
         Returns the type of this matrix, if it is computed
         """
-        if self._representation is not None:
-            return self._representation.get_type()
+        if self._impl is not None:
+            return self._impl.get_type()
         else:
-            assert self._expression is not None
-            return self._expression.get_type()
+            assert self._expr is not None
+            return self._expr.get_type()
 
     def is_expression(self):
-        return self._expression is not None
+        return self._expr is not None
 
     def __add__(self, other):
         if not isinstance(other, Matrix):
@@ -180,8 +180,8 @@ class Matrix(ExpressionNode):
             return '\n'.join(lines)
             
     def _format_expression(self, name_to_matrix):
-        if self._expression is not None:
-            return self._expression._format_expression(name_to_matrix)
+        if self._expr is not None:
+            return self._expr._format_expression(name_to_matrix)
         else:
             name = self.name
             if name is None:
