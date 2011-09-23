@@ -77,6 +77,18 @@ class AdditionGraph(object):
     def __init__(self, add_graph, conversion_graph):
         self.add_graph, self.conversion_graph = add_graph, conversion_graph
 
+    def get_vertices(self, impl_types=None):
+        """
+        Get the vertices in the addition graph, for the matrix implementation
+        types of interest. Default is all registered/loaded types.
+        """
+        if impl_types is None:
+            impl_types = _all_impl_types
+        for A in impl_types:
+            for B in impl_types:
+                yield (A, B) # source operands
+            yield A # computed targe operands
+
     def get_edges(self, vertex):
         if isinstance(vertex, tuple):
             # Has not yet applied to operation. First, provide all
