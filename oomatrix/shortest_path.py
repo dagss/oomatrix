@@ -13,7 +13,7 @@ def find_shortest_path(get_edges, start, stops):
         Describes the graph.  If a callable, it should take a vertex
         as its single argument and return an iterable (possibly empty)
         listing the edges going from the node, as tuples `(vertex,
-        cost)`. If not a callable, the []-operator will be used
+        cost, payload)`. If not a callable, the []-operator will be used
         instead.
 
     start : immutable object
@@ -27,9 +27,11 @@ def find_shortest_path(get_edges, start, stops):
     Returns
     -------
     shortest_path : list
-        The shortest path as a list of vertex objects. The first
-        and last item are `start` and `stop`, respectively, where `stop` is
-        the first endpoint reached among the possible endpoints.
+        The shortest path as a list of payload objects - that is, 
+        the objects representing the paths between the nodes. So if the
+        shortest path has n nodes, the result will be a list of length n-1.
+        If start is in the set of stops, will return None. The first item will
+        be the payload from the start node to the next.
     
     """
     if not callable(get_edges):
@@ -47,19 +49,30 @@ def find_shortest_path(get_edges, start, stops):
         path.reverse()
         return path
 
+    def resolve_payload_path(start):
+        path = []
+        path.append(prevpay[start])
+        prev = previous[start]
+        while prevpay[prev] is not None:
+            path.append(prevpay[prev])
+            prev = previous[prev]
+        path.reverse()
+        return path
+
     stops = set(stops)
 
     if start in stops:
-        return [start]
+        return [None]
 
     curr_vertex = start
     visited = set([curr_vertex])
     considered = {curr_vertex : 0}
     previous = {curr_vertex : None}
+    prevpay = {curr_vertex : None}
     costheap = []
     roof = None
     while True:
-        for n_vertex, cost in get_edges(curr_vertex):
+        for n_vertex, cost, payload in get_edges(curr_vertex):
             if n_vertex in visited:
                 continue
             if (n_vertex not in considered or 
@@ -68,6 +81,7 @@ def find_shortest_path(get_edges, start, stops):
                     costheap.remove((considered[n_vertex], n_vertex))
                 considered[n_vertex] = considered[curr_vertex] + cost
                 previous[n_vertex] = curr_vertex
+                prevpay[n_vertex] = payload
                 heapq.heappush(costheap, (considered[n_vertex], n_vertex))
         currcost, curr_vertex = heapq.heappop(costheap)
 
@@ -78,7 +92,7 @@ def find_shortest_path(get_edges, start, stops):
         if curr_vertex in stops:
             if roof is None:
                 roof = currcost
-                path = resolve_path(curr_vertex)
+                path = resolve_payload_path(curr_vertex)
                 stops.remove(curr_vertex)
             else:
                 if roof == currcost:
