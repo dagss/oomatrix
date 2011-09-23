@@ -1,4 +1,4 @@
-from ..core import MatrixImpl, AddAction, conversion, conversion_cost
+from ..core import MatrixImpl, conversion, add_operation
 
 class NumPyWrapper(object):
     # Mix-in for dense matrix represenations
@@ -33,16 +33,8 @@ class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
     def to_column_major(self):
         return ColumnMajorImpl(self.array)
 
-    @conversion_cost(ColumnMajorImpl)
-    def to_column_major_cost(self):
-        return 0
-
     @conversion(RowMajorImpl)
     def to_row_major(self):
         return RowMajorImpl(self.array)
-
-    @conversion_cost(RowMajorImpl)
-    def to_row_major_cost(self):
-        return 0
 
         

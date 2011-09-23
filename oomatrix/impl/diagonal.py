@@ -1,7 +1,7 @@
 import numpy as np
 
-from ..core import MatrixImpl, AddAction, conversion
-from ..cost import FLOP, MEM
+from ..core import MatrixImpl, add_operation, conversion
+from ..cost import FLOP, MEM, MEMOP
 from .dense import SymmetricContiguousImpl
 
 __all__ = ['DiagonalImpl']
@@ -22,24 +22,16 @@ class DiagonalImpl(MatrixImpl):
     def as_dtype(self, dtype):
         return DiagonalImpl(self.array.astype(dtype))
 
-    @conversion(SymmetricContiguousImpl)
-    def to_dense(self):
-        n = self._n
-        i = np.arange(n)
-        out = np.zeros((n, n), dtype=self.array.dtype)
-        out[i, i] = self.array
-        return SymmetricContiguousImpl(out)
+@conversion(DiagonalImpl, SymmetricContiguousImpl)
+def diagonal_to_dense(self):
+    n = D._n
+    i = np.arange(n)
+    out = np.zeros((n, n), dtype=D.dtype)
+    out[i, i] = D.array
+    return SymmetricContiguousImpl(out)
 
 
-class DiagonalPlusDiagonal(AddAction):
-    in_types = [DiagonalImpl] * 2
-    out_type = DiagonalImpl
-    description = 'Sum diagonal elements of {0} and {1}.'
+@add_operation((DiagonalImpl, DiagonalImpl), DiagonalImpl)
+def diagonal_plus_diagonal(A, B):
+    return DiagonalImpl(A.array + B.array)
 
-    @staticmethod
-    def perform(A, B):
-        return DiagonalImpl(A.array + B.array)
-
-    @staticmethod
-    def cost(A, B):
-        return A.array.size * (FLOP + MEM)
