@@ -14,8 +14,7 @@ class DiagonalImpl(MatrixImpl):
         array = np.asarray(array)
         if array.ndim != 1:
             raise ValueError("Please pass a one-dimensional array")
-        self.left_shape = self.right_shape = array.shape
-        self._n = array.shape[0]
+        self.ncols = self.nrows = array.shape[0]
         self.array = array
         self.dtype = array.dtype
 
@@ -24,7 +23,7 @@ class DiagonalImpl(MatrixImpl):
 
     @conversion(SymmetricContiguousImpl)
     def diagonal_to_dense(D):
-        n = D._n
+        n = D.ncols
         i = np.arange(n)
         out = np.zeros((n, n), dtype=D.dtype)
         out[i, i] = D.array

@@ -16,11 +16,11 @@ def test_shortest():
     path = find_shortest_path(addition_conversion_graph.get_edges,
                               (DiagonalImpl, DiagonalImpl),
                               set([DiagonalImpl]))
-    r = addition_conversion_graph.perform((Di._impl, Di._impl))
-    print Matrix('R', r)
+#    r = addition_conversion_graph.perform((Di._impl, Di._impl))
+#    print Matrix('R', r)
 
-    r = addition_conversion_graph.perform((Di._impl, De._impl))
-    print Matrix('R', r)
+#    r = addition_conversion_graph.perform((Di._impl, De._impl))
+#    print Matrix('R', r)
 
     # TODO...
     

@@ -5,8 +5,8 @@ class NumPyWrapper(object):
 
     def __init__(self, array):
         self.array = array
-        self.left_shape = (array.shape[0],)
-        self.right_shape = (array.shape[1],)
+        self.nrows = array.shape[0]
+        self.ncols = array.shape[1]
         self.dtype = array.dtype
 
     def get_element(self, i, j):
