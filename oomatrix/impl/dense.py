@@ -16,12 +16,6 @@ class ColumnMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'column-major'
 
 
-@add_operation((ColumnMajorImpl, ColumnMajorImpl), ColumnMajorImpl)
-def diagonal_plus_diagonal(A, B):
-    return ColumnMajorImpl(A.array + B.array)
-
-
-
 class RowMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'row-major'
 
@@ -46,4 +40,9 @@ class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
     def to_row_major(self):
         return RowMajorImpl(self.array)
 
-        
+
+for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
+    @add_operation((T, T), T)
+    def add(A, B):
+        return T(A.array + B.array)
+

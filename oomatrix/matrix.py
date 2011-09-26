@@ -43,6 +43,11 @@ class Matrix(object):
         """
         return self._expr.get_type()
 
+    def get_impl(self):
+        if self.is_expression():
+            raise ValueError("Matrix not computed")
+        return self._expr.matrix_impl
+
     def is_expression(self):
         return type(self._expr) is not LeafNode
 
