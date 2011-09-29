@@ -101,7 +101,7 @@ class AdditionGraph(object):
         types of interest. Default is all registered/loaded types.
         """
         if kinds is None:
-            kinds = _all_impl_types
+            kinds = self.conversion_graph.all_kinds
         kinds = list(kinds)
 
         def all_subsets(size, itemlst):
@@ -116,7 +116,7 @@ class AdditionGraph(object):
         n = min(max_node_size, len(kinds))
         for size in range(1, n + 1):
             for result in all_subsets(size, kinds):
-                yield set(result)
+                yield frozenset(result)
 
     def get_edges(self, vertex):
         # First, list all conversions
@@ -181,10 +181,9 @@ class AdditionGraph(object):
             target_kinds = self.conversion_graph.all_kinds
         stop_vertices = [frozenset((v,)) for v in target_kinds]
         path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
-        print path
         # Execute operations found
         matrices = reduced_operand_dict
-        for action, payload in path:
+        for payload in path:
             action, args = payload[0], payload[1:]
             if action == 'add':
                 kind_a, kind_b, to_kind, add_func, second_add_func = args
@@ -195,13 +194,12 @@ class AdditionGraph(object):
                 kind, to_kind, conv_func, second_add_func = args
                 A = matrices.pop(kind)
                 C = conv_func(A)
-                
             assert (to_kind in matrices) == (second_add_func is not None)
             if second_add_func is not None:
                 C = second_add_func(C, matrices[to_kind])
             matrices[to_kind] = C
 
-        M, = matrices
+        M, = matrices.values()
         return M
 
     # Decorator
