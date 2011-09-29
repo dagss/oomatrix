@@ -23,55 +23,43 @@ def add_to_graph(d, source_key, target_key, value):
     x[target_key] = value
     
 
-_all_impl_types = set()
-_conversion_db = {}
-_pending_conversion_registrations = {}
 
-# Decorator for registering conversion. Can be used either on
-# functions, or on methods in MatrixImpl instances, in which
-# case the first argument is optional...
-def conversion(arg1, arg2=None):
-    if arg2 is None:
-        dest_impl_type = arg1
+#
+# Operation graphs
+#
+
+class ConversionGraph(object):
+    # global shared class variable:
+    _global_pending_conversion_registrations = {}
+
+    def __init__(self):
+        self.conversions = {}
+        self.all_kinds = set()
+
+    #
+    # Decorators
+    #
+    def conversion_method(self, dest_impl_type):
         # Postpone figuring out source_type and registering to
         # the MatrixImplMetaclass
         def dec(func):
-            _pending_conversion_registrations[func] = (dest_impl_type,)
+            ConversionGraph._global_pending_conversion_registrations[func] = (
+                self, dest_impl_type)
             return func
         return dec
-    else:
-        source_impl_type, dest_impl_type = arg1, arg2
-        _all_impl_types.add(source_impl_type)
-        _all_impl_types.add(dest_impl_type)
+        
+    def conversion(self, arg1, arg2=None):
+        if arg2 is None:
+            return self.conversion_method(arg1)
+        source_impl_type, dest_impl_type = arg1, arg2        
+        self.all_kinds.add(source_impl_type)
+        self.all_kinds.add(dest_impl_type)
         def dec(func):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
-            add_to_graph(_conversion_db, source_impl_type, dest_impl_type, func)
+            add_to_graph(self.conversions, source_impl_type, dest_impl_type, func)
             return func
         return dec
-
-_add_operation_db = {}
-
-# Decorator
-def add_operation(source_impl_types, dest_impl_type):
-    if not isinstance(source_impl_types, tuple):
-        raise TypeError("source_impl_types must be a tuple")
-    _all_impl_types.update(source_impl_types)
-    _all_impl_types.add(dest_impl_type)
-    def dec(func):
-        if not callable(func):
-            raise TypeError("Does not decorate callable")
-        add_to_graph(_add_operation_db, source_impl_types, dest_impl_type, func)
-        return func
-    return dec
-
-
-
-
-
-#
-# Graph
-#
 
 class AdditionGraph(object):
     """
@@ -102,9 +90,10 @@ class AdditionGraph(object):
     size, addition operations move to sets having one less item.
     
     """
-    def __init__(self, add_operations, conversions):
-        self.add_operations, self.conversions = add_operations, conversions
-        
+
+    def __init__(self, conversion_graph):
+        self.conversion_graph = conversion_graph
+        self.add_operations = {}
 
     def get_vertices(self, max_node_size=4, kinds=None):
         """
@@ -131,8 +120,9 @@ class AdditionGraph(object):
 
     def get_edges(self, vertex):
         # First, list all conversions
+        conversions = self.conversion_graph.conversions
         for kind in vertex:
-            for to_kind, conv_func in self.conversions.get(kind, {}).iteritems():
+            for to_kind, conv_func in conversions.get(kind, {}).iteritems():
                 cost = 1
                 if to_kind in vertex:
                     # Converting to another kind that is already in vertex,
@@ -188,7 +178,7 @@ class AdditionGraph(object):
         # Find shortest path through graph to target_kinds
         start_vertex = frozenset(reduced_operand_dict) # get set of keys
         if target_kinds is None:
-            target_kinds = _all_impl_types
+            target_kinds = self.conversion_graph.all_kinds
         stop_vertices = [frozenset((v,)) for v in target_kinds]
         path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
         print path
@@ -214,7 +204,29 @@ class AdditionGraph(object):
         M, = matrices
         return M
 
-addition_conversion_graph = AdditionGraph(_add_operation_db, _conversion_db)
+    # Decorator
+    def add_operation(self, source_impl_types, dest_impl_type):
+        if not isinstance(source_impl_types, tuple):
+            raise TypeError("source_impl_types must be a tuple")
+        self.conversion_graph.all_kinds.update(source_impl_types)
+        self.conversion_graph.all_kinds.add(dest_impl_type)
+        def dec(func):
+            if not callable(func):
+                raise TypeError("Does not decorate callable")
+            add_to_graph(self.add_operations, source_impl_types, dest_impl_type, func)
+            return func
+        return dec
+    
+
+
+
+# Create default operation graph, and define some decorators
+# as methods bounds on this graph instance
+conversion_graph = ConversionGraph()
+conversion = conversion_graph.conversion
+
+addition_conversion_graph = AdditionGraph(conversion_graph)
+add_operation = addition_conversion_graph.add_operation
 
 
 #
@@ -227,13 +239,14 @@ class MatrixImplType(type):
         super(MatrixImplType, cls).__init__(name, bases, dct)
         # Register pending conversion registrations
         to_delete = []
-        for func, decorator_args in _pending_conversion_registrations.iteritems():
+        pending = ConversionGraph._global_pending_conversion_registrations
+        for func, decorator_args in pending.iteritems():
             if dct.get(func.__name__, None) is func:
-                dest_impl_type, = decorator_args
-                conversion(cls, dest_impl_type)(func)
+                graph, dest_impl_type = decorator_args
+                graph.conversion(cls, dest_impl_type)(func)
                 to_delete.append(func)
         for func in to_delete:
-            del _pending_conversion_registrations[func]
+            del pending[func]
 
     def __repr__(cls):
         return "<kind:%s>" % cls.name
