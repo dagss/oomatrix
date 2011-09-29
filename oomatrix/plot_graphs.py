@@ -36,7 +36,7 @@ def _format_label(v):
 def _format_edge(cost, payload):
     return "%.2f" % cost
 
-def get_graphstr(graph, name='', format_vertex=str,
+def get_graphstr(graph, max_node_size=4, name='', format_vertex=str,
                  format_edge=_format_edge):
     rawgraph = ''
     vertex_names = {}
@@ -52,7 +52,7 @@ def get_graphstr(graph, name='', format_vertex=str,
             attrdict = dict(label=attrdict)
         return ','.join('%s="%s"' % (key, value)
                         for key, value in attrdict.iteritems())    
-    for vertex in graph.get_vertices():
+    for vertex in graph.get_vertices(max_node_size):
         edges = []
         payloads = []
         attrs = attrstr(format_vertex(vertex))

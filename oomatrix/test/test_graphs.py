@@ -51,7 +51,7 @@ b = B(2)
 c = C(3)
 d = D(4)
 
-def plot(block=False):
+def plot(max_node_size=4, block=False):
     # Plot the addition graph, for use during debugging
     from ..plot_graphs import plot_graph
     def format_vertex(v):
@@ -60,7 +60,9 @@ def plot(block=False):
         return dict(label=' + '.join(names), color='red' if len(v) == 1 else 'black')
     def format_edge(cost, payload):
         return '%s %.2f' % (payload[0], cost)
-    plot_graph(mock_addition_graph, format_vertex=format_vertex, format_edge=format_edge,
+    plot_graph(mock_addition_graph,
+               max_node_size=max_node_size,
+               format_vertex=format_vertex, format_edge=format_edge,
                block=block)
 
 def test_addition_get_vertices():
@@ -86,5 +88,5 @@ def test_add_perform_two():
 
 
 def test_add_perform_many():
-    plot()
+    plot(3)
     yield eq_, D(8), mock_addition_graph.perform([a, c, d], [D])
