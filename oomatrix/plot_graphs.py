@@ -2,9 +2,6 @@ import subprocess
 import shlex
 
 def plot_graph(graph, name='hey'):
-    #verticelist = []
-    #edges = {}
-    #payloads = {}
     graphstr = get_graphstr(graph, name)
     ofile = open('temp.gv', 'w')
     ofile.write(graphstr)
@@ -16,16 +13,9 @@ def get_graphstr(graph, name='hey'):
     for vertex in graph.get_vertices():
         edges = []
         payloads = []
-
-        #vertexlist.append(str(vertex))
-        #edges[vertex] = []
-        #payloads[vertex] = []
+        rawgraph += '"' + str(vertex) + '"\n'
         for edge, cost, payload in graph.get_edges(vertex):
-            rawgraph += (str(vertex) + ' -> ' + str(edge) + ' [label="' + 
+            rawgraph += ('"' + str(vertex) + '" -> "' + str(edge) + '" [label="' + 
                         str(payload) + '"] \n')
-            #edges.append(str(edge))
-            #payloads.append(str(payload))
-            #edges[vertex].append(str(edge))
-            #payloads[vertex].append(str(payload))
-    return 'digraph ' + name + ' { \n' + rawgraph + '}'
+    return 'digraph ' + name + ' { \n' + rawgraph + '}\n'
 
