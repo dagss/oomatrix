@@ -25,6 +25,8 @@ for X in 'ABCD':
             return self.value
         def __eq__(self, other):
             return type(other) is type(self) and other.value == self.value
+        def __repr__(self):
+            return '%s(%d)' % (self.name, self.value)
         name = X
     mock_kinds.append(MockImpl)
 
@@ -72,7 +74,7 @@ def test_addition_get_vertices():
         assert type(v) is frozenset
         assert v in V0
 
-def test_add_perform():
+def test_add_perform_two():
     yield eq_, A(2), mock_addition_graph.perform([a, a])
     yield eq_, C(4), mock_addition_graph.perform([a, c])
 
@@ -83,3 +85,6 @@ def test_add_perform():
     yield assert_raises, ValueError, mock_addition_graph.perform, [a, b]
 
 
+def test_add_perform_many():
+    plot()
+    yield eq_, D(8), mock_addition_graph.perform([a, c, d], [D])
