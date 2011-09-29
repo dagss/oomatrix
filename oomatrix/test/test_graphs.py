@@ -50,6 +50,7 @@ c = C(3)
 d = D(4)
 
 def plot(block=False):
+    # Plot the addition graph, for use during debugging
     from ..plot_graphs import plot_graph
     def format_vertex(v):
         names = [kind.name for kind in v]

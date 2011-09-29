@@ -1,7 +1,5 @@
 import subprocess
-import shlex
 import os
-from time import sleep
 from tempfile import mkstemp
 import threading
 
