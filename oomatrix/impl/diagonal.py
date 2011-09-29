@@ -7,6 +7,29 @@ from .dense import SymmetricContiguousImpl
 __all__ = ['DiagonalImpl']
 
 class DiagonalImpl(MatrixImpl):
+
+    """
+
+
+    Example
+    -------
+
+    >>> D = Matrix('D', [1, 2, 3], diagonal=True)
+    >>> D
+    3-by-3 diagonal matrix 'D' of int64
+    [0 0 0]
+    [0 1 0]
+    [0 0 2]
+    >>> (D + D).compute()
+    3-by-3 diagonal matrix 'D' of int64
+    [0 0 0]
+    [0 2 0]
+    [0 0 4]
+
+    
+    """
+
+    
     name = 'diagonal'
     prose = ('the diagonal matrix', 'a diagonal matrix')
 
