@@ -64,14 +64,32 @@ def find_shortest_path(get_edges, start, stops):
     if start in stops:
         return [None]
 
-    curr_vertex = start
-    visited = set([curr_vertex])
-    considered = {curr_vertex : 0}
-    previous = {curr_vertex : None}
-    prevpay = {curr_vertex : None}
+    visited = set([start])
+    considered = {start : 0}
+    previous = {start : None}
+    prevpay = {start : None}
     costheap = []
+    heapq.heappush(costheap, (0, start))
     roof = None
     while True:
+        currcost, curr_vertex = heapq.heappop(costheap)
+        visited.add(curr_vertex)
+
+#        #Consistency check
+        if currcost != considered[curr_vertex]:
+            raise ValueError("Something went wrong")
+
+        if curr_vertex in stops:
+            if roof is None:
+                roof = currcost
+                path = resolve_payload_path(curr_vertex)
+                stops.remove(curr_vertex)
+            else:
+                if roof == currcost:
+                    raise ValueError("Ambiguous endpoint choice")
+                if roof < currcost:
+                    return path
+
         for n_vertex, cost, payload in get_edges(curr_vertex):
             if n_vertex in visited:
                 continue
@@ -83,25 +101,10 @@ def find_shortest_path(get_edges, start, stops):
                 previous[n_vertex] = curr_vertex
                 prevpay[n_vertex] = payload
                 heapq.heappush(costheap, (considered[n_vertex], n_vertex))
-        currcost, curr_vertex = heapq.heappop(costheap)
 
-#        #Consistency check
-        if currcost != considered[curr_vertex]:
-            raise ValueError("Something went wrong")
-        visited.add(curr_vertex)
-        if curr_vertex in stops:
-            if roof is None:
-                roof = currcost
-                path = resolve_payload_path(curr_vertex)
-                stops.remove(curr_vertex)
-            else:
-                if roof == currcost:
-                    raise ValueError("Ambiguous endpoint choice")
-                if roof < currcost:
-                    return path
         if len(costheap) == 0:
             if roof is None:
-                raise ValueError("""No more nodes to visit and endpoint 
-                                    not found""")
+                raise ValueError("No more nodes to visit and endpoint "
+                                 "not found")
             else:
                 return path

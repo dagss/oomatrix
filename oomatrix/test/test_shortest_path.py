@@ -77,3 +77,9 @@ def test_find_shortest_path():
             (e, 1, 'de')], e : [(b, 1, 'eb'), (c, 1, 'ec'), (d, 1, 'ed')]}
     path = find_shortest_path(graph, a, [b, c])
     yield eq_, path, ['ab']
+
+    #Should be able to follow a straight line
+    graph = {a : [(b, 1, 'ab')], b : [(c, 1, 'bc')], c : []}
+    path = find_shortest_path(graph, a, [c])
+    yield eq_, path, ['ab', 'bc']
+
