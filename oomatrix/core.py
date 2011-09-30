@@ -118,7 +118,7 @@ class AdditionGraph(object):
             for result in all_subsets(size, kinds):
                 yield frozenset(result)
 
-    def get_edges(self, vertex):
+    def get_edges_(self, vertex):
         # First, list all conversions
         conversions = self.conversion_graph.conversions
         for kind in vertex:
@@ -153,6 +153,13 @@ class AdditionGraph(object):
                     new_vertex = vertex.difference([kind_a, kind_b]).union([to_kind])
                     yield (new_vertex, cost,
                            ('add', kind_a, kind_b, to_kind, add_func, second_add_func))
+    def get_edges(self, vertex):
+        from random import shuffle, seed
+        seed(34)
+        edges = list(self.get_edges_(vertex))
+        shuffle(edges)
+        return edges
+
 
     def perform(self, operands, target_kinds=None):
         operand_dict = {}

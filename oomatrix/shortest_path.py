@@ -71,10 +71,12 @@ def find_shortest_path(get_edges, start, stops):
     prevpay = {curr_vertex : None}
     costheap = []
     roof = None
+    print 'starting'
     while True:
         for n_vertex, cost, payload in get_edges(curr_vertex):
             if n_vertex in visited:
                 continue
+            print 'considering ', n_vertex
             if (n_vertex not in considered or 
                 considered[n_vertex] > considered[curr_vertex] + cost):
                 if n_vertex in considered:
@@ -84,6 +86,7 @@ def find_shortest_path(get_edges, start, stops):
                 prevpay[n_vertex] = payload
                 heapq.heappush(costheap, (considered[n_vertex], n_vertex))
         currcost, curr_vertex = heapq.heappop(costheap)
+        print 'visiting ', curr_vertex
 
 #        #Consistency check
         if currcost != considered[curr_vertex]:
