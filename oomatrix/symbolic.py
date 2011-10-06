@@ -13,11 +13,10 @@ class ExpressionNode(object):
 
     def get_type(self):
         return TODO
-
-    def format_expression(self, name_to_matrix):
-        raise NotImplementedError()
     
 class LeafNode(ExpressionNode):
+    children = ()
+    
     def __init__(self, name, matrix_impl):
         self.name = name
         self.matrix_impl = matrix_impl
@@ -27,35 +26,57 @@ class LeafNode(ExpressionNode):
     def get_type(self):
         return type(self.matrix_impl)
 
-    def format_expression(self, name_to_matrix):
-        try:
-            x = name_to_matrix[self.name]
-        except KeyError:
-            name_to_matrix[self.name] = self.matrix_impl
-        else:
-            if self.matrix_impl is not x:
-                raise NotImplementedError("Two matrices with same name")
-        return self.name
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_leaf(*args, **kw)
 
 class DistributiveOperationNode(ExpressionNode):
     def __init__(self, a, b):
-        self.exprs = exprs = []
+        self.children = children = []
         for x in (a, b):
             if type(x) is type(self):
-                exprs.extend(x.exprs)
+                children.extend(x.children)
             else:
-                exprs.append(x)
+                children.append(x)
         # Following is correct both for multiplication and addition...
-        self.ncols = exprs[0].ncols
-        self.nrows = exprs[-1].nrows
-        self.dtype = exprs[0].dtype # TODO combine better
+        self.ncols = children[0].ncols
+        self.nrows = children[-1].nrows
+        self.dtype = children[0].dtype # TODO combine better
     
-    def format_expression(self, name_to_matrix):
-        exprs = [e.format_expression(name_to_matrix) for e in self.exprs]
-        return self.infix_str.join(exprs)
-
 class AddNode(DistributiveOperationNode):
-    infix_str = ' + '
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_add(*args, **kw)
 
 class MulNode(DistributiveOperationNode):
-    infix_str = ' * '
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_multiply(*args, **kw)
+
+
+class ConjugateTransposeNode(ExpressionNode):
+    def __init__(self, child):
+        self.child = child
+        self.children = [child]
+        self.ncols, self.nrows = child.nrows, child.ncols
+        self.dtype = child.dtype
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_conjugate_transpose(*args, **kw)
+
+class InverseNode(ExpressionNode):
+    def __init__(self, child):
+        self.child = child
+        self.children = [child]
+        self.nrows, self.ncols = child.nrows, child.ncols
+        self.dtype = child.dtype
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_inverse(*args, **kw)
+
+
+for x, val in [
+    (LeafNode, 1000),
+    (InverseNode, 40),
+    (ConjugateTransposeNode, 40),
+    (MulNode, 30),
+    (AddNode, 20)]:
+    x.precedence = val
+

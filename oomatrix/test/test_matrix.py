@@ -30,3 +30,25 @@ def test_basic():
     
     print De + De
     print De + Di
+
+def test_symbolic():
+    namemap0 = dict(De=De, Di=Di)
+
+    def test(exprstr0, expr, namemap0=namemap0):
+        exprstr, namemap = expr.format_expression()
+        eq_(exprstr0, exprstr)
+        eq_(namemap0, namemap)
+        
+    yield test, 'De + Di', De + Di
+    yield test, 'Di + De', Di + De
+    yield test, '(De + Di).H', (De + Di).H
+    yield test, 'De + Di.H', De + Di.H
+    yield test, 'De + Di.H * Di', De + Di.H * Di
+    yield test, '(De + Di.H) * Di', (De + Di.H) * Di
+    yield test, 'De', De.H.H.H.H, dict(De=De)
+    yield test, 'De', De.I.I.I.I, dict(De=De)
+    yield test, 'De.I * Di', De.I * Di
+    yield test, 'De.H.I * Di', De.H.I * Di
+    yield test, 'De.H.I * Di', De.I.H * Di
+    yield test, 'De.H * Di', De.I.H.I * Di
+    yield test, '(De + Di).I', (De + Di).H.I.H
