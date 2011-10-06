@@ -10,7 +10,9 @@ Di = Matrix('Di', np.arange(3).astype(np.int64), diagonal=True)
 def assert_repr(fact, test):
     fact = dedent(fact)
     if not fact == test:
-        print 'GOT: ---'
+        print 'EXPECTED:'
+        print fact
+        print 'GOT:'
         print test
         print '---'
     eq_(fact, test)
@@ -27,9 +29,25 @@ def test_basic():
     [0 0 0]
     [0 1 0]
     [0 0 2]""", repr(Di)
+
+    yield assert_repr, """\
+    3-by-3 matrix of int64 given by:
     
-    print De + De
-    print De + Di
+        De + De
+    
+    where
+
+        De: 3-by-3 row-major matrix of int64""", repr(De + De)
+
+    yield assert_repr, """\
+    3-by-3 matrix of int64 given by:
+    
+        De + Di
+    
+    where
+
+        De: 3-by-3 row-major matrix of int64
+        Di: 3-by-3 diagonal matrix of int64""", repr(De + Di)
 
 def test_symbolic():
     namemap0 = dict(De=De, Di=Di)

@@ -33,7 +33,6 @@ class Matrix(object):
                 else:
                     if obj.ndim != 2:
                         raise ValueError()
-
                     from .impl import dense
                     if obj.flags.c_contiguous:
                         r = dense.RowMajorImpl(obj)
@@ -66,10 +65,10 @@ class Matrix(object):
 
     def single_line_description(self, skip_name=False):
         shapestr = '%d-by-%d' % (self.ncols, self.nrows)
-        typestr = self.get_type().name
+        typestr = '%s ' % self.get_type().name if not self.is_expression() else ''
         dtypestr = ' of %s' % self.dtype if self.dtype is not None else ''
         namestr = " '%s'" % self._expr.name if self._expr.name and not skip_name else ''
-        return "%s %s matrix%s%s" % (
+        return "%s %smatrix%s%s" % (
             shapestr,
             typestr,
             namestr,
@@ -116,10 +115,7 @@ class Matrix(object):
             lines.append('')
             lines.append('where')
             lines.append('')
-            return ''
-            for name, matrix_impl in matrices.iteritems():
-#                assert not matrix.is_expression()
-                matrix = self._construct(name, matrix_impl)
+            for name, matrix in matrices.iteritems():
                 lines.append('    %s: %s' %
                              (name, matrix.single_line_description(skip_name=True)))
         return '\n'.join(lines)
