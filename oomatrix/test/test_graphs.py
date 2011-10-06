@@ -88,5 +88,4 @@ def test_add_perform_two():
 
 
 def test_add_perform_many():
-    plot(3)
     yield eq_, D(8), mock_addition_graph.perform([a, c, d], [D])

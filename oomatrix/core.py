@@ -88,6 +88,9 @@ class AdditionGraph(object):
     number of items in the frozenset reaches 1, all additions have
     been performed. Conversions move between different sets of same
     size, addition operations move to sets having one less item.
+
+    The arguments for add operations are wrapped so that they can be
+    called with arguments sorted in the order of their kind.
     
     """
 
@@ -136,23 +139,29 @@ class AdditionGraph(object):
                                           second_add_func))
                     
         # Then, list any cross-kind additions
+        a_visited = set()
         for kind_a in vertex:
+            a_visited.add(kind_a)
             for kind_b in vertex:
-                if kind_a is kind_b:
+                if kind_b in a_visited:
                     continue
-                add_ops = self.add_operations.get((kind_a, kind_b), {})
+                if kind_b < kind_a:
+                    kind_ap, kind_bp = kind_b, kind_a
+                else:
+                    kind_ap, kind_bp = kind_a, kind_b
+                add_ops = self.add_operations.get((kind_ap, kind_bp), {})
                 for to_kind, add_func in add_ops.iteritems():
                     cost = 1
-                    if to_kind is not kind_a and to_kind is not kind_b and to_kind in vertex:
+                    if to_kind is not kind_ap and to_kind is not kind_bp and to_kind in vertex:
                         # Result overlaps with another kind, so take into account cost
                         # of subsequent addition
                         second_add_func = self.add_operations[(to_kind, to_kind)][to_kind]
                         cost += 1
                     else:
                         second_add_func = None
-                    new_vertex = vertex.difference([kind_a, kind_b]).union([to_kind])
+                    new_vertex = vertex.difference([kind_ap, kind_bp]).union([to_kind])
                     yield (new_vertex, cost,
-                           ('add', kind_a, kind_b, to_kind, add_func, second_add_func))
+                           ('add', kind_ap, kind_bp, to_kind, add_func, second_add_func))
 
     def perform(self, operands, target_kinds=None):
         operand_dict = {}
@@ -211,6 +220,18 @@ class AdditionGraph(object):
         def dec(func):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
+            A, B = source_impl_types
+
+            if B < A:
+                # Reverse the arguments
+                print "Reversing", A, B
+                def reverse_arguments(a, b):
+                    return func(b, a)
+                func = reverse_arguments
+                A, B = B, A
+            
+            if (A, B) in self.add_operations:
+                raise Exception("Already registered addition for %s" % (A, B))
             add_to_graph(self.add_operations, source_impl_types, dest_impl_type, func)
             return func
         return dec
@@ -248,6 +269,17 @@ class MatrixImplType(type):
 
     def __repr__(cls):
         return "<kind:%s>" % cls.name
+
+    def __eq__(cls, other_cls):
+        return cls is other_cls
+
+    def __ne__(cls, other_cls):
+        return cls is not other_cls
+
+    def __cmp__(cls, other_cls):
+        if not isinstance(other_cls, MatrixImplType):
+            raise TypeError("Invalid comparison")
+        return cmp(cls.name, other_cls.name)
 
 class MatrixImpl(object):
     __metaclass__ = MatrixImplType
