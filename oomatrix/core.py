@@ -29,12 +29,16 @@ def add_to_graph(d, source_key, target_key, value):
 #
 
 class ConversionGraph(object):
+    # Functions in self.listeners will be called whenever
+    # a conversion is added.
+    
     # global shared class variable:
     _global_pending_conversion_registrations = {}
 
     def __init__(self):
         self.conversions = {}
         self.all_kinds = set()
+        self.listeners = []
 
     #
     # Decorators
@@ -58,6 +62,8 @@ class ConversionGraph(object):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
             add_to_graph(self.conversions, source_impl_type, dest_impl_type, func)
+            for listener in self.listeners:
+                listener(self, source_impl_type, dest_impl_type, func)
             return func
         return dec
 
@@ -235,8 +241,19 @@ class AdditionGraph(object):
             add_to_graph(self.add_operations, source_impl_types, dest_impl_type, func)
             return func
         return dec
-    
 
+class MatVecGraph(object):
+    def __init__(self, conversion_graph):
+        self.conversion_graph = conversion_graph
+        conversion_graph.listeners.append(self.on_conversion_added)
+
+    def on_conversion_added(self, conversion_graph, source_kind, dest_kind, func):
+        if hasattr(dest_kind, 'apply'):
+            pass
+
+    # Decorator
+    def matvec(self, matrix_impl, vec):
+        raise NotImplementedError()
 
 
 # Create default operation graph, and define some decorators
