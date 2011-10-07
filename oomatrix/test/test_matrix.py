@@ -61,17 +61,17 @@ def test_symbolic():
         
     yield test, 'De + Di', De + Di
     yield test, 'Di + De', Di + De
-    yield test, '(De + Di).H', (De + Di).H
-    yield test, 'De + Di.H', De + Di.H
-    yield test, 'De + Di.H * Di', De + Di.H * Di
-    yield test, '(De + Di.H) * Di', (De + Di.H) * Di
-    yield test, 'De', De.H.H.H.H, dict(De=De)
-    yield test, 'De', De.I.I.I.I, dict(De=De)
-    yield test, 'De.I * Di', De.I * Di
-    yield test, 'De.H.I * Di', De.H.I * Di
-    yield test, 'De.H.I * Di', De.I.H * Di
-    yield test, 'De.H * Di', De.I.H.I * Di
-    yield test, '(De + Di).I', (De + Di).H.I.H
+    yield test, '(De + Di).h', (De + Di).h
+    yield test, 'De + Di.h', De + Di.h
+    yield test, 'De + Di.h * Di', De + Di.h * Di
+    yield test, '(De + Di.h) * Di', (De + Di.h) * Di
+    yield test, 'De', De.h.h.h.h, dict(De=De)
+    yield test, 'De', De.i.i.i.i, dict(De=De)
+    yield test, 'De.i * Di', De.i * Di
+    yield test, 'De.h.i * Di', De.h.i * Di
+    yield test, 'De.h.i * Di', De.i.h * Di
+    yield test, 'De.h * Di', De.i.h.i * Di
+    yield test, '(De + Di).i', (De + Di).h.i.h
 
 def test_matvec():
     a = np.arange(3)

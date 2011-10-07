@@ -23,11 +23,11 @@ class ExpressionFormatter(object):
 
     def visit_conjugate_transpose(self, terms):
         assert len(terms) == 1
-        return terms[0] + '.H'
+        return terms[0] + '.h'
 
     def visit_inverse(self, terms):
         assert len(terms) == 1
-        return terms[0] + '.I'
+        return terms[0] + '.i'
 
 default_formatter = ExpressionFormatter()
 

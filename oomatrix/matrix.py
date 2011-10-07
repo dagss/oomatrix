@@ -199,7 +199,7 @@ class Matrix(object):
         
 
     @property
-    def H(self):
+    def h(self):
         if type(self._expr) is ConjugateTransposeNode:
             e = self._expr.child
         elif type(self._expr) is InverseNode:
@@ -212,7 +212,7 @@ class Matrix(object):
         return self._construct(e)
 
     @property
-    def I(self):
+    def i(self):
         if self.ncols != self.nrows:
             raise ValueError("Cannot take inverse of non-square matrix")
         if type(self._expr) is InverseNode:
