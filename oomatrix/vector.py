@@ -29,6 +29,6 @@ class Vector(object):
         MatVecComputer(writer, noop).compute(self._expr, array, out, False)
         return out
 
-    def describe(self, out=None, stream=sys.stderr):
+    def explain(self, out=None, stream=sys.stderr):
         self.compute(out, verbose=True, noop=True, stream=stream)
         

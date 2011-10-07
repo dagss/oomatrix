@@ -2,7 +2,7 @@ import numpy as np
 from nose.tools import ok_, eq_, assert_raises
 from textwrap import dedent
 
-from .. import Matrix, Vector, compute, describe
+from .. import Matrix, Vector, compute, explain
 
 De_array = np.arange(9).reshape(3, 3).astype(np.int64)
 De = Matrix('De', De_array)
@@ -78,8 +78,8 @@ def test_matvec():
     yield ok_, type(De * a) is Vector
     yield ok_, type(compute(De * a)) is np.ndarray
     yield ok_, np.all(compute(De * a) == np.dot(De_array, a))
-
-    describe(De * (Di + Di) * a)
     yield ok_, np.all(compute(De * (Di + Di) * a) == np.dot(De_array, Di_array * a + Di_array * a))
+
+    #explain(De * (Di + Di) * a)
 
     
