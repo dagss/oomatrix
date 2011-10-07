@@ -58,6 +58,13 @@ class DiagonalImpl(MatrixImpl):
         else:
             return self.array[i]
 
+    def apply(self, vec, out, should_accumulate):
+        result = (vec.T * self.array).T
+        if should_accumulate:
+            out += result
+        else:
+            out[...] = result
+
 @add_operation((DiagonalImpl, DiagonalImpl), DiagonalImpl)
 def diagonal_plus_diagonal(A, B):
     return DiagonalImpl(A.array + B.array)

@@ -2,10 +2,12 @@ import numpy as np
 from nose.tools import ok_, eq_, assert_raises
 from textwrap import dedent
 
-from .. import Matrix
+from .. import Matrix, Vector, compute, describe
 
-De = Matrix('De', np.arange(9).reshape(3, 3).astype(np.int64))
-Di = Matrix('Di', np.arange(3).astype(np.int64), diagonal=True)
+De_array = np.arange(9).reshape(3, 3).astype(np.int64)
+De = Matrix('De', De_array)
+Di_array = np.arange(3).astype(np.int64)
+Di = Matrix('Di', Di_array, diagonal=True)
 
 def assert_repr(fact, test):
     fact = dedent(fact)
@@ -70,3 +72,14 @@ def test_symbolic():
     yield test, 'De.H.I * Di', De.I.H * Di
     yield test, 'De.H * Di', De.I.H.I * Di
     yield test, '(De + Di).I', (De + Di).H.I.H
+
+def test_matvec():
+    a = np.arange(3)
+    yield ok_, type(De * a) is Vector
+    yield ok_, type(compute(De * a)) is np.ndarray
+    yield ok_, np.all(compute(De * a) == np.dot(De_array, a))
+
+    describe(De * (Di + Di) * a)
+    yield ok_, np.all(compute(De * (Di + Di) * a) == np.dot(De_array, Di_array * a + Di_array * a))
+
+    

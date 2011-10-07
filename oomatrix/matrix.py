@@ -9,6 +9,9 @@ __all__ = ['Matrix']
 
 
 class Matrix(object):
+
+    __array_priority__ = 10000
+    
     def __init__(self, *args, **kwargs):
         if len(args) == 0:
             raise TypeError("Wrong number of arguments")
@@ -174,13 +177,26 @@ class Matrix(object):
         return self._construct(self._expr.symbolic_add(other._expr))
 
     def __mul__(self, other):
-        if not isinstance(other, Matrix):
-            raise TypeError('Matrix instance needed') # TODO implement conversions
+        if isinstance(other, np.ndarray):
+            from vector import Vector
+            return Vector(self._expr, other, transpose=False)
+        elif isinstance(other, Matrix):
+            if other.ncols != self.nrows:
+                raise ValueError('Matrices do not conform')
+            return self._construct(self._expr.symbolic_mul(other._expr))
+        else:
+            # TODO implement some conversion framework for registering vector types
+            raise TypeError('Type not recognized')
 
-        if other.ncols != self.nrows:
-            raise ValueError('Matrices do not conform')
+    def __rmul__(self, other):
+        raise NotImplementedError()
+        # TODO: Made tricky by not wanting to conjugate a complex result
         
-        return self._construct(self._expr.symbolic_mul(other._expr))
+        #if isinstance(other, np.ndarray):
+        #    return Vector(self.H._expr, other, transpose=True)
+        #else:
+        #   raise TypeError('Type not recognized')
+        
 
     @property
     def H(self):

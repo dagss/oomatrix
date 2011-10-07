@@ -1,3 +1,5 @@
+import numpy as np
+
 from ..core import MatrixImpl, conversion, add_operation
 
 class NumPyWrapper(object):
@@ -11,6 +13,12 @@ class NumPyWrapper(object):
 
     def get_element(self, i, j):
         return self.array[i, j]
+
+    def apply(self, vec, out, should_accumulate):
+        if should_accumulate:
+            out += np.dot(self.array, vec)
+        else:
+            out[...] = np.dot(self.array, vec)
 
 class ColumnMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'column-major'
