@@ -1,5 +1,5 @@
 
-from .shortest_path import find_shortest_path
+from .graph.shortest_path import find_shortest_path
 
 # TODO Cost model etc.
 
