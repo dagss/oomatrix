@@ -12,37 +12,33 @@ class Matrix(object):
 
     __array_priority__ = 10000
     
-    def __init__(self, *args, **kwargs):
-        if len(args) == 0:
-            raise TypeError("Wrong number of arguments")
-        if isinstance(args[0], ExpressionNode):
-            if len(args) != 1:
-                raise TypeError("Wrong number of arguments")
-            e = args[0]
+    def __init__(self, obj, name=None, diagonal=False):
+        if isinstance(obj, ExpressionNode):
+            if (name, diagonal) != (None, False):
+                raise TypeError("cannot provide options when passing an ExpressionNode")
+            e = obj
+        elif isinstance(obj, MatrixImpl):
+            e = LeafNode(name, obj)
+        elif isinstance(obj, (str, bool, int, tuple)):
+            # Simply protect against common misuses
+            raise TypeError('first argument should contain matrix data')
         else:
-            if len(args) != 2:
-                raise TypeError("Wrong number of arguments")
-            name, obj = args
-            if isinstance(obj, MatrixImpl):
-                r = obj
+            obj = np.asarray(obj)
+            if diagonal:
+                if obj.ndim != 1:
+                    raise ValueError()
+                from .impl import diagonal
+                r = diagonal.DiagonalImpl(obj)
             else:
-                obj = np.asarray(obj)
-                diagonal = kwargs.get('diagonal', False)
-                if diagonal:
-                    if obj.ndim != 1:
-                        raise ValueError()
-                    from .impl import diagonal
-                    r = diagonal.DiagonalImpl(obj)
+                if obj.ndim != 2:
+                    raise ValueError("array ndim != 2")
+                from .impl import dense
+                if obj.flags.c_contiguous:
+                    r = dense.RowMajorImpl(obj)
+                elif obj.flags.f_contiguous:
+                    r = dense.ColMajorImpl(obj)
                 else:
-                    if obj.ndim != 2:
-                        raise ValueError("array ndim != 2")
-                    from .impl import dense
-                    if obj.flags.c_contiguous:
-                        r = dense.RowMajorImpl(obj)
-                    elif obj.flags.f_contiguous:
-                        r = dense.ColMajorImpl(obj)
-                    else:
-                        r = dense.StridedImpl(obj)
+                    r = dense.StridedImpl(obj)
             e = LeafNode(name, r)
 
         self._expr = e
@@ -141,7 +137,7 @@ class Matrix(object):
         name_to_matrix = {}
         s = default_formatter.format(self._expr, name_to_matrix)
         for key, expr in name_to_matrix.iteritems():
-            name_to_matrix[key] = Matrix(key, expr.matrix_impl)
+            name_to_matrix[key] = Matrix(expr.matrix_impl, key)
         return s, name_to_matrix
 
     #

@@ -4,9 +4,9 @@ from .. import Matrix, Vector, compute, explain
 from nose import SkipTest
 
 De_array = np.arange(9).reshape(3, 3).astype(np.int64)
-De = Matrix('De', De_array)
+De = Matrix(De_array, 'De')
 Di_array = np.arange(3).astype(np.int64)
-Di = Matrix('Di', Di_array, diagonal=True)
+Di = Matrix(Di_array, 'Di', diagonal=True)
 
 def assert_repr(fact, test):
     fact = dedent(fact)
@@ -55,7 +55,14 @@ def test_repr():
     [1.0]
     [1.0]
     [1.0]
-    [1.0]''', repr(Matrix('Foo', np.ones((4, 1))))
+    [1.0]''', repr(Matrix(np.ones((4, 1)), 'Foo'))
+
+    yield assert_repr, '''\
+    1-by-4 row-major matrix of float64
+    [1.0]
+    [1.0]
+    [1.0]
+    [1.0]''', repr(Matrix(np.ones((4, 1))))
 
 
 def test_symbolic():
