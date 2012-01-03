@@ -1,9 +1,9 @@
 import numpy as np
 
-from ..core import MatrixImpl, conversion, add_operation
+from ..core import MatrixImpl, conversion, add_operation, multiply_operation
 
 class NumPyWrapper(object):
-    # Mix-in for dense matrix represenations
+    # Mix-in for dense matrix representations
 
     def __init__(self, array):
         self.array = array
@@ -53,4 +53,9 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
     @add_operation((T, T), T)
     def add(A, B):
         return T(A.array + B.array)
+
+    @multiply_operation((T, T), T)
+    def multiply(A, B):
+        return T(np.dot(A.array, B.array))
+
 
