@@ -179,7 +179,8 @@ class Matrix(object):
             # TODO implement some conversion framework for registering vector types
             raise TypeError('Type not recognized')
         if self.ncols != other.nrows:
-            raise ValueError('Matrices do not conform')
+            raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
+                self.ncols, other.nrows))
         return Matrix(self._expr.symbolic_mul(other._expr))
 
     def __rmul__(self, other):
