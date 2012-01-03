@@ -1,8 +1,7 @@
-import numpy as np
-from nose.tools import ok_, eq_, assert_raises
-from textwrap import dedent
+from .common import *
 
 from .. import Matrix, Vector, compute, explain
+from nose import SkipTest
 
 De_array = np.arange(9).reshape(3, 3).astype(np.int64)
 De = Matrix('De', De_array)
@@ -19,7 +18,7 @@ def assert_repr(fact, test):
         print '---'
     eq_(fact, test)
 
-def test_basic():
+def test_repr():
     yield assert_repr, """\
     3-by-3 row-major matrix 'De' of int64
     [0 1 2]
@@ -51,6 +50,14 @@ def test_basic():
         De: 3-by-3 row-major matrix of int64
         Di: 3-by-3 diagonal matrix of int64""", repr(De + Di)
 
+    yield assert_repr, '''\
+    1-by-4 row-major matrix 'Foo' of float64
+    [1.0]
+    [1.0]
+    [1.0]
+    [1.0]''', repr(Matrix('Foo', np.ones((4, 1))))
+
+
 def test_symbolic():
     namemap0 = dict(De=De, Di=Di)
 
@@ -74,6 +81,7 @@ def test_symbolic():
     yield test, '(De + Di).i', (De + Di).h.i.h
 
 def test_matvec():
+    raise SkipTest()
     a = np.arange(3)
     yield ok_, type(De * a) is Vector
     yield ok_, type(compute(De * a)) is np.ndarray

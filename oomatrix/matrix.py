@@ -35,7 +35,7 @@ class Matrix(object):
                     r = diagonal.DiagonalImpl(obj)
                 else:
                     if obj.ndim != 2:
-                        raise ValueError()
+                        raise ValueError("array ndim != 2")
                     from .impl import dense
                     if obj.flags.c_contiguous:
                         r = dense.RowMajorImpl(obj)
@@ -84,7 +84,7 @@ class Matrix(object):
         # TODO: Actually make this brief. This is the
         # reason for the ackward way of fetching elements:
         # Normally only the corners are fetched
-        m, n = self.ncols, self.nrows
+        m, n = self.nrows, self.ncols
         lines = []
         for i in range(m):
             elems = [str(self[i, j]) for j in range(n)]
