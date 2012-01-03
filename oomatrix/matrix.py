@@ -170,19 +170,17 @@ class Matrix(object):
         if other.ncols != self.ncols or self.nrows != other.nrows:
             raise ValueError('Matrices do not have same shape in addition')
 
-        return self._construct(self._expr.symbolic_add(other._expr))
+        return Matrix(self._expr.symbolic_add(other._expr))
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
-            from vector import Vector
-            return Vector(self._expr, other, transpose=False)
-        elif isinstance(other, Matrix):
-            if other.ncols != self.nrows:
-                raise ValueError('Matrices do not conform')
-            return self._construct(self._expr.symbolic_mul(other._expr))
-        else:
+            other = Matrix(other)
+        elif not isinstance(other, Matrix):
             # TODO implement some conversion framework for registering vector types
             raise TypeError('Type not recognized')
+        if self.ncols != other.nrows:
+            raise ValueError('Matrices do not conform')
+        return Matrix(self._expr.symbolic_mul(other._expr))
 
     def __rmul__(self, other):
         raise NotImplementedError()
