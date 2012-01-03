@@ -38,8 +38,8 @@ class DistributiveOperationNode(ExpressionNode):
             else:
                 children.append(x)
         # Following is correct both for multiplication and addition...
-        self.ncols = children[0].ncols
-        self.nrows = children[-1].nrows
+        self.nrows= children[0].nrows
+        self.ncols = children[-1].ncols
         self.dtype = children[0].dtype # TODO combine better
     
 class AddNode(DistributiveOperationNode):
