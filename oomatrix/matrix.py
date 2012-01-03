@@ -223,4 +223,14 @@ class Matrix(object):
         if arg != -1:
             raise TypeError("Only -1 supported as Matrix power")
         return self.I
-        
+
+    #
+    # Conversion
+    #
+    def as_array(self, order='C'):
+        from .impl.dense import NumPyWrapper
+        if (not self.is_expression() and
+            isinstance(self._expr.matrix_impl, NumPyWrapper)):
+            return self._expr.matrix_impl.array.copy(order)
+        else:
+            raise NotImplementedError()
