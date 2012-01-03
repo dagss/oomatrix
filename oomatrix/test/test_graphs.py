@@ -2,7 +2,7 @@ import numpy as np
 from nose import SkipTest
 from nose.tools import ok_, eq_, assert_raises
 
-from ..core import ConversionGraph, AdditionGraph, MatrixImpl
+from ..core import ConversionGraph, AdditionGraph, MatrixImpl, MultiplyPairGraph
 from ..impl.diagonal import *
 from ..impl.dense import *
 
@@ -11,6 +11,8 @@ from .. import Matrix
 mock_conversion_graph = ConversionGraph()
 mock_conversion = mock_conversion_graph.conversion
 mock_addition_graph = AdditionGraph(mock_conversion_graph)
+mock_multiply_graph = MultiplyPairGraph(mock_conversion_graph)
+mock_multiply_operation = mock_multiply_graph.multiply_operation
 mock_add_operation = mock_addition_graph.add_operation
 
 mock_kinds = []
@@ -34,12 +36,28 @@ for X in 'ABCD':
     def _adder(a, b):
         return type(a)(a.value + b.value)
 
+    @mock_multiply_operation((MockImpl, MockImpl), MockImpl)
+    def _multiplier(a, b):
+        return type(a)(a.value * b.value)
+
 A, B, C, D = mock_kinds
+
+@mock_multiply_operation((A, B), C)
+def multiply_A_B_to_C(a, b):
+    return C(a.value * b.value)
 
 def make_conv(kind_a, kind_b):
     @mock_conversion(kind_a, kind_b)
     def _converter(input):
         return kind_b(input.value)
+
+
+# Conversions:
+#
+# A --> B --> C --> D
+# ^     |
+# +-----+
+#
 
 make_conv(A, B)
 make_conv(B, C)
@@ -51,9 +69,9 @@ b = B(2)
 c = C(3)
 d = D(4)
 
-def plot(max_node_size=4, block=False):
+def plot_add(max_node_size=4, block=False):
     # Plot the addition graph, for use during debugging
-    from ..plot_graphs import plot_graph
+    from ..graph.plot_graphs import plot_graph
     def format_vertex(v):
         names = [kind.name for kind in v]
         names.sort()
@@ -62,6 +80,19 @@ def plot(max_node_size=4, block=False):
         return '%s %.2f' % (payload[0], cost)
     plot_graph(mock_addition_graph,
                max_node_size=max_node_size,
+               format_vertex=format_vertex, format_edge=format_edge,
+               block=block)
+
+def plot_mul(block=False):
+    # Plot the addition graph, for use during debugging
+    from ..graph.plot_graphs import plot_graph
+    def format_vertex(v):
+        names = [kind.name for kind in v]
+        names.sort()
+        return dict(label=' '.join(names), color='red' if len(v) == 1 else 'black')
+    def format_edge(cost, payload):
+        return '%.2f' % cost
+    plot_graph(mock_multiply_graph,
                format_vertex=format_vertex, format_edge=format_edge,
                block=block)
 
@@ -89,3 +120,14 @@ def test_add_perform_two():
 
 def test_add_perform_many():
     yield eq_, D(8), mock_addition_graph.perform([a, c, d], [D])
+
+def test_mul_two():
+    yield eq_, B(4), mock_multiply_graph.perform([b, b])
+    yield eq_, C(6), mock_multiply_graph.perform([b, c])
+    yield eq_, C(6), mock_multiply_graph.perform([c, b])
+    yield eq_, A(2), mock_multiply_graph.perform([a, b], target_kinds=[A])
+    yield eq_, C(2), mock_multiply_graph.perform([a, b], target_kinds=[C])
+    # (A, B) -> C has fast path and is cheaper:
+    yield eq_, C(2), mock_multiply_graph.perform([a, b], target_kinds=[A, C])
+    # But (B, A) -> C does not
+    yield eq_, A(2), mock_multiply_graph.perform([b, a], target_kinds=[A, C])

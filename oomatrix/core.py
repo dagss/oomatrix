@@ -256,6 +256,98 @@ class MatVecGraph(object):
         raise NotImplementedError()
 
 
+class MultiplyPairGraph(object):
+    """
+    A graph used to find the best combination of conversions to
+    invoke a single matrix multiplication ``A * B``. If A
+    and B are of the same type, this is often just the multiplication
+    operation itself, but things can get more complicated if one
+    or several conversions must be performed.
+
+    This graph does not address the best way to form the product of
+    more than two matrices. Doing that is a classical example of dynamic
+    programming which can use this class in its inner step.
+    """
+
+    def __init__(self, conversion_graph):
+        self.conversion_graph = conversion_graph
+        self.multiply_operations = {}
+
+    # Implement graph on which to perform shortest-path
+    def get_vertices(self, max_node_size=4, kinds=None):
+        """
+        Get the vertices in the graph, for the matrix implementation
+        types of interest. Default is all registered/loaded types.
+        """
+        if kinds is None:
+            kinds = self.conversion_graph.all_kinds
+        kinds = list(kinds)
+
+        for A_kind in kinds:
+            for B_kind in kinds:
+                yield (A_kind, B_kind) # source vertex
+            yield (A_kind,) # target vertex
+
+    def get_edges(self, vertex):
+        # Payload: ('multiply'|0|1, func)
+        # Where 0, 1 denotes conversion of left or right operand
+        if len(vertex) == 1:
+            return # at final node
+        conversions = self.conversion_graph.conversions
+        # All direct multiplications of A and B
+        for target_kind, mul_func in self.multiply_operations.get(vertex, {}).iteritems():
+            yield ((target_kind,), 1, ('multiply', mul_func))
+        A_kind, B_kind = vertex
+        # Yield possible conversions of A
+        for A_to_kind, conv_func in conversions.get(A_kind, {}).iteritems():
+            yield ((A_to_kind, B_kind), 1, (0, conv_func))
+        # Yield possible conversions of B
+        for B_to_kind, conv_func in conversions.get(B_kind, {}).iteritems():
+            yield ((A_kind, B_to_kind), 1, (1, conv_func))
+
+    # Public-facing methods
+    def perform(self, operands, target_kinds=None):
+        A, B = operands
+        start_vertex = (A.get_type(), B.get_type())
+        if target_kinds is None:
+            target_kinds = self.conversion_graph.all_kinds
+        stop_vertices = [(v,) for v in target_kinds]
+        path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
+        vertex = (A, B)
+        result = None
+        for action, func in path:
+            a, b = vertex
+            if action == 'multiply':
+                result = func(a, b)
+            elif action == 0:
+                vertex = (func(a), b)
+            elif action == 1:
+                vertex = (a, func(b))
+            else:
+                assert False
+        assert result is not None
+        return result
+
+
+    # Decorator
+    def multiply_operation(self, source_impl_types, dest_impl_type):
+        if not isinstance(source_impl_types, tuple) or len(source_impl_types) != 2:
+            raise TypeError("source_impl_types must be a tuple of length 2")
+        self.conversion_graph.all_kinds.update(source_impl_types)
+        self.conversion_graph.all_kinds.add(dest_impl_type)
+        def dec(func):
+            if not callable(func):
+                raise TypeError("Does not decorate callable")
+            if source_impl_types in self.multiply_operations:
+                raise Exception("Already registered multiplication for %s" % (A, B))
+            add_to_graph(self.multiply_operations, source_impl_types, dest_impl_type, func)
+            return func
+        return dec
+    
+
+
+
+
 # Create default operation graph, and define some decorators
 # as methods bounds on this graph instance
 conversion_graph = ConversionGraph()
@@ -263,6 +355,10 @@ conversion = conversion_graph.conversion
 
 addition_conversion_graph = AdditionGraph(conversion_graph)
 add_operation = addition_conversion_graph.add_operation
+
+
+multiply_graph = MultiplyPairGraph(conversion_graph)
+multiply_operation = multiply_graph.multiply_operation
 
 
 #
