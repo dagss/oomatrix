@@ -1,7 +1,12 @@
+import sys
 import numpy as np
+
+# TODO: Computers should be reentrant/thread-safe, since they can
+# be assigned to a global configuration variable.
 
 from . import formatter
 from .symbolic import ExpressionNode, LeafNode
+from .matrix import Matrix
 
 class DescriptionWriter(object):
     def __init__(self, stream):
@@ -135,9 +140,108 @@ class MatVecComputer(object):
                           op='+=' if should_accumulate else '=')
         matrix_impl.apply(vec, out, should_accumulate)
             
-    def visit_conjugate_transpose(self, terms):
+    def visit_inverse(self, expr, vec, out, should_accumulate):
         raise NotImplementedError()
 
-    def visit_inverse(self, terms):
+    def visit_conjugate_transpose(self, expr, vec, out, should_accumulate):
         raise NotImplementedError()
+
+
+class StupidComputation(object):
+    def __init__(self, multiply_graph, writer, noop):
+        self.multiply_graph = multiply_graph
+        self.writer = writer
+        self.noop = noop
+    
+    def compute(self, expr):
+        return expr.accept_visitor(self, expr)
+
+    def visit_add(self, expr):
+        pass
+
+    def visit_multiply(self, expr):
+        # Figure out if this is a "matrix-vector" product, in which
+        # case we change the order of multiplication. This simple
+        # heuristic is the only one StupidComputer is capable of.
+        def mul_pair(left, right):
+            # Recurse to compute left and right matrices
+            left = left.accept_visitor(self, left)
+            right = right.accept_visitor(self, right)
+            matrix_impl = self.multiply_graph.perform((left.matrix_impl, right.matrix_impl))
+            return LeafNode(None, matrix_impl)
+        
+        assert len(expr.children) >= 2
+        if expr.children[-1].ncols == 1 and expr.children[0].nrows > 1:
+            # Right-to-left
+            right = expr.children[-1]
+            for left in expr.children[-2::-1]:
+                right = mul_pair(left, right)
+            return right
+        else:
+            # Left-to-right
+            left = expr.children[0]
+            for right in expr.children[1:]:
+                left = mul_pair(left, right)
+            return left
+
+    def visit_leaf(self, expr):
+        return expr
+            
+    def visit_inverse(self, expr):
+        raise NotImplementedError()
+
+    def visit_conjugate_transpose(self, expr):
+        raise NotImplementedError()
+
+
+class StupidComputer(object):
+    """
+    Computes an expression using some simple syntax-level rules.
+    First, we treat all matrices with one 1-length dimension as
+    a "vector". Then, ignoring any cost estimates:
+
+      - Matrix-vector products are performed such that there's always
+        a vector; ``A * B * x`` is performed right-to-left and
+        ``x * A * B`` is performed left-to-right. Similarly,
+        ``(A + B) * x`` is computed as ``A * x + B * x``.
+        
+      - Matrix-matrix products such as ``A * B * C`` are performed
+        left-to-right (no matter what). Also, expressions are computed
+        as formed: ``(A + B) * X`` first computes ``A + B`` before
+        multiplying with ``X``.
+
+      - Matrix additions ``A + B`` are performed in some arbitrary
+        order.
+
+      - ``A.i * B`` always first attempts ``A.solve_right(B)``,
+        then ``A.inverse() * B``.
+
+      - ``A.h.i * B`` first tries ``A.solve_left(B)``, then
+        ``A.conjugate_transpose().i * B``.
+
+    Note that vectors and matrices are treated quite differently,
+    and that the only thing qualifying a matrix as a "vector" is
+    its shape.
+
+    We always assume that the right conversions etc. are present so
+    that the expression can be computed in the fashion shown above.
+    The output type is not selectable, it just becomes whatever it
+    is.
+
+    No in-place operations or buffer reuse is ever performed.
+    """
+    
+    def __init__(self, multiply_graph=None):
+        if multiply_graph is None:
+            from .core import multiply_graph
+        self.multiply_graph = multiply_graph
+
+    def compute(self, matrix, verbose=False, noop=False, stream=sys.stderr):
+        if verbose:
+            writer = DescriptionWriter(stream)
+        else:
+            writer = NoopWriter()
+        matrix_impl = StupidComputation(self.multiply_graph, writer, noop).compute(matrix._expr)
+        return Matrix(matrix_impl)
+
 
