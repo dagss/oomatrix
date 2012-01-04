@@ -1,6 +1,9 @@
 
 from .graph.shortest_path import find_shortest_path
 
+class ImpossibleOperationError(NotImplementedError):
+    pass
+
 # TODO Cost model etc.
 
 # Graphs are represented as
@@ -230,7 +233,6 @@ class AdditionGraph(object):
 
             if B < A:
                 # Reverse the arguments
-                print "Reversing", A, B
                 def reverse_arguments(a, b):
                     return func(b, a)
                 func = reverse_arguments
@@ -312,7 +314,11 @@ class MultiplyPairGraph(object):
         if target_kinds is None:
             target_kinds = self.conversion_graph.all_kinds
         stop_vertices = [(v,) for v in target_kinds]
-        path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
+        try:
+            path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
+        except ValueError:
+            raise ImpossibleOperationError("Found no way of multiplying %r with %r" %
+                                           start_vertex)
         vertex = (A, B)
         result = None
         for action, func in path:
@@ -367,6 +373,8 @@ multiply_operation = multiply_graph.multiply_operation
 
 
 class MatrixImplType(type):
+    _transpose_classes = {}
+    
     def __init__(cls, name, bases, dct):
         super(MatrixImplType, cls).__init__(name, bases, dct)
         # Register pending conversion registrations
@@ -394,6 +402,26 @@ class MatrixImplType(type):
             raise TypeError("Invalid comparison")
         return cmp(cls.name, other_cls.name)
 
+    @property
+    def h(cls):
+        """
+        A property for creating a new MatrixImplType (a new class),
+        representing the conjugate transpose.
+        """
+        if cls not in MatrixImplType._transpose_classes:
+            class NewClass(MatrixImpl):
+                name = 'conjugate transpose %s' % cls.name
+                def __init__(self, wrapped):
+                    self.wrapped = wrapped
+                    self.nrows, self.ncols = wrapped.ncols, wrapped.nrows
+                def conjugate_transpose(self):
+                    return self.wrapped 
+                def get_element(self, i, j):
+                    return self.wrapped.get_element(j, i) # TODO conj
+            NewClass.__name__ = 'ConjugateTranspose%s' % cls.__name__
+            MatrixImplType._transpose_classes[cls] = NewClass
+        return MatrixImplType._transpose_classes[cls]
+
 class MatrixImpl(object):
     __metaclass__ = MatrixImplType
     
@@ -404,3 +432,6 @@ class MatrixImpl(object):
     def get_type(self):
         return type(self)
 
+    def conjugate_transpose(self):
+        transpose_cls = type(self).h
+        return transpose_cls(self)

@@ -5,8 +5,9 @@ import numpy as np
 # be assigned to a global configuration variable.
 
 from . import formatter
-from .symbolic import ExpressionNode, LeafNode
+from .symbolic import ExpressionNode, LeafNode, ConjugateTransposeNode
 from .matrix import Matrix
+from .core import ImpossibleOperationError
 
 class DescriptionWriter(object):
     def __init__(self, stream):
@@ -148,10 +149,19 @@ class MatVecComputer(object):
 
 
 class StupidComputation(object):
+    # Each visitor method returns either a LeafNode or a
+    # ConjugateTransposeNode with a LeafNode child.
+    
     def __init__(self, multiply_graph, writer, noop):
         self.multiply_graph = multiply_graph
         self.writer = writer
         self.noop = noop
+
+    def is_right_vector(self, expr):
+        return expr.ncols == 1 and expr.nrows > 1
+
+    def is_left_vector(self, expr):
+        return expr.nrows == 1 and expr.ncols > 1
     
     def compute(self, expr):
         return expr.accept_visitor(self, expr)
@@ -160,18 +170,50 @@ class StupidComputation(object):
         pass
 
     def visit_multiply(self, expr):
-        # Figure out if this is a "matrix-vector" product, in which
-        # case we change the order of multiplication. This simple
-        # heuristic is the only one StupidComputer is capable of.
+        # See StupidComputer for details on the behaviour below
+        def transpose(expr):
+            if isinstance(expr, ConjugateTransposeNode):
+                return expr.child
+            else:
+                return ConjugateTransposeNode(expr)
+        
         def mul_pair(left, right):
-            # Recurse to compute left and right matrices
+            ## # Deal with any transpositions; when dealing with vector,
+            ## # we optimize this
+            ## post_transpose = False
+            ## if isinstance(left, ConjugateTransposeNode) and self.is_right_vector(right):
+            ##     # Turn ``A.h * u`` into ``(u.h * A).h``
+            ##     post_transpose = True
+            ##     left, right = transpose(right), left.child
+            ## elif isinstance(right, ConjugateTransposeNode) and self.is_left_vector(left):
+            ##     # Turn ``u * A.h`` into ``(A * u.h).h``
+            ##     post_transpose = True
+            ##     left, right = right.child, transpose(left)
+
+            # Recurse to compute left and right expressions and turn them
+            # into LeafNodes.
             left = left.accept_visitor(self, left)
             right = right.accept_visitor(self, right)
-            matrix_impl = self.multiply_graph.perform((left.matrix_impl, right.matrix_impl))
-            return LeafNode(None, matrix_impl)
+
+            # Perform multiplications
+            left_impl = left.matrix_impl
+            right_impl = right.matrix_impl
+            try:
+                matrix_impl = self.multiply_graph.perform((left_impl, right_impl))
+            except ImpossibleOperationError:
+                # Try the transpose product
+                left_impl = left_impl.conjugate_transpose()
+                right_impl = right_impl.conjugate_transpose()
+                matrix_impl = self.multiply_graph.perform((right_impl, left_impl))
+                matrix_impl = matrix_impl.conjugate_transpose()
+                
+            result = LeafNode(None, matrix_impl)
+            return result
         
         assert len(expr.children) >= 2
-        if expr.children[-1].ncols == 1 and expr.children[0].nrows > 1:
+        # Figure out if this is a "matrix-vector" product, in which
+        # case we change the order of multiplication.
+        if self.is_right_vector(expr):
             # Right-to-left
             right = expr.children[-1]
             for left in expr.children[-2::-1]:
@@ -191,14 +233,20 @@ class StupidComputation(object):
         raise NotImplementedError()
 
     def visit_conjugate_transpose(self, expr):
-        raise NotImplementedError()
+        child = expr.child
+        child = child.accept_visitor(self, child)
+        if isinstance(child, ConjugateTransposeNode):
+            return child
+        else:
+            return LeafNode(None, child.matrix_impl.conjugate_transpose())
 
 
 class StupidComputer(object):
     """
     Computes an expression using some simple syntax-level rules.
     First, we treat all matrices with one 1-length dimension as
-    a "vector". Then, ignoring any cost estimates:
+    a "vector". Then, ignoring any cost estimates (A and B
+    are matrices, u is a vector):
 
       - Matrix-vector products are performed such that there's always
         a vector; ``A * B * x`` is performed right-to-left and
@@ -209,6 +257,9 @@ class StupidComputer(object):
         left-to-right (no matter what). Also, expressions are computed
         as formed: ``(A + B) * X`` first computes ``A + B`` before
         multiplying with ``X``.
+
+      ##- ``A.h * u`` is computed as ``(u.h * A).h``, but ``A.h * B``
+      ##  does an actual transposition of ``A``.
 
       - Matrix additions ``A + B`` are performed in some arbitrary
         order.

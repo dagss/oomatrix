@@ -1,6 +1,4 @@
-import numpy as np
-from nose import SkipTest
-from nose.tools import ok_, eq_, assert_raises
+from .common import *
 
 from ..core import ConversionGraph, AdditionGraph, MatrixImpl, MultiplyPairGraph
 from ..impl.diagonal import *
@@ -81,6 +79,10 @@ def test_addition_get_vertices():
         assert v in V0
 
 def test_add_perform_two():
+
+    #plot_add_graph(mock_addition_graph)
+    #plot_mul_graph(mock_multiply_graph)
+
     yield eq_, A(2), mock_addition_graph.perform([a, a])
     yield eq_, C(4), mock_addition_graph.perform([a, c])
 

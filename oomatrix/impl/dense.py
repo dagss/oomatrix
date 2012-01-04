@@ -2,6 +2,12 @@ import numpy as np
 
 from ..core import MatrixImpl, conversion, add_operation, multiply_operation
 
+def array_conjugate(x):
+    if x.dtype.kind == 'c':
+        return x.T.conjugate()
+    else:
+        return x.T
+
 class NumPyWrapper(object):
     # Mix-in for dense matrix representations
 
@@ -23,14 +29,11 @@ class NumPyWrapper(object):
 class ColumnMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'column-major'
 
-
 class RowMajorImpl(MatrixImpl, NumPyWrapper):
     name = 'row-major'
 
-
 class StridedImpl(MatrixImpl, NumPyWrapper):
     name = 'strided'
-
 
 class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
     """
@@ -49,13 +52,49 @@ class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
         return RowMajorImpl(self.array)
 
 
+#
+# Implement all operations using NumPy with a C-contiguous target.
+#
+# In due course, have our own LAPACK wrapper to do the efficient
+# thing in each case.
+#
+
 for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
-    @add_operation((T, T), T)
-    def add(A, B):
-        return T(A.array + B.array)
+    
+    @add_operation((T, T), RowMajorImpl)
+    def add(a, b):
+        # Ensure result will be C-contiguous with any NumPy
+        out = np.zeros(A.shape, order='C')
+        np.add(a.array, b.array, out)
+        return T(out)
 
-    @multiply_operation((T, T), T)
-    def multiply(A, B):
-        return T(np.dot(A.array, B.array))
+    @multiply_operation((T, T), RowMajorImpl)
+    def multiply(a, b):
+        out = np.dot(a.array, b.array)
+        if not out.flags.c_contiguous:
+            raise NotImplementedError('numpy.dot returned non-C-contiguous array')
+        return T(out)
 
+    #
+    # Then for the conjugate-transpose versions
+    #
+    @add_operation((T.h, T), RowMajorImpl)
+    def add(a, b):
+        a_arr = a.wrapped.array.T
+        if issubclass(a_arr.dtype.type, np.complex):
+            a_arr = a_arr.conjugate()
+        # Ensure result will be C-contiguous with any NumPy
+        out = np.zeros(A.shape, order='C')
+        np.add(a_arr, b.array, out)
+        return T(out)
+
+    @multiply_operation((T.h, T), RowMajorImpl)
+    def multiply(a, b):
+        a_arr = a.wrapped.array.T
+        if issubclass(a_arr.dtype.type, np.complex):
+            a_arr = a_arr.conjugate()
+        out = np.dot(a_arr, b.array)
+        if not out.flags.c_contiguous:
+            raise NotImplementedError('numpy.dot returned non-C-contiguous array')
+        return T(out)
 
