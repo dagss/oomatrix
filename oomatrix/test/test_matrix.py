@@ -8,28 +8,29 @@ De = Matrix(De_array, 'De')
 Di_array = np.arange(3).astype(np.int64)
 Di = Matrix(Di_array, 'Di', diagonal=True)
 
-def assert_repr(fact, test):
+def assert_repr(fact, object_to_repr):
     fact = dedent(fact)
-    if not fact == test:
+    r = repr(object_to_repr)
+    if not fact == r:
         print 'EXPECTED:'
         print fact
         print 'GOT:'
-        print test
+        print r
         print '---'
-    eq_(fact, test)
+    assert fact == r
 
 def test_repr():
     yield assert_repr, """\
     3-by-3 row-major matrix 'De' of int64
     [0 1 2]
     [3 4 5]
-    [6 7 8]""", repr(De)
+    [6 7 8]""", De
 
     yield assert_repr, """\
     3-by-3 diagonal matrix 'Di' of int64
     [0 0 0]
     [0 1 0]
-    [0 0 2]""", repr(Di)
+    [0 0 2]""", Di
 
     yield assert_repr, """\
     3-by-3 matrix of int64 given by:
@@ -38,7 +39,7 @@ def test_repr():
     
     where
 
-        De: 3-by-3 row-major matrix of int64""", repr(De + De)
+        De: 3-by-3 row-major matrix of int64""", De + De
 
     yield assert_repr, """\
     3-by-3 matrix of int64 given by:
@@ -48,21 +49,51 @@ def test_repr():
     where
 
         De: 3-by-3 row-major matrix of int64
-        Di: 3-by-3 diagonal matrix of int64""", repr(De + Di)
+        Di: 3-by-3 diagonal matrix of int64""", De + Di
+
+    yield assert_repr, """\
+    3-by-3 matrix of int64 given by:
+
+        De.h
+
+    where
+
+        De: 3-by-3 row-major matrix of int64""", De.h
+
+    yield assert_repr, """\
+    3-by-3 matrix of int64 given by:
+
+        De.h * Di
+
+    where
+
+        De: 3-by-3 row-major matrix of int64
+        Di: 3-by-3 diagonal matrix of int64""", De.h * Di
 
     yield assert_repr, '''\
     1-by-4 row-major matrix 'Foo' of float64
     [1.0]
     [1.0]
     [1.0]
-    [1.0]''', repr(Matrix(np.ones((4, 1)), 'Foo'))
+    [1.0]''', Matrix(np.ones((4, 1)), 'Foo')
 
     yield assert_repr, '''\
     1-by-4 row-major matrix of float64
     [1.0]
     [1.0]
     [1.0]
-    [1.0]''', repr(Matrix(np.ones((4, 1))))
+    [1.0]''', Matrix(np.ones((4, 1)))
+
+    yield (assert_repr, '''\
+    1-by-4 matrix of float64 given by:
+
+        $0 + $1
+
+    where
+
+        $0: 1-by-4 row-major matrix of float64
+        $1: 1-by-4 row-major matrix of float64''',
+           Matrix(np.ones((4, 1))) + Matrix(np.ones((4, 1))))
 
 
 def test_symbolic():
