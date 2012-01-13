@@ -89,9 +89,11 @@ def conversion_action_from_function(func, source_kind, target_kind,
     if name is None:
         name = func.__name__
     class ResultAction(Conversion):
+        def __init__(self, child):
+            self.child = child
+            
         def perform(self):
-            assert len(self.children) == 1
-            source = self.children[0].perform()
+            source = self.child.perform()
             assert isinstance(source, source_kind)
             result = func(source)
             assert isinstance(result, target_kind)

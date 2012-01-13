@@ -81,7 +81,7 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
     #
     # Then for the conjugate-transpose versions
     #
-    @add_operation((T.h, T), RowMajorImpl)
+    @add_operation((T.H, T), RowMajorImpl)
     def add(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):
@@ -91,7 +91,7 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
         np.add(a_arr, b.array, out)
         return RowMajorImpl(out)
 
-    @multiply_operation((T.h, T), RowMajorImpl)
+    @multiply_operation((T.H, T), RowMajorImpl)
     def multiply(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):

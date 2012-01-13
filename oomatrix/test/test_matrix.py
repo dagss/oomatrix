@@ -1,6 +1,6 @@
 from .common import *
 
-from .. import Matrix, Vector, compute, explain
+from .. import Matrix, compute, explain
 from nose import SkipTest
 
 De_array = np.arange(9).reshape(3, 3).astype(np.int64)

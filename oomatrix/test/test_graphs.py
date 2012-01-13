@@ -4,7 +4,7 @@ from ..core import ConversionGraph, AdditionGraph, MatrixImpl, MultiplyPairGraph
 from ..impl.diagonal import *
 from ..impl.dense import *
 
-from .. import Matrix
+from .. import Matrix, actions
 
 mock_conversion_graph = ConversionGraph()
 mock_conversion = mock_conversion_graph.conversion
@@ -97,12 +97,17 @@ def test_add_perform_many():
     yield eq_, D(8), mock_addition_graph.perform([a, c, d], [D])
 
 def test_mul_two():
-    yield eq_, B(4), mock_multiply_graph.perform([b, b])
-    yield eq_, C(6), mock_multiply_graph.perform([b, c])
-    yield eq_, C(6), mock_multiply_graph.perform([c, b])
-    yield eq_, A(2), mock_multiply_graph.perform([a, b], target_kinds=[A])
-    yield eq_, C(2), mock_multiply_graph.perform([a, b], target_kinds=[C])
+    find = mock_multiply_graph.find_cheapest_action
+    def test(lst, **opts):
+        action = find([actions.LeafAction(x) for x in lst], **opts)
+        return action.perform()
+    
+    yield eq_, B(4), test([b, b])
+    yield eq_, C(6), test([b, c])
+    yield eq_, C(6), test([c, b])
+    yield eq_, A(2), test([a, b], target_kinds=[A])
+    yield eq_, C(2), test([a, b], target_kinds=[C])
     # (A, B) -> C has fast path and is cheaper:
-    yield eq_, C(2), mock_multiply_graph.perform([a, b], target_kinds=[A, C])
+    yield eq_, C(2), test([a, b], target_kinds=[A, C])
     # But (B, A) -> C does not
-    yield eq_, A(2), mock_multiply_graph.perform([b, a], target_kinds=[A, C])
+    yield eq_, A(2), test([b, a], target_kinds=[A, C])
