@@ -1,15 +1,22 @@
 
 
-class ExpressionFormatter(object):
+class BasicExpressionFormatter(object):
+    def __init__(self, name_to_symbol):
+        self.name_to_symbol = name_to_symbol
+        self.anonymous_count = 0
 
-    def format(self, expr, name_to_symbol):
+    def format(self, expr):
         if len(expr.children) == 0:
-            name_to_symbol[expr.name] = expr
-            return expr.name
+            name = expr.name
+            if name is None:
+                name = '$%d' % self.anonymous_count
+                self.anonymous_count += 1
+            self.name_to_symbol[name] = expr
+            return name
         else:
             child_strs = []
             for childexpr in expr.children:
-                s = self.format(childexpr, name_to_symbol)
+                s = self.format(childexpr)
                 if expr.precedence > childexpr.precedence:
                     s = '(%s)' % s
                 child_strs.append(s)
@@ -29,7 +36,13 @@ class ExpressionFormatter(object):
         assert len(terms) == 1
         return terms[0] + '.i'
 
-default_formatter = ExpressionFormatter()
+class ExpressionFormatterFactory(object):
+    def format(self, expr):
+        name_to_symbol = {}
+        s = BasicExpressionFormatter(name_to_symbol).format(expr)
+        return s, name_to_symbol
+
+default_formatter_factory = ExpressionFormatterFactory()
 
     
         

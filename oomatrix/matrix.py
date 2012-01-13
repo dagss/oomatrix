@@ -3,7 +3,7 @@ import numpy as np
 from .core import MatrixImpl
 from .symbolic import (ExpressionNode, LeafNode, AddNode, MulNode, ConjugateTransposeNode,
                        InverseNode)
-from .formatter import default_formatter
+from .formatter import default_formatter_factory
 
 __all__ = ['Matrix']
 
@@ -89,6 +89,7 @@ class Matrix(object):
         return '\n'.join(lines)
 
     def compute(self):
+        print self
         if type(self._expr) is LeafNode:
             return self
         else:
@@ -134,8 +135,7 @@ class Matrix(object):
             used in the expression string
             
         """
-        name_to_matrix = {}
-        s = default_formatter.format(self._expr, name_to_matrix)
+        s, name_to_matrix = default_formatter_factory.format(self._expr)
         for key, expr in name_to_matrix.iteritems():
             name_to_matrix[key] = Matrix(expr.matrix_impl, key)
         return s, name_to_matrix
