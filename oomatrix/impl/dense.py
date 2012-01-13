@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..core import MatrixImpl, conversion, add_operation, multiply_operation
+from ..core import MatrixImpl, conversion, addition, multiplication
 
 def array_conjugate(x):
     if x.dtype.kind == 'c':
@@ -64,14 +64,14 @@ class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
 
 for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
     
-    @add_operation((T, T), RowMajorImpl)
+    @addition((T, T), RowMajorImpl)
     def add(a, b):
         # Ensure result will be C-contiguous with any NumPy
         out = np.zeros(A.shape, order='C')
         np.add(a.array, b.array, out)
         return RowMajorImpl(out)
 
-    @multiply_operation((T, T), RowMajorImpl)
+    @multiplication((T, T), RowMajorImpl)
     def multiply(a, b):
         out = np.dot(a.array, b.array)
         if not out.flags.c_contiguous:
@@ -81,7 +81,7 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
     #
     # Then for the conjugate-transpose versions
     #
-    @add_operation((T.H, T), RowMajorImpl)
+    @addition((T.H, T), RowMajorImpl)
     def add(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):
@@ -91,7 +91,7 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
         np.add(a_arr, b.array, out)
         return RowMajorImpl(out)
 
-    @multiply_operation((T.H, T), RowMajorImpl)
+    @multiplication((T.H, T), RowMajorImpl)
     def multiply(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):

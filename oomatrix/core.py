@@ -56,7 +56,7 @@ class ConversionGraph(object):
             return func
         return dec
         
-    def conversion(self, arg1, arg2=None):
+    def conversion_decorator(self, arg1, arg2=None):
         if arg2 is None:
             return self.conversion_method(arg1)
         source_kind, dest_kind = arg1, arg2        
@@ -225,7 +225,7 @@ class AdditionGraph(object):
         return M
 
     # Decorator
-    def add_operation(self, source_kinds, dest_kind):
+    def addition_decorator(self, source_kinds, dest_kind):
         if not isinstance(source_kinds, tuple):
             raise TypeError("source_kinds must be a tuple")
         self.conversion_graph.all_kinds.update(source_kinds)
@@ -351,7 +351,7 @@ class MultiplyPairGraph(object):
 
 
     # Decorator
-    def multiply_operation(self, source_kinds, dest_kind):
+    def multiplication_decorator(self, source_kinds, dest_kind):
         if not isinstance(source_kinds, tuple) or len(source_kinds) != 2:
             raise TypeError("source_kinds must be a tuple of length 2")
         self.conversion_graph.all_kinds.update(source_kinds)
@@ -372,14 +372,14 @@ class MultiplyPairGraph(object):
 # Create default operation graph, and define some decorators
 # as methods bounds on this graph instance
 conversion_graph = ConversionGraph()
-conversion = conversion_graph.conversion
+conversion = conversion_graph.conversion_decorator
 
 addition_conversion_graph = AdditionGraph(conversion_graph)
-add_operation = addition_conversion_graph.add_operation
+addition = addition_conversion_graph.addition_decorator
 
 
 multiply_graph = MultiplyPairGraph(conversion_graph)
-multiply_operation = multiply_graph.multiply_operation
+multiplication = multiply_graph.multiplication_decorator
 
 
 #
@@ -398,7 +398,7 @@ class MatrixImplType(type):
         for func, decorator_args in pending.iteritems():
             if dct.get(func.__name__, None) is func:
                 graph, dest_kind = decorator_args
-                graph.conversion(cls, dest_kind)(func)
+                graph.conversion_decorator(cls, dest_kind)(func)
                 to_delete.append(func)
         for func in to_delete:
             del pending[func]

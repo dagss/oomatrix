@@ -1,6 +1,6 @@
 import numpy as np
 
-from ..core import MatrixImpl, add_operation, conversion
+from ..core import MatrixImpl, addition, conversion
 from ..cost import FLOP, MEM, MEMOP
 from .dense import SymmetricContiguousImpl
 
@@ -65,7 +65,7 @@ class DiagonalImpl(MatrixImpl):
         else:
             out[...] = result
 
-@add_operation((DiagonalImpl, DiagonalImpl), DiagonalImpl)
+@addition((DiagonalImpl, DiagonalImpl), DiagonalImpl)
 def diagonal_plus_diagonal(A, B):
     return DiagonalImpl(A.array + B.array)
 

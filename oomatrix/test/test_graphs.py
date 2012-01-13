@@ -7,11 +7,11 @@ from ..impl.dense import *
 from .. import Matrix, actions
 
 mock_conversion_graph = ConversionGraph()
-mock_conversion = mock_conversion_graph.conversion
+mock_conversion = mock_conversion_graph.conversion_decorator
 mock_addition_graph = AdditionGraph(mock_conversion_graph)
 mock_multiply_graph = MultiplyPairGraph(mock_conversion_graph)
-mock_multiply_operation = mock_multiply_graph.multiply_operation
-mock_add_operation = mock_addition_graph.add_operation
+mock_multiplication = mock_multiply_graph.multiplication_decorator
+mock_addition = mock_addition_graph.addition_decorator
 
 mock_kinds = []
 
@@ -30,17 +30,17 @@ for X in 'ABCD':
         name = X
     mock_kinds.append(MockImpl)
 
-    @mock_add_operation((MockImpl, MockImpl), MockImpl)
+    @mock_addition((MockImpl, MockImpl), MockImpl)
     def _adder(a, b):
         return type(a)(a.value + b.value)
 
-    @mock_multiply_operation((MockImpl, MockImpl), MockImpl)
+    @mock_multiplication((MockImpl, MockImpl), MockImpl)
     def _multiplier(a, b):
         return type(a)(a.value * b.value)
 
 A, B, C, D = mock_kinds
 
-@mock_multiply_operation((A, B), C)
+@mock_multiplication((A, B), C)
 def multiply_A_B_to_C(a, b):
     return C(a.value * b.value)
 

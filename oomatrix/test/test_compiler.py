@@ -8,11 +8,11 @@ def arrayeq_(x, y):
     assert np.all(x == y)
 
 mock_conversion_graph = ConversionGraph()
-mock_conversion = mock_conversion_graph.conversion
+mock_conversion = mock_conversion_graph.conversion_decorator
 mock_addition_graph = AdditionGraph(mock_conversion_graph)
 mock_multiply_graph = MultiplyPairGraph(mock_conversion_graph)
-mock_multiply_operation = mock_multiply_graph.multiply_operation
-mock_add_operation = mock_addition_graph.add_operation
+mock_multiplication = mock_multiply_graph.multiplication_decorator
+mock_addition = mock_addition_graph.addition_decorator
 
 class Mock1(MatrixImpl):
     name = 'Mock1'
@@ -33,23 +33,23 @@ class Mock2(Mock1):
     name = 'Mock2'
 Mock2.H.__repr__ = conjugate_repr
 
-@mock_multiply_operation((Mock1, Mock1), Mock1)
+@mock_multiplication((Mock1, Mock1), Mock1)
 def applemul(a, b):
     assert a.ncols == b.nrows
     return Mock1('(%s %s)' % (a.value, b.value), a.nrows, b.ncols)
 
-@mock_multiply_operation((Mock1, Mock1.H), Mock1)
+@mock_multiplication((Mock1, Mock1.H), Mock1)
 def orangemul(a, b):
     assert a.ncols == b.nrows
     return Mock1('(%s %s.h)' % (a.value, b.wrapped.value), a.nrows, b.ncols)
 
 @credits('libfairtrade', 'N. Roozen & F. van der Hoof (1988)')
-@mock_multiply_operation((Mock1, Mock2), Mock2)
+@mock_multiplication((Mock1, Mock2), Mock2)
 def bananamul(a, b):
     assert a.ncols == b.nrows
     return Mock2('(%s %s)' % (a.value, b.value), a.nrows, b.ncols)
 
-@mock_multiply_operation((Mock1.H, Mock2), Mock2)
+@mock_multiplication((Mock1.H, Mock2), Mock2)
 def figmul(a, b):
     assert a.ncols == b.nrows
     return Mock2('(%s %s.h)' % (a.wrapped.value, b.value), a.nrows, b.ncols)
