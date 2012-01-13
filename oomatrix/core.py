@@ -1,5 +1,6 @@
 
 from .graph.shortest_path import find_shortest_path
+from . import actions
 
 class ImpossibleOperationError(NotImplementedError):
     pass
@@ -64,7 +65,10 @@ class ConversionGraph(object):
         def dec(func):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
-            add_to_graph(self.conversions, source_impl_type, dest_impl_type, func)
+            action_type = actions.conversion_action_from_function(func,
+                                                                  source_impl_type,
+                                                                  dest_impl_type)
+            add_to_graph(self.conversions, source_impl_type, dest_impl_type, action_type)
             for listener in self.listeners:
                 listener(self, source_impl_type, dest_impl_type, func)
             return func
@@ -297,20 +301,23 @@ class MultiplyPairGraph(object):
             return # at final node
         conversions = self.conversion_graph.conversions
         # All direct multiplications of A and B
-        for target_kind, mul_func in self.multiply_operations.get(vertex, {}).iteritems():
-            yield ((target_kind,), 1, ('multiply', mul_func))
+        for target_kind, conv_action_type in self.multiply_operations.get(vertex, {}).iteritems():
+            yield ((target_kind,), 1, ('multiply', conv_action_type))
         A_kind, B_kind = vertex
         # Yield possible conversions of A
-        for A_to_kind, conv_func in conversions.get(A_kind, {}).iteritems():
-            yield ((A_to_kind, B_kind), 1, (0, conv_func))
+        for A_to_kind, conv_action_type in conversions.get(A_kind, {}).iteritems():
+            yield ((A_to_kind, B_kind), 1, (0, conv_action_type))
         # Yield possible conversions of B
-        for B_to_kind, conv_func in conversions.get(B_kind, {}).iteritems():
-            yield ((A_kind, B_to_kind), 1, (1, conv_func))
+        for B_to_kind, conv_action_type in conversions.get(B_kind, {}).iteritems():
+            yield ((A_kind, B_to_kind), 1, (1, conv_action_type))
 
     # Public-facing methods
-    def perform(self, operands, target_kinds=None):
-        A, B = operands
-        start_vertex = (A.get_type(), B.get_type())
+    def find_cheapest_action(self, children, target_kinds=None):
+        assert all(isinstance(child, actions.Action) for child in children)
+        assert len(children) == 2
+        
+        # First, operate on the kinds of the child actions
+        start_vertex = tuple(x.get_kind() for x in children)
         if target_kinds is None:
             target_kinds = self.conversion_graph.all_kinds
         stop_vertices = [(v,) for v in target_kinds]
@@ -319,16 +326,20 @@ class MultiplyPairGraph(object):
         except ValueError:
             raise ImpossibleOperationError("Found no way of multiplying %r with %r" %
                                            start_vertex)
-        vertex = (A, B)
+
+        print 'TODO: post-multiply conversions'
+
+        node = children
         result = None
-        for action, func in path:
-            a, b = vertex
-            if action == 'multiply':
-                result = func(a, b)
-            elif action == 0:
-                vertex = (func(a), b)
-            elif action == 1:
-                vertex = (a, func(b))
+        for edge, action_type in path:
+            if edge == 'multiply':
+                result = action_type(node)
+            elif edge == 0:
+                a, b = node
+                node = (action_type(a), b)
+            elif edge == 1:
+                a, b = node
+                node = (a, action_type(b))
             else:
                 assert False
         assert result is not None
@@ -346,12 +357,12 @@ class MultiplyPairGraph(object):
                 raise TypeError("Does not decorate callable")
             if source_impl_types in self.multiply_operations:
                 raise Exception("Already registered multiplication for %s" % (A, B))
-            add_to_graph(self.multiply_operations, source_impl_types, dest_impl_type, func)
+            action_type = actions.multiplication_action_from_function(func,
+                                                                      source_impl_types,
+                                                                      dest_impl_type)
+            add_to_graph(self.multiply_operations, source_impl_types, dest_impl_type, action_type)
             return func
         return dec
-    
-
-
 
 
 # Create default operation graph, and define some decorators
@@ -403,7 +414,7 @@ class MatrixImplType(type):
         return cmp(cls.name, other_cls.name)
 
     @property
-    def h(cls):
+    def H(cls):
         """
         A property for creating a new MatrixImplType (a new class),
         representing the conjugate transpose.
@@ -433,5 +444,25 @@ class MatrixImpl(object):
         return type(self)
 
     def conjugate_transpose(self):
-        transpose_cls = type(self).h
+        transpose_cls = type(self).H
         return transpose_cls(self)
+
+
+
+def credits(library=None, authors=None):
+    """
+    Decorator used to decorate implementation actions with information
+    about the library used and references.
+    """
+    attrs = {}
+    if library is not None:
+        attrs['library'] = library
+    if authors is not None:
+        attrs['authors'] = authors
+    def dec(func):
+        if getattr(func, 'credits', None) is None:
+            func.credits = {}
+        func.credits.update(attrs)
+        return func
+    return dec
+

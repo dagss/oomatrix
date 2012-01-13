@@ -53,6 +53,7 @@ class MulNode(DistributiveOperationNode):
 
 class ConjugateTransposeNode(ExpressionNode):
     def __init__(self, child):
+        assert not isinstance(child, ConjugateTransposeNode), 'Double conjugation not allowed'
         self.child = child
         self.children = [child]
         self.ncols, self.nrows = child.nrows, child.ncols

@@ -52,6 +52,9 @@ class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
         return RowMajorImpl(self.array)
 
 
+
+
+
 #
 # Implement all operations using NumPy with a C-contiguous target.
 #
@@ -66,14 +69,14 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
         # Ensure result will be C-contiguous with any NumPy
         out = np.zeros(A.shape, order='C')
         np.add(a.array, b.array, out)
-        return T(out)
+        return RowMajorImpl(out)
 
     @multiply_operation((T, T), RowMajorImpl)
     def multiply(a, b):
         out = np.dot(a.array, b.array)
         if not out.flags.c_contiguous:
             raise NotImplementedError('numpy.dot returned non-C-contiguous array')
-        return T(out)
+        return RowMajorImpl(out)
 
     #
     # Then for the conjugate-transpose versions
@@ -86,7 +89,7 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
         # Ensure result will be C-contiguous with any NumPy
         out = np.zeros(A.shape, order='C')
         np.add(a_arr, b.array, out)
-        return T(out)
+        return RowMajorImpl(out)
 
     @multiply_operation((T.h, T), RowMajorImpl)
     def multiply(a, b):
@@ -96,5 +99,25 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
         out = np.dot(a_arr, b.array)
         if not out.flags.c_contiguous:
             raise NotImplementedError('numpy.dot returned non-C-contiguous array')
-        return T(out)
+        return RowMajorImpl(out)
 
+
+
+
+## for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
+    
+##     class _(MultiplyOperation):
+##         library = 'numpy'
+        
+##         @staticmethod
+##         def perform(a, b):
+##             pass
+
+##         @staticmethod
+##         def get_nnz(a, b):
+##             return a.row_count * b.column_count
+
+        
+##             def multiply(a, b):
+##         a
+    
