@@ -47,30 +47,30 @@ class ConversionGraph(object):
     #
     # Decorators
     #
-    def conversion_method(self, dest_impl_type):
+    def conversion_method(self, dest_kind):
         # Postpone figuring out source_type and registering to
         # the MatrixImplMetaclass
         def dec(func):
             ConversionGraph._global_pending_conversion_registrations[func] = (
-                self, dest_impl_type)
+                self, dest_kind)
             return func
         return dec
         
     def conversion(self, arg1, arg2=None):
         if arg2 is None:
             return self.conversion_method(arg1)
-        source_impl_type, dest_impl_type = arg1, arg2        
-        self.all_kinds.add(source_impl_type)
-        self.all_kinds.add(dest_impl_type)
+        source_kind, dest_kind = arg1, arg2        
+        self.all_kinds.add(source_kind)
+        self.all_kinds.add(dest_kind)
         def dec(func):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
             action_type = actions.conversion_action_from_function(func,
-                                                                  source_impl_type,
-                                                                  dest_impl_type)
-            add_to_graph(self.conversions, source_impl_type, dest_impl_type, action_type)
+                                                                  source_kind,
+                                                                  dest_kind)
+            add_to_graph(self.conversions, source_kind, dest_kind, action_type)
             for listener in self.listeners:
-                listener(self, source_impl_type, dest_impl_type, func)
+                listener(self, source_kind, dest_kind, func)
             return func
         return dec
 
@@ -225,15 +225,15 @@ class AdditionGraph(object):
         return M
 
     # Decorator
-    def add_operation(self, source_impl_types, dest_impl_type):
-        if not isinstance(source_impl_types, tuple):
-            raise TypeError("source_impl_types must be a tuple")
-        self.conversion_graph.all_kinds.update(source_impl_types)
-        self.conversion_graph.all_kinds.add(dest_impl_type)
+    def add_operation(self, source_kinds, dest_kind):
+        if not isinstance(source_kinds, tuple):
+            raise TypeError("source_kinds must be a tuple")
+        self.conversion_graph.all_kinds.update(source_kinds)
+        self.conversion_graph.all_kinds.add(dest_kind)
         def dec(func):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
-            A, B = source_impl_types
+            A, B = source_kinds
 
             if B < A:
                 # Reverse the arguments
@@ -246,9 +246,9 @@ class AdditionGraph(object):
                 raise Exception("Already registered addition for %s" % (A, B))
 
             action_factory = actions.addition_action_from_function(func,
-                                                                   source_impl_types,
-                                                                   dest_impl_type)
-            add_to_graph(self.add_operations, source_impl_types, dest_impl_type, action_factory)
+                                                                   source_kinds,
+                                                                   dest_kind)
+            add_to_graph(self.add_operations, source_kinds, dest_kind, action_factory)
             return func
         return dec
 
@@ -351,20 +351,20 @@ class MultiplyPairGraph(object):
 
 
     # Decorator
-    def multiply_operation(self, source_impl_types, dest_impl_type):
-        if not isinstance(source_impl_types, tuple) or len(source_impl_types) != 2:
-            raise TypeError("source_impl_types must be a tuple of length 2")
-        self.conversion_graph.all_kinds.update(source_impl_types)
-        self.conversion_graph.all_kinds.add(dest_impl_type)
+    def multiply_operation(self, source_kinds, dest_kind):
+        if not isinstance(source_kinds, tuple) or len(source_kinds) != 2:
+            raise TypeError("source_kinds must be a tuple of length 2")
+        self.conversion_graph.all_kinds.update(source_kinds)
+        self.conversion_graph.all_kinds.add(dest_kind)
         def dec(func):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
-            if source_impl_types in self.multiply_operations:
+            if source_kinds in self.multiply_operations:
                 raise Exception("Already registered multiplication for %s" % (A, B))
             action_factory = actions.multiplication_action_from_function(func,
-                                                                         source_impl_types,
-                                                                         dest_impl_type)
-            add_to_graph(self.multiply_operations, source_impl_types, dest_impl_type, action_factory)
+                                                                         source_kinds,
+                                                                         dest_kind)
+            add_to_graph(self.multiply_operations, source_kinds, dest_kind, action_factory)
             return func
         return dec
 
@@ -397,8 +397,8 @@ class MatrixImplType(type):
         pending = ConversionGraph._global_pending_conversion_registrations
         for func, decorator_args in pending.iteritems():
             if dct.get(func.__name__, None) is func:
-                graph, dest_impl_type = decorator_args
-                graph.conversion(cls, dest_impl_type)(func)
+                graph, dest_kind = decorator_args
+                graph.conversion(cls, dest_kind)(func)
                 to_delete.append(func)
         for func in to_delete:
             del pending[func]
