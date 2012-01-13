@@ -112,8 +112,8 @@ def conversion_action_from_function(func, source_kind, target_kind,
     ResultAction.__module__ = func.__module__
     return ResultAction
 
-def multiplication_action_from_function(func, source_kinds, target_kind,
-                                       name=None, authors=None):
+def _arithmetic_action_from_function(superclass, func, source_kinds, target_kind,
+                                    name=None, authors=None):
     """
     Use to dynamically generate a Multiplication subclass
     from a function definition.
@@ -124,7 +124,7 @@ def multiplication_action_from_function(func, source_kinds, target_kind,
     """
     if name is None:
         name = func.__name__
-    class ResultAction(Multiplication):
+    class ResultAction(superclass):
         def perform(self):
             operands = [child.perform() for child in self.children]
             assert len(operands) == len(source_kinds)
@@ -145,8 +145,32 @@ def multiplication_action_from_function(func, source_kinds, target_kind,
         def get_kind(self):
             return target_kind
 
-    ResultAction.__name__ = 'Multiplication_%s' % func.__name__
+    ResultAction.__name__ = '%s_%s' % (superclass.__name__, func.__name__)
     ResultAction.__module__ = func.__module__
     return ResultAction
+
+
+def multiplication_action_from_function(func, source_kinds, target_kind,
+                                       name=None, authors=None):
+    """
+    Use to dynamically generate a Multiplication subclass
+    from a function definition.
+
+    Used in particular by the @multiplication decorator
+    in core.py.
+    
+    """
+    return _arithmetic_action_from_function(Multiplication, func, source_kinds,
+                                            target_kind, name, authors)
                                      
-        
+def addition_action_from_function(func, source_kinds, target_kind,
+                                  name=None, authors=None):
+    """
+    Use to dynamically generate an Addition subclass
+    from a function definition.
+
+    Used in particular by the @addition decorator in core.py.
+    
+    """
+    return _arithmetic_action_from_function(Addition, func, source_kinds,
+                                            target_kind, name, authors)

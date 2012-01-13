@@ -176,19 +176,19 @@ class AdditionGraph(object):
                     yield (new_vertex, cost,
                            ('add', kind_ap, kind_bp, to_kind, add_func, second_add_func))
 
-    def perform(self, operands, target_kinds=None):
+    def find_cheapest_action(self, operands, target_kinds=None):
         operand_dict = {}
         # Sort operands by their kind
         for op in operands:
-            operand_dict.setdefault(op.get_type(), []).append(op)
+            operand_dict.setdefault(op.get_kind(), []).append(op)
 
         # Perform all within-kind additions
         reduced_operand_dict = {}
         for kind, operand_list in operand_dict.iteritems():
-            add_operation = self.add_operations[(kind, kind)][kind]
+            add_action_factory = self.add_operations[(kind, kind)][kind]
             u, rest = operand_list[0], operand_list[1:]
             for v in rest:
-                u = add_operation(u, v)
+                u = add_action_factory([u, v])
             reduced_operand_dict[kind] = u
         del operand_dict
 
@@ -206,19 +206,19 @@ class AdditionGraph(object):
         # Execute operations found
         matrices = reduced_operand_dict
         for payload in path:
-            action, args = payload[0], payload[1:]
-            if action == 'add':
-                kind_a, kind_b, to_kind, add_func, second_add_func = args
+            edge, args = payload[0], payload[1:]
+            if edge == 'add':
+                kind_a, kind_b, to_kind, add_action_factory, second_add_action_factory = args
                 A = matrices.pop(kind_a)
                 B = matrices.pop(kind_b)
-                C = add_func(A, B)
-            elif action == 'convert':
-                kind, to_kind, conv_func, second_add_func = args
+                C = add_action_factory([A, B])
+            elif edge == 'convert':
+                kind, to_kind, conv_action_factory, second_add_action_factory = args
                 A = matrices.pop(kind)
-                C = conv_func(A)
-            assert (to_kind in matrices) == (second_add_func is not None)
-            if second_add_func is not None:
-                C = second_add_func(C, matrices[to_kind])
+                C = conv_action_factory(A)
+            assert (to_kind in matrices) == (second_add_action_factory is not None)
+            if second_add_action_factory is not None:
+                C = second_add_action_factory([C, matrices[to_kind]])
             matrices[to_kind] = C
 
         M, = matrices.values()
@@ -244,7 +244,11 @@ class AdditionGraph(object):
             
             if (A, B) in self.add_operations:
                 raise Exception("Already registered addition for %s" % (A, B))
-            add_to_graph(self.add_operations, source_impl_types, dest_impl_type, func)
+
+            action_factory = actions.addition_action_from_function(func,
+                                                                   source_impl_types,
+                                                                   dest_impl_type)
+            add_to_graph(self.add_operations, source_impl_types, dest_impl_type, action_factory)
             return func
         return dec
 
@@ -301,15 +305,15 @@ class MultiplyPairGraph(object):
             return # at final node
         conversions = self.conversion_graph.conversions
         # All direct multiplications of A and B
-        for target_kind, conv_action_type in self.multiply_operations.get(vertex, {}).iteritems():
-            yield ((target_kind,), 1, ('multiply', conv_action_type))
+        for target_kind, conv_action_factory in self.multiply_operations.get(vertex, {}).iteritems():
+            yield ((target_kind,), 1, ('multiply', conv_action_factory))
         A_kind, B_kind = vertex
         # Yield possible conversions of A
-        for A_to_kind, conv_action_type in conversions.get(A_kind, {}).iteritems():
-            yield ((A_to_kind, B_kind), 1, (0, conv_action_type))
+        for A_to_kind, conv_action_factory in conversions.get(A_kind, {}).iteritems():
+            yield ((A_to_kind, B_kind), 1, (0, conv_action_factory))
         # Yield possible conversions of B
-        for B_to_kind, conv_action_type in conversions.get(B_kind, {}).iteritems():
-            yield ((A_kind, B_to_kind), 1, (1, conv_action_type))
+        for B_to_kind, conv_action_factory in conversions.get(B_kind, {}).iteritems():
+            yield ((A_kind, B_to_kind), 1, (1, conv_action_factory))
 
     # Public-facing methods
     def find_cheapest_action(self, children, target_kinds=None):
@@ -331,15 +335,15 @@ class MultiplyPairGraph(object):
 
         node = children
         result = None
-        for edge, action_type in path:
+        for edge, action_factory in path:
             if edge == 'multiply':
-                result = action_type(node)
+                result = action_factory(node)
             elif edge == 0:
                 a, b = node
-                node = (action_type(a), b)
+                node = (action_factory(a), b)
             elif edge == 1:
                 a, b = node
-                node = (a, action_type(b))
+                node = (a, action_factory(b))
             else:
                 assert False
         assert result is not None
@@ -357,10 +361,10 @@ class MultiplyPairGraph(object):
                 raise TypeError("Does not decorate callable")
             if source_impl_types in self.multiply_operations:
                 raise Exception("Already registered multiplication for %s" % (A, B))
-            action_type = actions.multiplication_action_from_function(func,
-                                                                      source_impl_types,
-                                                                      dest_impl_type)
-            add_to_graph(self.multiply_operations, source_impl_types, dest_impl_type, action_type)
+            action_factory = actions.multiplication_action_from_function(func,
+                                                                         source_impl_types,
+                                                                         dest_impl_type)
+            add_to_graph(self.multiply_operations, source_impl_types, dest_impl_type, action_factory)
             return func
         return dec
 

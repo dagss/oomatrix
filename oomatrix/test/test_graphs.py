@@ -67,6 +67,18 @@ b = B(2)
 c = C(3)
 d = D(4)
 
+def assert_add(expected, lst, target_kinds=None):
+    action = mock_addition_graph.find_cheapest_action(
+        [actions.LeafAction(x) for x in lst], target_kinds)
+    got = action.perform()
+    eq_(expected, got)
+
+def assert_mul(expected, lst, target_kinds=None):
+    action = mock_multiply_graph.find_cheapest_action(
+        [actions.LeafAction(x) for x in lst], target_kinds)
+    got = action.perform()
+    eq_(expected, got)
+
 def test_addition_get_vertices():
     V = list(mock_addition_graph.get_vertices(3, [A, B, C, D]))
     V0 = [[A], [B], [C], [D],
@@ -83,31 +95,27 @@ def test_add_perform_two():
     #plot_add_graph(mock_addition_graph)
     #plot_mul_graph(mock_multiply_graph)
 
-    yield eq_, A(2), mock_addition_graph.perform([a, a])
-    yield eq_, C(4), mock_addition_graph.perform([a, c])
+    yield assert_add, A(2), [a, a]
+    yield assert_add, C(4), [a, c]
 
-    yield eq_, A(3), mock_addition_graph.perform([a, b], [A])
-    yield eq_, B(3), mock_addition_graph.perform([a, b], [B])
+    yield assert_add, A(3), [a, b], [A]
+    yield assert_add, B(3), [a, b], [B]
 
     # Can result in both a and b, so raises exception
-    yield assert_raises, ValueError, mock_addition_graph.perform, [a, b]
+    yield assert_raises, ValueError, assert_add, None, [a, b]
 
 
 def test_add_perform_many():
-    yield eq_, D(8), mock_addition_graph.perform([a, c, d], [D])
+    yield assert_add, D(8), [a, c, d], [D]
 
 def test_mul_two():
-    find = mock_multiply_graph.find_cheapest_action
-    def test(lst, **opts):
-        action = find([actions.LeafAction(x) for x in lst], **opts)
-        return action.perform()
     
-    yield eq_, B(4), test([b, b])
-    yield eq_, C(6), test([b, c])
-    yield eq_, C(6), test([c, b])
-    yield eq_, A(2), test([a, b], target_kinds=[A])
-    yield eq_, C(2), test([a, b], target_kinds=[C])
+    yield assert_mul, B(4), [b, b]
+    yield assert_mul, C(6), [b, c]
+    yield assert_mul, C(6), [c, b]
+    yield assert_mul, A(2), [a, b], [A]
+    yield assert_mul, C(2), [a, b], [C]
     # (A, B) -> C has fast path and is cheaper:
-    yield eq_, C(2), test([a, b], target_kinds=[A, C])
+    yield assert_mul, C(2), [a, b], [A, C]
     # But (B, A) -> C does not
-    yield eq_, A(2), test([b, a], target_kinds=[A, C])
+    yield assert_mul, A(2), [b, a], [A, C]
