@@ -301,19 +301,26 @@ class MultiplyPairGraph(object):
     def get_edges(self, vertex):
         # Payload: ('multiply'|0|1, func)
         # Where 0, 1 denotes conversion of left or right operand
-        if len(vertex) == 1:
-            return # at final node
         conversions = self.conversion_graph.conversions
-        # All direct multiplications of A and B
-        for target_kind, conv_action_factory in self.multiply_operations.get(vertex, {}).iteritems():
-            yield ((target_kind,), 1, ('multiply', conv_action_factory))
-        A_kind, B_kind = vertex
-        # Yield possible conversions of A
-        for A_to_kind, conv_action_factory in conversions.get(A_kind, {}).iteritems():
-            yield ((A_to_kind, B_kind), 1, (0, conv_action_factory))
-        # Yield possible conversions of B
-        for B_to_kind, conv_action_factory in conversions.get(B_kind, {}).iteritems():
-            yield ((A_kind, B_to_kind), 1, (1, conv_action_factory))
+        if len(vertex) == 1:
+            # Mul has happened; at this point, only list possible post-operation
+            # conversions
+            kind, = vertex
+            for target_kind, conv_action_factory in conversions.get(
+                kind, {}).iteritems():
+                yield ((target_kind,), 1, (0, conv_action_factory))
+        else:
+            # All direct multiplications of A and B
+            for target_kind, mul_action_factory in self.multiply_operations.get(
+                vertex, {}).iteritems():
+                yield ((target_kind,), 1, ('multiply', mul_action_factory))
+            A_kind, B_kind = vertex
+            # Yield possible conversions of A
+            for A_to_kind, conv_action_factory in conversions.get(A_kind, {}).iteritems():
+                yield ((A_to_kind, B_kind), 1, (0, conv_action_factory))
+            # Yield possible conversions of B
+            for B_to_kind, conv_action_factory in conversions.get(B_kind, {}).iteritems():
+                yield ((A_kind, B_to_kind), 1, (1, conv_action_factory))
 
     # Public-facing methods
     def find_cheapest_action(self, children, target_kinds=None):
@@ -328,26 +335,24 @@ class MultiplyPairGraph(object):
         try:
             path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
         except ValueError:
-            raise ImpossibleOperationError("Found no way of multiplying %r with %r" %
-                                           start_vertex)
+            if target_kinds != self.conversion_graph.all_kinds:
+                postfix = ' to produce one of [%s]' % (', '.join(str(kind)
+                                                                         for kind in target_kinds))
+            else:
+                postfix = ''
+            raise ImpossibleOperationError("Found no way of multiplying %r with %r%s" %
+                                           (start_vertex + (postfix,)))
 
-        print 'TODO: post-multiply conversions'
-
-        node = children
-        result = None
+        node = tuple(children)
         for edge, action_factory in path:
             if edge == 'multiply':
-                result = action_factory(node)
-            elif edge == 0:
-                a, b = node
-                node = (action_factory(a), b)
-            elif edge == 1:
-                a, b = node
-                node = (a, action_factory(b))
+                node = (action_factory(node),)
             else:
-                assert False
-        assert result is not None
-        return result
+                # edge is an int indicating which element to convert with
+                # the action
+                node = node[:edge] + (action_factory(node[edge]),) + node[edge + 1:]
+        assert len(node) == 1
+        return node[0]
 
 
     # Decorator

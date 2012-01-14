@@ -34,9 +34,12 @@ for X in 'ABCD':
     def _adder(a, b):
         return type(a)(a.value + b.value)
 
-    @mock_multiplication((MockImpl, MockImpl), MockImpl)
-    def _multiplier(a, b):
-        return type(a)(a.value * b.value)
+    if X != 'D':
+        # Type D does not have within-type multiplication; only
+        # way to get to D result is after-operation conversion
+        @mock_multiplication((MockImpl, MockImpl), MockImpl)
+        def _multiplier(a, b):
+            return type(a)(a.value * b.value)
 
 A, B, C, D = mock_kinds
 
@@ -119,3 +122,7 @@ def test_mul_two():
     yield assert_mul, C(2), [a, b], [A, C]
     # But (B, A) -> C does not
     yield assert_mul, A(2), [b, a], [A, C]
+
+    # Post-multiply conversion
+    yield assert_mul, D(2), [a, b], [D]
+    
