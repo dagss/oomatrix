@@ -266,6 +266,9 @@ class MatVecGraph(object):
         raise NotImplementedError()
 
 
+def tuple_replace(tup, idx, value):
+    return tup[:idx] + (value,) + tup[idx + 1:]
+
 class MultiplyPairGraph(object):
     """
     A graph used to find the best combination of conversions to
@@ -302,29 +305,25 @@ class MultiplyPairGraph(object):
         # Payload: ('multiply'|0|1, func)
         # Where 0, 1 denotes conversion of left or right operand
         conversions = self.conversion_graph.conversions
-        if len(vertex) == 1:
-            # Mul has happened; at this point, only list possible post-operation
-            # conversions
-            kind, = vertex
-            for target_kind, conv_action_factory in conversions.get(
-                kind, {}).iteritems():
-                yield ((target_kind,), 1, (0, conv_action_factory))
-        else:
-            # All direct multiplications of A and B
+
+        if len(vertex) > 1:
+            # Multiplication actions at this point
             for target_kind, mul_action_factory in self.multiply_operations.get(
                 vertex, {}).iteritems():
                 yield ((target_kind,), 1, ('multiply', mul_action_factory))
-            A_kind, B_kind = vertex
-            # Yield possible conversions of A
-            for A_to_kind, conv_action_factory in conversions.get(A_kind, {}).iteritems():
-                yield ((A_to_kind, B_kind), 1, (0, conv_action_factory))
-            # Yield possible conversions of B
-            for B_to_kind, conv_action_factory in conversions.get(B_kind, {}).iteritems():
-                yield ((A_kind, B_to_kind), 1, (1, conv_action_factory))
+
+        # List possible conversions of one of the elements of the tuple
+        # This can happen both before multiplication (len > 1) and after (len == 1)
+        for i in range(len(vertex)):
+            from_kind = vertex[i]
+            for target_kind, conversion_factory in conversions.get(from_kind, {}).iteritems():
+                neighbour = tuple_replace(vertex, i, target_kind)
+                yield (neighbour, 1, (i, conversion_factory))
 
     # Public-facing methods
     def find_cheapest_action(self, children, target_kinds=None):
-        assert all(isinstance(child, actions.Action) for child in children)
+        assert all(isinstance(child, actions.Action)
+                   for child in children)
         assert len(children) == 2
         
         # First, operate on the kinds of the child actions
@@ -333,15 +332,17 @@ class MultiplyPairGraph(object):
             target_kinds = self.conversion_graph.all_kinds
         stop_vertices = [(v,) for v in target_kinds]
         try:
-            path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
+            path = find_shortest_path(self.get_edges,
+                                      start_vertex, stop_vertices)
         except ValueError:
             if target_kinds != self.conversion_graph.all_kinds:
-                postfix = ' to produce one of [%s]' % (', '.join(str(kind)
-                                                                         for kind in target_kinds))
+                postfix = ' to produce one of [%s]' % (
+                    ', '.join(str(kind) for kind in target_kinds))
             else:
                 postfix = ''
-            raise ImpossibleOperationError("Found no way of multiplying %r with %r%s" %
-                                           (start_vertex + (postfix,)))
+            raise ImpossibleOperationError(
+                "Found no way of multiplying %r with %r%s" %
+                (start_vertex + (postfix,)))
 
         node = tuple(children)
         for edge, action_factory in path:

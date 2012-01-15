@@ -33,6 +33,10 @@ class Mock2(Mock1):
     name = 'Mock2'
 Mock2.H.__repr__ = conjugate_repr
 
+class Mock3(Mock1):
+    name = 'Mock3'
+Mock3.H.__repr__ = conjugate_repr
+
 @mock_multiplication((Mock1, Mock1), Mock1)
 def applemul(a, b):
     assert a.ncols == b.nrows
@@ -65,42 +69,49 @@ v = Matrix(Mock2('v', 4, 1))
 # SimplisticCompiler
 #
 
+## '<Mock2:(A u)>', '''\
+##         A * u is computed in one step, "bananamul(A, u)", using [1]
+
+##         [1] libfairtrade, N. Roozen & F. van der Hoof (1988)''',
 
 def test_stupid_compiler_mock():
     compiler = SimplisticCompiler(multiply_graph=mock_multiply_graph)
     co = compiler.compute
 #    ex = compiler.explain
-    def test(expected, description, M):
+    def test(expected, M, target_kind=None):
         eq_(expected, repr(co(M)._expr.matrix_impl))
-        #eq(dedent(description), ex(M))
 
     # A is 3-by-3 Mock1, B is 3-by-4 Mock2, u is 3-by-1 Mock2
 
-    # The description strings can be preceded by "In order to compute A * u, one would..."
-    
+    #
+    # Multiplication
+    #
+
     yield ok_, type(A * u) is Matrix
-    yield test, '<Mock2:(A u)>', '''\
-        A * u is computed in one step, "bananamul(A, u)", using [1]
+    yield test, '<Mock2:(A u)>', A * u
 
-        [1] libfairtrade, N. Roozen & F. van der Hoof (1988)''', A * u
+    yield test, '<Mock2:(A (A u))>', A * A * u
+    yield test, '<Mock2:(A (A (A u)))>', A * A * A * u
+    yield test, '<Mock2:(((A A) A) B)>', A * A * A * B
 
-    yield test, '<Mock2:(A (A u))>', '''\
-        Compute $1 = A * u using 
-        
-        ''', A * A * u
-    yield test, '<Mock2:(A (A (A u)))>', None, A * A * A * u
-    yield test, '<Mock2:(((A A) A) B)>', None, A * A * A * B
+    #
+    # Mul + conjugation
+    #
 
     # Straightforward conjugate
-    yield test, '<Mock1:(A A.h)>', None, A * A.h
+    yield test, '<Mock1:(A A.h)>', A * A.h
     # Need to conjugate parent expression
-    yield test, '<conjugate transpose Mock1:(A A).h>', None, A.h * A.h
+    yield test, '<conjugate transpose Mock1:(A A).h>', A.h * A.h
     # A.h * A is not implemented
     yield assert_raises, ImpossibleOperationError, co, A.h * A
     # But A.h * B is (need to conjugate parent)
-    yield test, '<conjugate transpose Mock2:(A B.h).h>', None, B.h * A
-    yield test, '<conjugate transpose Mock1:(A x).h>', None, Matrix(Mock1('x', 3, 1)).h * A.h
+    yield test, '<conjugate transpose Mock2:(A B.h).h>', B.h * A
+    yield test, '<conjugate transpose Mock1:(A x).h>', Matrix(Mock1('x', 3, 1)).h * A.h
 
+    #
+    # Post-multiply conversion
+    #
+    
 
 def test_stupid_compiler_numpy():
     De_array = np.arange(9).reshape(3, 3).astype(np.int64) + 1j
