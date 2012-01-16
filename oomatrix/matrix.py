@@ -2,8 +2,7 @@ import numpy as np
 
 from . import symbolic
 from .core import MatrixImpl
-from .symbolic import (ExpressionNode, LeafNode, AddNode, MulNode, ConjugateTransposeNode,
-                       InverseNode)
+from .symbolic import ExpressionNode, LeafNode
 from .formatter import default_formatter_factory
 
 __all__ = ['Matrix']
@@ -182,7 +181,7 @@ class Matrix(object):
         if self.ncols != other.nrows:
             raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
                 self.ncols, other.nrows))
-        return Matrix(symbolic.MulNode([self._expr, other._expr]))
+        return Matrix(symbolic.MultiplyNode([self._expr, other._expr]))
 
     def __rmul__(self, other):
         raise NotImplementedError()
@@ -196,29 +195,13 @@ class Matrix(object):
 
     @property
     def h(self):
-        if type(self._expr) is ConjugateTransposeNode:
-            e = self._expr.child
-        elif type(self._expr) is InverseNode:
-            if type(self._expr.child) is ConjugateTransposeNode:
-                e = InverseNode(self._expr.child.child)
-            else:
-                e = InverseNode(ConjugateTransposeNode(self._expr.child))
-        else:
-            e = ConjugateTransposeNode(self._expr)
-        return self._construct(e)
+        return Matrix(symbolic.ConjugateTransposeNode(self._expr))
 
     @property
     def i(self):
         if self.ncols != self.nrows:
             raise ValueError("Cannot take inverse of non-square matrix")
-        if type(self._expr) is InverseNode:
-            e = self._expr.child
-        elif type(self._expr) is ConjugateTransposeNode and type(self._expr.child) is InverseNode:
-            # (A**-1).H**-1 -> A.H
-            e = ConjugateTransposeNode(self._expr.child.child)
-        else:
-            e = InverseNode(self._expr)
-        return self._construct(e)
+        return Matrix(symbolic.InverseNode(self._expr))
 
     def __pow__(self, arg):
         # Inverse

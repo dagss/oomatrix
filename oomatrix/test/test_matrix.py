@@ -113,8 +113,8 @@ def test_symbolic():
     yield test, 'De', De.h.h.h.h, dict(De=De)
     yield test, 'De', De.i.i.i.i, dict(De=De)
     yield test, 'De.i * Di', De.i * Di
-    yield test, 'De.h.i * Di', De.h.i * Di
-    yield test, 'De.h.i * Di', De.i.h * Di
+    yield test, 'De.i.h * Di', De.h.i * Di
+    yield test, 'De.i.h * Di', De.i.h * Di
     yield test, 'De.h * Di', De.i.h.i * Di
     yield test, '(De + Di).i', (De + Di).h.i.h
 

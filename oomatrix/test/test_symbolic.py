@@ -27,10 +27,27 @@ def add(*args):
     return AddNode(args)
 
 def mul(*args):
-    return MulNode(args)
+    return MultiplyNode(args)
+
+def H(arg):
+    return ConjugateTransposeNode(arg)
+
+def I(arg):
+    return InverseNode(arg)
 
 def test_basic():
     yield assert_expr, 'a * (b + c + d)', mul(a, add(b, c, d))
+
+def test_tree_constraints():
+    yield ok_, H(H(a)) is a
+    yield ok_, I(I(a)) is a
+    yield assert_expr, 'a.i.h', H(I(a))
+    yield assert_expr, 'a.i.h', I(H(a))
+    yield ok_, I(H(H(I(a)))) is a
+    yield ok_, H(I(H(I(a)))) is a
+    yield ok_, H(I(I(H(a)))) is a
+    yield ok_, I(H(I(H(a)))) is a
+
 
 def test_distributive():
     inp = mul(add(a, b, c), d)
