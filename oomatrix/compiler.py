@@ -18,26 +18,29 @@ class SimplisticCompilation(object):
     def is_left_vector(self, expr):
         return expr.nrows == 1 and expr.ncols > 1
     
-    def compile(self, symbolic_node):
+    def compile(self, symbolic_node, target_kinds=None):
         assert isinstance(symbolic_node, symbolic.ExpressionNode), (
             '%r is not symbolic node' % symbolic_node)
-        action_node = symbolic_node.accept_visitor(self, symbolic_node)
+        action_node = symbolic_node.accept_visitor(
+            self, symbolic_node, target_kinds=target_kinds)
         assert isinstance(action_node, actions.Action)
         return action_node
 
-    def visit_add(self, expr):
-        pass
+    def visit_add(self, expr, target_kinds):
+        raise NotImplementedError()
 
-    def visit_multiply(self, expr):
+    def visit_multiply(self, expr, target_kinds):
         def mul_pair(left, right):
             # Perform multiplications
             try:
-                node = self.multiply_graph.find_cheapest_action((left, right))
+                node = self.multiply_graph.find_cheapest_action(
+                    (left, right), target_kinds=target_kinds)
             except ImpossibleOperationError:
                 # Try the transpose product
                 left = actions.conjugate_transpose_action(left)
                 right = actions.conjugate_transpose_action(right)
-                node = self.multiply_graph.find_cheapest_action((right, left))
+                node = self.multiply_graph.find_cheapest_action(
+                    (right, left))
                 node = actions.conjugate_transpose_action(node)
             return node
         
@@ -63,15 +66,22 @@ class SimplisticCompilation(object):
                 left = mul_pair(left, right)
             return left
 
-    def visit_leaf(self, expr):
+    def visit_leaf(self, expr, target_kinds):
+        if target_kinds is not None:
+            raise NotImplementedError()
         return actions.LeafAction(expr.matrix_impl)
             
-    def visit_inverse(self, expr):
+    def visit_inverse(self, expr, target_kinds):
         raise NotImplementedError()
 
-    def visit_conjugate_transpose(self, expr): 
+    def visit_conjugate_transpose(self, expr, target_kinds): 
+        if target_kinds is not None:
+            raise NotImplementedError()
         child_action = self.compile(expr.child)
         return actions.ConjugateTransposeAction(child_action)
+
+    def visit_bracket(self, expr, target_kinds):
+        return self.compile(expr.child, target_kinds=expr.kinds)
 
 
 class SimplisticCompiler(object):
@@ -91,9 +101,10 @@ class SimplisticCompiler(object):
         as formed: ``(A + B) * X`` first computes ``A + B`` before
         multiplying with ``X``.
 
-      - ``A.h * u`` is computed as per the above rules (conjugate_transpose()
-        being cheap), however, if that operation is not possible,
-        ``(u.h * A).h`` is attempted instead before giving up.
+      - ``A.h * u`` is computed as per the above rules
+        (conjugate_transpose() being cheap), however, if that
+        operation is not possible, ``(u.h * A).h`` is attempted
+        instead before giving up.
 
       - Matrix additions ``A + B`` are performed in some arbitrary
         order.
@@ -122,7 +133,8 @@ class SimplisticCompiler(object):
         self.multiply_graph = multiply_graph
 
     def compile(self, matrix):
-        operation_root = SimplisticCompilation(self.multiply_graph).compile(matrix._expr)
+        operation_root = SimplisticCompilation(
+            self.multiply_graph).compile(matrix._expr)
         return operation_root
 
     def compute(self, matrix):

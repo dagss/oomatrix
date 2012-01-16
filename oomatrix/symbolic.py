@@ -72,9 +72,22 @@ class InverseNode(ExpressionNode):
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_inverse(*args, **kw)
 
+class BracketNode(ExpressionNode):
+    def __init__(self, child, kinds=None):
+        self.child = child
+        self.children = [child]
+        self.kinds = kinds
+        self.nrows, self.ncols = child.nrows, child.ncols
+        self.dtype = child.dtype
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_bracket(*args, **kw)
+
+
 
 for x, val in [
     (LeafNode, 1000),
+    (BracketNode, 1000),
     (InverseNode, 40),
     (ConjugateTransposeNode, 40),
     (MulNode, 30),

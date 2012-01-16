@@ -36,6 +36,10 @@ class BasicExpressionFormatter(object):
         assert len(terms) == 1
         return terms[0] + '.i'
 
+    def visit_bracket(self, terms):
+        assert terms
+        return '[%s]' % terms[0]
+
 class ExpressionFormatterFactory(object):
     def format(self, expr):
         name_to_symbol = {}

@@ -1,5 +1,6 @@
 import numpy as np
 
+from . import symbolic
 from .core import MatrixImpl
 from .symbolic import (ExpressionNode, LeafNode, AddNode, MulNode, ConjugateTransposeNode,
                        InverseNode)
@@ -235,3 +236,15 @@ class Matrix(object):
             return self._expr.matrix_impl.array.copy(order)
         else:
             raise NotImplementedError()
+
+    def as_kind(self, kinds):
+        if isinstance(kinds, tuple):
+            raise TypeError('kinds argument should be a kind or a list')
+        if not isinstance(kinds, list):
+            kinds = [kinds]
+        return Matrix(symbolic.BracketNode(self._expr, kinds=kinds))
+
+    def bracket(self):
+        return Matrix(symbolic.BracketNode(self._expr, kinds=None))
+
+        

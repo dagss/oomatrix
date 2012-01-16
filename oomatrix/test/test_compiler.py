@@ -37,6 +37,10 @@ class Mock3(Mock1):
     name = 'Mock3'
 Mock3.H.__repr__ = conjugate_repr
 
+@mock_conversion(Mock2, Mock3)
+def conv(x):
+    return Mock3('conv(%s)' % x.value, x.nrows, x.ncols)
+
 @mock_multiplication((Mock1, Mock1), Mock1)
 def applemul(a, b):
     assert a.ncols == b.nrows
@@ -82,7 +86,6 @@ def test_stupid_compiler_mock():
         eq_(expected, repr(co(M)._expr.matrix_impl))
 
     # A is 3-by-3 Mock1, B is 3-by-4 Mock2, u is 3-by-1 Mock2
-
     #
     # Multiplication
     #
@@ -111,7 +114,8 @@ def test_stupid_compiler_mock():
     #
     # Post-multiply conversion
     #
-    
+    yield test, '<Mock3:conv((A B))>', (A * B).as_kind(Mock3)
+
 
 def test_stupid_compiler_numpy():
     De_array = np.arange(9).reshape(3, 3).astype(np.int64) + 1j
