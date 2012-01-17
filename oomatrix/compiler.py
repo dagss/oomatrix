@@ -52,7 +52,7 @@ class SimplisticCompilation(object):
         try:
             node = self.multiply_graph.find_cheapest_action(
                 (left, right), target_kinds=target_kinds)
-        except ImpossibleOperationError:
+        except ImpossibleOperationError, e:
             # Try the transpose product
             left = actions.conjugate_transpose_action(left)
             right = actions.conjugate_transpose_action(right)

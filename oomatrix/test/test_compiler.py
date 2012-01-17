@@ -1,18 +1,11 @@
 from .common import *
-from .. import Matrix, compute, explain
+from .. import Matrix, compute, explain, symbolic
 from ..compiler import SimplisticCompiler
 from ..core import (ConversionGraph, AdditionGraph, MatrixImpl, MultiplyPairGraph,
                     ImpossibleOperationError, credits)
 
 def arrayeq_(x, y):
     assert np.all(x == y)
-
-mock_conversion_graph = ConversionGraph()
-mock_conversion = mock_conversion_graph.conversion_decorator
-mock_add_graph = AdditionGraph(mock_conversion_graph)
-mock_multiply_graph = MultiplyPairGraph(mock_conversion_graph)
-mock_multiplication = mock_multiply_graph.multiplication_decorator
-mock_addition = mock_add_graph.addition_decorator
 
 class MockKind(MatrixImpl):
     def __init__(self, value, nrows, ncols):
@@ -23,165 +16,171 @@ class MockKind(MatrixImpl):
     def __repr__(self):
         return '<%s:%s>' % (type(self).name, self.value)
 
-def conjugate_repr(self):
-    return '<%s:%s.h>' % (type(self).name, self.wrapped.value)
+class MockMatricesUniverse:
+    def __init__(self):
+        self.conversion_graph = ConversionGraph()
+        self.conversion = (
+            self.conversion_graph.conversion_decorator)
+        self.add_graph = AdditionGraph(
+            self.conversion_graph)
+        self.multiply_graph = MultiplyPairGraph(
+            self.conversion_graph)
+        self.multiplication = (
+            self.multiply_graph.multiplication_decorator)
+        self.addition = self.add_graph.addition_decorator
+
+    def define_mul(self, a, b, result):
+        def get_kind_and_transpose(x):
+            if isinstance(x._expr, symbolic.LeafNode):
+                return x.get_type(), ''
+            elif isinstance(x._expr, symbolic.ConjugateTransposeNode):
+                return type(x._expr.child.matrix_impl).H, '.h'
+        
+        a_kind, ah = get_kind_and_transpose(a)
+        b_kind, bh = get_kind_and_transpose(b)
+        result_kind, rh = get_kind_and_transpose(result)
+
+        @self.multiplication((a_kind, b_kind), result_kind)
+        def mul(a, b):
+            x = result_kind('(%s%s * %s%s)' %
+                              (a.value, ah, b.value, bh),
+                              a.nrows, b.ncols)
+            return x
+
+    def define_conv(self, a, result):
+        def get_kind_and_transpose(x):
+            if isinstance(x._expr, symbolic.LeafNode):
+                return x.get_type(), ''
+            elif isinstance(x._expr, symbolic.ConjugateTransposeNode):
+                return type(x._expr.child.matrix_impl).H, '.h'
+
+        a_kind, ah = get_kind_and_transpose(a)
+        result_kind, rh = get_kind_and_transpose(result)
+        @self.conversion(a_kind, result_kind)
+        def conv(a):
+            return result_kind('%s%s%s' %
+                               (result_kind.name, a.value, ah),
+                               a.nrows, a.ncols)
 
 
-#
-# A matrix that can be multiplied on both sides, transposed
-# or non-transposed, and added
-#
-class BothWays(MockKind):
-    name = 'BothWays'
-BothWays.H.__repr__ = conjugate_repr
-BB = Matrix(BothWays('BB', 3, 3))
-bb = Matrix(BothWays('bb', 3, 1))
+    def new_matrix(self, name_,
+                   right=(), right_h=(), add=(),
+                   result='self'):
+        class NewKind(MockKind):
+            name = name_
+            is_transpose_kind = False
+            def conjugate_transpose(self):
+                return NewKind_H(
+                    self.value, self.ncols, self.nrows)
 
-@mock_multiplication((BothWays, BothWays.H), BothWays)
-@mock_multiplication((BothWays.H, BothWays), BothWays)
-@mock_multiplication((BothWays, BothWays), BothWays)
-def bananamul(a, b):
-    assert a.ncols == b.nrows
-    return BothWays('(%s %s)' % (a.value, b.value), a.nrows, b.ncols)
+        class NewKind_H(MockKind):
+            name = name_ + '.H'
+            def conjugate_transpose(self):
+                return NewKind(self.value, self.ncols, self.nrows)
+            def __repr__(self):
+                return '<%s:%s>' % (type(self).name,
+                                    self.value)
+                
 
-@mock_addition((BothWays, BothWays), BothWays)
-def add(a, b):
-    assert a.ncols == b.ncols and a.nrows == b.nrows
-    return type(a)('(%s + %s)' % (a.value, b.value), a.nrows, a.ncols)
+        NewKind.conjugate_transpose_class = NewKind_H
+        NewKind_H.conjugate_transpose_class = NewKind
 
-    
-class Mock1(MockKind):
-    name = 'Mock1'
-Mock1.H.__repr__ = conjugate_repr
+        if result == 'self':
+            result_kind = NewKind
+        else:
+            result_kind = result.get_type()
 
-
-class Mock2(MockKind):
-    name = 'Mock2'
-Mock2.H.__repr__ = conjugate_repr
-
-class Mock3(MockKind):
-    name = 'Mock3'
-Mock3.H.__repr__ = conjugate_repr
-
-@mock_conversion(Mock2, Mock3)
-def conv(x):
-    return Mock3('conv(%s)' % x.value, x.nrows, x.ncols)
-
-@mock_multiplication((Mock1, Mock1), Mock1)
-def applemul(a, b):
-    assert a.ncols == b.nrows
-    return Mock1('(%s %s)' % (a.value, b.value), a.nrows, b.ncols)
-
-@mock_multiplication((Mock1, Mock1.H), Mock1)
-def orangemul(a, b):
-    assert a.ncols == b.nrows
-    return Mock1('(%s %s.h)' % (a.value, b.wrapped.value), a.nrows, b.ncols)
-
-@credits('libfairtrade', 'N. Roozen & F. van der Hoof (1988)')
-@mock_multiplication((Mock1, Mock2), Mock2)
-def bananamul(a, b):
-    assert a.ncols == b.nrows
-    return Mock2('(%s %s)' % (a.value, b.value), a.nrows, b.ncols)
-
-@mock_multiplication((Mock1.H, Mock2), Mock2)
-def figmul(a, b):
-    assert a.ncols == b.nrows
-    return Mock2('(%s %s.h)' % (a.wrapped.value, b.value), a.nrows, b.ncols)
-
-
-for X in [Mock1, Mock2, Mock3]:
-
-    @mock_addition((X, X), X)
-    def within_add(a, b):
-        assert a.ncols == b.ncols and a.nrows == b.nrows
-        return type(a)('(%s + %s)' % (a.value, b.value), a.nrows, a.ncols)
-
-
-A = Matrix(Mock1('A', 3, 3))
-B = Matrix(Mock2('B', 3, 4))
-u = Matrix(Mock2('u', 3, 1))
-v = Matrix(Mock2('v', 4, 1))
-x = Matrix(Mock1('x', 3, 1))
-
-#u = Vector(np.arange(3))
-
-#
-# SimplisticCompiler
-#
-
-## '<Mock2:(A u)>', '''\
-##         A * u is computed in one step, "bananamul(A, u)", using [1]
-
-##         [1] libfairtrade, N. Roozen & F. van der Hoof (1988)''',
+        # Always have within-kind addition
+        @self.addition((NewKind, NewKind), NewKind)
+        def add(a, b):
+            return NewKind('(%s + %s)' % (a.value, b.value),
+                           a.nrows, b.ncols)
+        
+        return (Matrix(NewKind(name_, 3, 3)),
+                Matrix(NewKind(name_.lower(), 3, 1)),
+                Matrix(NewKind(name_.lower() + 'h', 1, 3)))
+        
 
 def test_stupid_compiler_mock():
-    compiler = SimplisticCompiler(multiply_graph=mock_multiply_graph,
-                                  add_graph=mock_add_graph)
+    ctx = MockMatricesUniverse()
+    compiler = SimplisticCompiler(
+        multiply_graph=ctx.multiply_graph,
+        add_graph=ctx.add_graph)
     co = compiler.compute
 #    ex = compiler.explain
     def test(expected, M, target_kind=None):
         eq_(expected, repr(co(M)._expr.matrix_impl))
 
-
-    # A is 3-by-3 Mock1, B is 3-by-4 Mock2, u is 3-by-1 Mock2
-    #
-    # Multiplication
-    #
-
-    yield ok_, type(A * u) is Matrix
-    yield test, '<Mock2:(A u)>', A * u
-
-    yield test, '<Mock2:(A (A u))>', A * A * u
-    yield test, '<Mock2:(A (A (A u)))>', A * A * A * u
-    yield test, '<Mock2:(((A A) A) B)>', A * A * A * B
+    A, a, ah = ctx.new_matrix('A')
+    B, b, bh = ctx.new_matrix('B')
 
     #
-    # Mul + conjugation
+    # Straight multiplication
     #
 
-    # Straightforward conjugate
-    yield test, '<Mock1:(A A.h)>', A * A.h
-    # Need to conjugate parent expression
-    yield test, '<conjugate transpose Mock1:(A A).h>', A.h * A.h
-    # A.h * A is not implemented
-    yield assert_raises, ImpossibleOperationError, co, A.h * A
-    # But A.h * B is (need to conjugate parent)
-    yield test, '<conjugate transpose Mock2:(A B.h).h>', B.h * A
-    yield test, '<conjugate transpose Mock1:(A x).h>', Matrix(Mock1('x', 3, 1)).h * A.h
+    # A * B -> B
+    ctx.define_mul(A, B, B)
+    yield test, '<B:(A * B)>', A * B
+    
+    yield (assert_raises, ImpossibleOperationError,
+           test, '<B:(A * B)>', B * A)
+    # B * A -> B.h
+    ctx.define_mul(B, A, B.h)
+    yield test, '<B.H:(B * A)>', B * A
+
+    # order of multiplication (mat-mat vs. mat-vec)
+    ctx.define_mul(A, A, A)
+    yield test, '<A:(((A * A) * A) * A)>', A * A * A * A
+    yield test, '<A:(A * (A * (A * a)))>', A * A * A * a
+    yield test, '<A:(((ah * A) * A) * A)>', ah * A * A * A
+
+    
+    #
+    # Transpose multiplication
+    #
+
+    # Cause transpose of entire product
+    yield test, '<A.H:(A * A)>', A.h * A.h
+    yield test, '<B:(B * A)>', A.h * B.h # -> (B * A).h which has
+                                         # kind B.H.H
+
+    # Straightforward conjugate -- doesn't work until mul action
+    # is registered
+    yield (assert_raises, ImpossibleOperationError,
+           test, '', A * A.h)
+    ctx.define_mul(A, A.h, A)
+    yield test, '<A:(A * A.h)>', A * A.h
+
+    yield (assert_raises, ImpossibleOperationError,
+           test, '', A.h * A)
+    ctx.define_mul(A.h, A, A)
+    yield test, '<A:(A.h * A)>', A.h * A
+
 
     #
     # Post-multiply conversion
     #
-    yield test, '<Mock3:conv((A B))>', (A * B).as_kind(Mock3)
+    S, s, sh = ctx.new_matrix('S') # only used as conversion 'sink'
+    ctx.define_conv(A, S)
+    yield test, '<S:S(A * A)>', (A * A).as_kind(S.get_type())
 
     #
     # Addition
     #
 
     # Normal add
-    yield test, '<BothWays:(BB + BB)>', BB + BB
+    yield test, '<A:(A + A)>', A + A
 
     # Do not use distributive rule for matrices
-    yield test, '<BothWays:((BB + BB) BB)>', (BB + BB) * BB
-    yield test, '<BothWays:(BB (BB + BB))>', BB * (BB + BB)
+    yield test, '<A:((A + A) * A)>', (A + A) * A
+    yield test, '<A:(A * (A + A))>', A * (A + A)
 
     # But, use it for vectors
-    yield test, '<Mock1:((A x) + (A x))>', (A + A) * x
-
-
-    #yield test, '<Mock1:((A x) + (A x))>', (A.h + A.h) * x
-
-    #yield test, '', (A.h + A.h).h * u
-    #yield test, '', (A + A) * (A + A) * u
-
-    #yield test, '<Mock3:((x.h A) + (x.h A))>', x.h * (A + A)
-    #return
-
-    return
-
-
-# (A + A) * (A * u + A * u)
-# (A + A) * (A * u + A * u)
+    yield test, '<A:((A * a) + (A * a))>', (A + A) * a
+    yield test, '<A:((ah * A) + (ah * A))>', ah * (A + A)
+    yield (test, '<A:(((((ah * A) + (ah * A)) * A) + '
+                      '(((ah * A) + (ah * A)) * A)) * A)>',
+           ah * (A + A) * (A + A) * A)
 
 def test_stupid_compiler_numpy():
     De_array = np.arange(9).reshape(3, 3).astype(np.int64) + 1j

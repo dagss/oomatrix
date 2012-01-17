@@ -373,7 +373,7 @@ class MultiplyPairGraph(object):
             if not callable(func):
                 raise TypeError("Does not decorate callable")
             if source_kinds in self.multiply_operations:
-                raise Exception("Already registered multiplication for %s" % (A, B))
+                raise Exception("Already registered multiplication for %s" % (source_kinds,))
             action_factory = actions.multiplication_action_from_function(func,
                                                                          source_kinds,
                                                                          dest_kind)
@@ -436,6 +436,9 @@ class MatrixImplType(type):
         A property for creating a new MatrixImplType (a new class),
         representing the conjugate transpose.
         """
+        result = getattr(cls, 'conjugate_transpose_class', None)
+        if result is not None:
+            return result
         if cls not in MatrixImplType._transpose_classes:
             class NewClass(MatrixImpl):
                 name = 'conjugate transpose %s' % cls.name
