@@ -22,7 +22,11 @@ class ExpressionNode(object):
 
     def distribute_left(self, other):
         raise NotImplementedError()
-    
+
+    def dump(self):
+        from .formatter import BasicExpressionFormatter
+        return BasicExpressionFormatter({}).format(self)
+
 
 class LeafNode(ExpressionNode):
     children = ()

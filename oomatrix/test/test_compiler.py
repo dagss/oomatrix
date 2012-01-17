@@ -9,13 +9,12 @@ def arrayeq_(x, y):
 
 mock_conversion_graph = ConversionGraph()
 mock_conversion = mock_conversion_graph.conversion_decorator
-mock_addition_graph = AdditionGraph(mock_conversion_graph)
+mock_add_graph = AdditionGraph(mock_conversion_graph)
 mock_multiply_graph = MultiplyPairGraph(mock_conversion_graph)
 mock_multiplication = mock_multiply_graph.multiplication_decorator
-mock_addition = mock_addition_graph.addition_decorator
+mock_addition = mock_add_graph.addition_decorator
 
-class Mock1(MatrixImpl):
-    name = 'Mock1'
+class MockKind(MatrixImpl):
     def __init__(self, value, nrows, ncols):
         self.value = value
         self.nrows = nrows
@@ -26,14 +25,41 @@ class Mock1(MatrixImpl):
 
 def conjugate_repr(self):
     return '<%s:%s.h>' % (type(self).name, self.wrapped.value)
+
+
+#
+# A matrix that can be multiplied on both sides, transposed
+# or non-transposed, and added
+#
+class BothWays(MockKind):
+    name = 'BothWays'
+BothWays.H.__repr__ = conjugate_repr
+BB = Matrix(BothWays('BB', 3, 3))
+bb = Matrix(BothWays('bb', 3, 1))
+
+@mock_multiplication((BothWays, BothWays.H), BothWays)
+@mock_multiplication((BothWays.H, BothWays), BothWays)
+@mock_multiplication((BothWays, BothWays), BothWays)
+def bananamul(a, b):
+    assert a.ncols == b.nrows
+    return BothWays('(%s %s)' % (a.value, b.value), a.nrows, b.ncols)
+
+@mock_addition((BothWays, BothWays), BothWays)
+def add(a, b):
+    assert a.ncols == b.ncols and a.nrows == b.nrows
+    return type(a)('(%s + %s)' % (a.value, b.value), a.nrows, a.ncols)
+
     
+class Mock1(MockKind):
+    name = 'Mock1'
 Mock1.H.__repr__ = conjugate_repr
 
-class Mock2(Mock1):
+
+class Mock2(MockKind):
     name = 'Mock2'
 Mock2.H.__repr__ = conjugate_repr
 
-class Mock3(Mock1):
+class Mock3(MockKind):
     name = 'Mock3'
 Mock3.H.__repr__ = conjugate_repr
 
@@ -62,10 +88,20 @@ def figmul(a, b):
     assert a.ncols == b.nrows
     return Mock2('(%s %s.h)' % (a.wrapped.value, b.value), a.nrows, b.ncols)
 
+
+for X in [Mock1, Mock2, Mock3]:
+
+    @mock_addition((X, X), X)
+    def within_add(a, b):
+        assert a.ncols == b.ncols and a.nrows == b.nrows
+        return type(a)('(%s + %s)' % (a.value, b.value), a.nrows, a.ncols)
+
+
 A = Matrix(Mock1('A', 3, 3))
 B = Matrix(Mock2('B', 3, 4))
 u = Matrix(Mock2('u', 3, 1))
 v = Matrix(Mock2('v', 4, 1))
+x = Matrix(Mock1('x', 3, 1))
 
 #u = Vector(np.arange(3))
 
@@ -79,11 +115,13 @@ v = Matrix(Mock2('v', 4, 1))
 ##         [1] libfairtrade, N. Roozen & F. van der Hoof (1988)''',
 
 def test_stupid_compiler_mock():
-    compiler = SimplisticCompiler(multiply_graph=mock_multiply_graph)
+    compiler = SimplisticCompiler(multiply_graph=mock_multiply_graph,
+                                  add_graph=mock_add_graph)
     co = compiler.compute
 #    ex = compiler.explain
     def test(expected, M, target_kind=None):
         eq_(expected, repr(co(M)._expr.matrix_impl))
+
 
     # A is 3-by-3 Mock1, B is 3-by-4 Mock2, u is 3-by-1 Mock2
     #
@@ -116,6 +154,34 @@ def test_stupid_compiler_mock():
     #
     yield test, '<Mock3:conv((A B))>', (A * B).as_kind(Mock3)
 
+    #
+    # Addition
+    #
+
+    # Normal add
+    yield test, '<BothWays:(BB + BB)>', BB + BB
+
+    # Do not use distributive rule for matrices
+    yield test, '<BothWays:((BB + BB) BB)>', (BB + BB) * BB
+    yield test, '<BothWays:(BB (BB + BB))>', BB * (BB + BB)
+
+    # But, use it for vectors
+    yield test, '<Mock1:((A x) + (A x))>', (A + A) * x
+
+
+    #yield test, '<Mock1:((A x) + (A x))>', (A.h + A.h) * x
+
+    #yield test, '', (A.h + A.h).h * u
+    #yield test, '', (A + A) * (A + A) * u
+
+    #yield test, '<Mock3:((x.h A) + (x.h A))>', x.h * (A + A)
+    #return
+
+    return
+
+
+# (A + A) * (A * u + A * u)
+# (A + A) * (A * u + A * u)
 
 def test_stupid_compiler_numpy():
     De_array = np.arange(9).reshape(3, 3).astype(np.int64) + 1j

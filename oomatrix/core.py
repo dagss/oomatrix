@@ -185,7 +185,14 @@ class AdditionGraph(object):
         # Perform all within-kind additions
         reduced_operand_dict = {}
         for kind, operand_list in operand_dict.iteritems():
-            add_action_factory = self.add_operations[(kind, kind)][kind]
+            try:
+                add_action_factory = self.add_operations[
+                    (kind, kind)][kind]
+            except KeyError:
+                raise AssertionError(
+                    'Within-kind matrix addition not '
+                    'defined for %s, this is a bug' % kind)
+            
             u, rest = operand_list[0], operand_list[1:]
             for v in rest:
                 u = add_action_factory([u, v])
