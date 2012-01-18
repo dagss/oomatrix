@@ -1,6 +1,16 @@
 import numpy as np
 from nose.tools import ok_, eq_, assert_raises
 from textwrap import dedent
+import contextlib
+
+def assert_not_raises(func, *args):
+    "Turn any exception into AssertionError"
+    try:
+        func(*args)
+    except:
+        raise AssertionError()
+
+
 
 def ndrange(shape, dtype=np.double):
     return np.arange(np.prod(shape)).reshape(shape).astype(dtype)

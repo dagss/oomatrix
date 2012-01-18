@@ -11,11 +11,14 @@ Then ``isinstance(Diagonal, MatrixKind)`` holds true. Matrix kinds
 can be used in arithmetic operations in order to create matcher
 patterns, such as::
 
-    @action(Diagonal * Diagonal + Dense, Dense)
+    @action(Diagonal * Diagonal + Dense.h, Dense)
     def foo(di1, di2, de): ..
-    
+
+
 
 """
+
+from functools import total_ordering
 
 from .core import ConversionGraph
 
@@ -23,8 +26,31 @@ from .core import ConversionGraph
 # Core classes
 #
 
+class PatternNode(object):
+    def get_key(self):
+        return ((self.symbol,) + 
+                tuple(child.get_key() for child in self.children))
 
-class MatrixKind(type):
+    def __add__(self, other):
+        if not isinstance(self, PatternNode):
+            raise TypeError('wrong type')
+        return AddPatternNode([self, other])
+
+    def __mul__(self, other):
+        if not isinstance(self, PatternNode):
+            raise TypeError('wrong type')
+        return MultiplyPatternNode([self, other])
+
+    @property
+    def h(self):
+        return ConjugateTransposePatternNode(self)
+
+    @property
+    def i(self):
+        return InversePatternNode(self)
+
+@total_ordering # implements __ge__ and so on
+class MatrixKind(type, PatternNode):
     _transpose_classes = {}
     
     def __init__(cls, name, bases, dct):
@@ -39,6 +65,8 @@ class MatrixKind(type):
                 to_delete.append(func)
         for func in to_delete:
             del pending[func]
+        if 'name' not in dct:
+            cls.name = name
 
     def __repr__(cls):
         return "<kind:%s>" % cls.name
@@ -49,14 +77,23 @@ class MatrixKind(type):
     def __ne__(cls, other_cls):
         return cls is not other_cls
 
-    def __cmp__(cls, other_cls):
-        # TODO Remove this
+    def __lt__(cls, other_cls):
+        # sort by id in this particular run...
         if not isinstance(other_cls, MatrixKind):
-            raise TypeError("Invalid comparison")
-        return cmp(cls.name, other_cls.name)
+            raise TypeError('only MatrixImpl instances are '
+                            'comparable')
+        # to provide stable sorting in testcases,
+        # we have _sort_id
+        key = getattr(cls, '_sort_id', id(cls))
+        otherkey = getattr(other_cls, '_sort_id', id(other_cls))
+        return key < otherkey
 
+    def get_key(cls):
+        return cls
+ 
     @property
     def H(cls):
+        # TODO: deprecate in favor of pattern-matching/lowercase .h
         """
         A property for creating a new MatrixKind (a new class),
         representing the conjugate transpose.
@@ -116,10 +153,8 @@ def credits(library=None, authors=None):
 # are the leaf nodes.
 #
 
-class PatternNode(object):
-    def get_key(self):
-        return (self.symbol,
-                tuple(child.get_key() for child in self.children))
+class IllegalPatternError(TypeError):
+    pass
 
 class ArithmeticPatternNode(PatternNode):
     def __init__(self, children):
@@ -142,40 +177,22 @@ class MultiplyPatternNode(ArithmeticPatternNode):
 
 class ConjugateTransposePatternNode(PatternNode):
     symbol = 'h'
-    def __new__(cls, expr):
-        if isinstance(expr, ConjugateTransposeNode):
-            # a.h.h -> a
-            return expr.child
-        elif (isinstance(expr, InverseNode) and 
-              isinstance(expr.child, ConjugateTransposeNode)):
-                # a.h.i.h -> a.i
-                return InverseNode(expr.child.child)
-        else:
-            # a.i.h is OK
-            return ExpressionNode.__new__(cls, expr)
-    
     def __init__(self, child):
-        assert not isinstance(child, ConjugateTransposeNode)
+        if not isinstance(child, (InversePatternNode, MatrixKind)):
+            raise IllegalPatternError(
+                '.h must be applied directly to A or A.i for a '
+                'matrix kind A; (A + B).h etc. is not allowed')
         self.child = child
+        self.children = [child]
 
 class InversePatternNode(PatternNode):
-    symbol = 'i'
-    def __new__(cls, expr):
-        if isinstance(expr, InverseNode):
-            # a.i.i -> a.i
-            return expr.child
-        elif isinstance(expr, ConjugateTransposeNode):
-            if isinstance(expr.child, InverseNode):
-                # a.i.h.i -> a.h
-                return ConjugateTransposeNode(expr.child.child)
-            else:
-                # a.h.i -> a.i.h
-                self = ExpressionNode.__new__(cls, expr.child)
-                self.__init__(expr.child)
-                return ConjugateTransposeNode(self)
-        else:
-            return ExpressionNode.__new__(cls, expr)
-    
+    symbol = 'i'    
     def __init__(self, child):
+        if not isinstance(child, MatrixKind):
+            raise IllegalPatternError(
+                '.i must be applied directly to a matrix kind; '
+                'A.h.i should be written A.i.h, (A * B).i should '
+                'be written (B.i * A.i), and so on)')
         self.child = child
+        self.children = [child]
 
