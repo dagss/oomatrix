@@ -1,6 +1,7 @@
 import numpy as np
 
-from ..core import MatrixImpl, addition, conversion
+from ..core import addition, conversion
+from ..kind import MatrixImpl
 from ..cost import FLOP, MEM, MEMOP
 from .dense import SymmetricContiguousImpl
 

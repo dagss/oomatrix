@@ -1,8 +1,9 @@
 from .common import *
 from .. import Matrix, compute, explain, symbolic
 from ..compiler import SimplisticCompiler
-from ..core import (ConversionGraph, AdditionGraph, MatrixImpl, MultiplyPairGraph,
-                    ImpossibleOperationError, credits)
+from ..core import (ConversionGraph, AdditionGraph, MultiplyPairGraph,
+                    ImpossibleOperationError)
+from ..kind import MatrixImpl, credits
 
 def arrayeq_(x, y):
     assert np.all(x == y)

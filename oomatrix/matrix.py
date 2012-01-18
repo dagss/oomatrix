@@ -1,7 +1,7 @@
 import numpy as np
 
 from . import symbolic
-from .core import MatrixImpl
+from .kind import MatrixImpl
 from .symbolic import ExpressionNode, LeafNode
 from .formatter import default_formatter_factory
 

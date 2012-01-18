@@ -1,6 +1,7 @@
 from .common import *
 
-from ..core import ConversionGraph, AdditionGraph, MatrixImpl, MultiplyPairGraph
+from ..core import ConversionGraph, AdditionGraph, MultiplyPairGraph
+from ..kind import MatrixImpl
 from ..impl.diagonal import *
 from ..impl.dense import *
 

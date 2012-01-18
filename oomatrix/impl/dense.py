@@ -1,6 +1,7 @@
 import numpy as np
 
-from ..core import MatrixImpl, conversion, addition, multiplication
+from ..core import conversion, addition, multiplication
+from ..kind import MatrixImpl
 
 def array_conjugate(x):
     if x.dtype.kind == 'c':
