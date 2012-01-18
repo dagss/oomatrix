@@ -12,7 +12,8 @@ class MockKind(MatrixImpl):
         self.value = value
         self.nrows = nrows
         self.ncols = ncols
-
+        self.dtype = np.double
+        
     def __repr__(self):
         return '<%s:%s>' % (type(self).name, self.value)
 
@@ -185,12 +186,12 @@ def test_stupid_compiler_mock():
 def test_stupid_compiler_numpy():
     De_array = np.arange(9).reshape(3, 3).astype(np.int64) + 1j
     De = Matrix(De_array, 'De')
-    Di_array = np.arange(3).astype(np.int64)
+    Di_array = np.arange(3).astype(np.complex128)
     Di = Matrix(Di_array, 'Di', diagonal=True)
     # The very basic computation
     compiler = SimplisticCompiler()
     co = compiler.compute
-    a = ndrange((3, 1))
+    a = ndrange((3, 1), dtype=np.complex128)
     yield ok_, type(De * a) is Matrix
     yield arrayeq_, co(De * a).as_array(), np.dot(De_array, a)
     yield arrayeq_, co(De.h * a).as_array(), np.dot(De_array.T.conjugate(), a)

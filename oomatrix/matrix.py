@@ -63,7 +63,7 @@ class Matrix(object):
         return type(self._expr) is not LeafNode
 
     def single_line_description(self, skip_name=False):
-        shapestr = '%d-by-%d' % (self.ncols, self.nrows)
+        shapestr = '%d-by-%d' % (self.nrows, self.ncols)
         typestr = '%s ' % self.get_type().name if not self.is_expression() else ''
         dtypestr = ' of %s' % self.dtype if self.dtype is not None else ''
         namestr = " '%s'" % self._expr.name if self._expr.name and not skip_name else ''

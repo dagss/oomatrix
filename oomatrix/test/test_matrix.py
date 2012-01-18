@@ -71,28 +71,28 @@ def test_repr():
         Di: 3-by-3 diagonal matrix of int64""", De.h * Di
 
     yield assert_repr, '''\
-    1-by-4 row-major matrix 'Foo' of float64
+    4-by-1 row-major matrix 'Foo' of float64
     [1.0]
     [1.0]
     [1.0]
     [1.0]''', Matrix(np.ones((4, 1)), 'Foo')
 
     yield assert_repr, '''\
-    1-by-4 row-major matrix of float64
+    4-by-1 row-major matrix of float64
     [1.0]
     [1.0]
     [1.0]
     [1.0]''', Matrix(np.ones((4, 1)))
 
     yield (assert_repr, '''\
-    1-by-4 matrix of float64 given by:
+    4-by-1 matrix of float64 given by:
 
         $0 + $1
 
     where
 
-        $0: 1-by-4 row-major matrix of float64
-        $1: 1-by-4 row-major matrix of float64''',
+        $0: 4-by-1 row-major matrix of float64
+        $1: 4-by-1 row-major matrix of float64''',
            Matrix(np.ones((4, 1))) + Matrix(np.ones((4, 1))))
 
 
