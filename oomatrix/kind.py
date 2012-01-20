@@ -20,22 +20,121 @@ The ``get_key`` will return the same tree in both those cases.
 
 
 
-#There is
-#however a difference in how arguments are mapped, so there's a seperate
-#utility ``call_with_tree`` to call a callable with a symbolic tree.
 
+Kind universes
+--------------
 
+New kinds are created by instantiating classes, and it would be bothersome
+to have to explicitly assign them to a collection of available kinds. At
+the same time, one needs to create lots of mock kinds for unit test purposes
+etc., and one does not wish these to in any way modify global state.
 
-
+So to avoid a global state or global registry of matrix types, we instead
+have the `MatrixKindUniverse`, accessed by the `universe` attribute of each
+kind. Each kind starts out with a universe consisting only of itself.
+Then, each time a match pattern is created (e.g., ``Dense + Diagonal``),
+one merges the implied universes.
 """
 
 from functools import total_ordering
+import threading
 
 from .core import ConversionGraph
 
 def argsort(seq):
     return sorted(range(len(seq)), key=seq.__getitem__)
 
+
+#
+# kind universes
+#
+class MatrixKindUniverse(object):
+    """Keeps track of the set of all MatrixKind and Computation instances
+
+    But note that 'all' is relative -- it means a set of kinds and
+    computations which have been in touch with one another. It is
+    possible to have multiple disjoint universes.
+
+    Joining universes happens through linking them together; actual
+    data about the universe is only stored in the root node. We delay
+    shortening the linked lists created until the data is accessed
+    through a given path, so that there is no need for backlinks.
+
+    MatrixKindUniverse can be used from multiple threads
+    concurrently. Writing (with associated locking) mostly only
+    happens during program startup. Given the very special usecase, a
+    single global lock seems appropriate.
+    """
+
+    # write lock for writes to *all* universes in the process
+    reentrant_write_lock = threading.RLock()
+    
+    def __init__(self):
+        self._kinds = set() # del-ed upon joining a root
+        self._computations = {} # del-ed upon joining a root
+        self._linked = None
+
+    def _get_root(self):
+        # Returns the root node, possibly shortening the chain of links
+        # in the process
+        linked = self._linked
+        if linked is None:
+            # self is the root node
+            return self
+        elif linked._linked is None:
+            # we're linked straight at the root node, can't do better
+            return linked
+        else:
+            # we're left dangling from a previous join; shorten the path
+            with MatrixKindUniverse.reentrant_write_lock:
+                # _linked NEVER gets set to None except in the ctor; so
+                # we don't need the typical re-check-upon-locking
+                linked = self._linked = linked._get_root()
+            return linked
+
+    def join_with(self, other):
+        my_root = self._get_root()
+        other_root = other._get_root()
+        if my_root is other_root:
+            return # already linked
+        with MatrixKindUniverse.reentrant_write_lock:
+            # note that it is left to future _get_root calls to update any
+            # other nodes pointing to other
+
+            # first, check again in case of race
+            my_root = self._get_root()
+            other_root = other._get_root()
+            if my_root is other_root:
+                return
+
+            # do the join between the respective roots
+            my_root._kinds.update(other_root._kinds)
+            my_root._computations.update(other_root._computations)
+            del other_root._kinds
+            del other_root._computations
+            other_root._linked = my_root
+            other._linked = my_root # not strictly necesarry
+
+    def add_kind(self, kind):
+        with MatrixKindUniverse.reentrant_write_lock:
+            # Need to do this atomically, so that root doesn't become non-root
+            # under our nose
+            root = self._get_root()
+            root._kinds.add(kind)
+
+    def add_computation(self, computation):
+        with MatrixKindUniverse.reentrant_write_lock:
+            # Need to do this atomically, so that root doesn't become non-root
+            # under our nose
+            root = self._get_root()
+            root._computation.add(computation)
+
+    def get_computation(self, key):
+        return self._get_root()._computations[key]
+
+    def get_kinds(self):
+        # make a copy to be safe for now
+        return set(self._get_root()._kinds)
 
 #
 # Core classes
@@ -102,6 +201,8 @@ class MatrixKind(type, PatternNode):
             del pending[func]
         if 'name' not in dct:
             cls.name = name
+        cls.universe = MatrixKindUniverse()
+        cls.universe.add_kind(cls)
 
     def __repr__(cls):
         return "<kind:%s>" % cls.name
@@ -207,6 +308,11 @@ class ArithmeticPatternNode(PatternNode):
         del children
         self.children = unpacked_children
         self._init_sorting()
+        # Join universes
+        universe = self.children[0].universe
+        for x in self.children[1:]:
+            universe.join_with(x.universe)
+        self.universe = universe
 
     def _init_sorting(self):
         pass
@@ -236,6 +342,7 @@ class ConjugateTransposePatternNode(PatternNode):
                 'matrix kind A; (A + B).h etc. is not allowed')
         self.child = child
         self.children = [child]
+        self.universe = child.universe
 
 class InversePatternNode(PatternNode):
     symbol = 'i'    
@@ -247,4 +354,4 @@ class InversePatternNode(PatternNode):
                 'be written (B.i * A.i), and so on)')
         self.child = child
         self.children = [child]
-
+        self.universe = child.universe

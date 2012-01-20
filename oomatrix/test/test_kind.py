@@ -86,3 +86,39 @@ def test_tree_normalization():
     # no nested muls
     yield ok_, all(child is Dense for child in
                    (Dense * Dense * Dense * Dense).children)
+
+def test_kind_universe():
+    class A(MatrixImpl): pass
+    class C(MatrixImpl): pass
+    class B(MatrixImpl): pass
+
+    yield eq_, set([A]), A.universe.get_kinds()
+    A + B # get A and B to know one another
+    yield eq_, set([A, B]), A.universe.get_kinds()
+    yield eq_, set([A, B]), B.universe.get_kinds()
+    yield eq_, set([C]), C.universe.get_kinds()
+    # get C and the rest to know each other in a convoluted way
+    ((C.i.h + C) + C) * B
+    yield eq_, set([A, B, C]), A.universe.get_kinds()
+    yield eq_, set([A, B, C]), C.universe.get_kinds()
+    yield eq_, set([A, B, C]), B.universe.get_kinds()
+    
+def test_kind_universe_links_behaviour():
+    # closer inspection of the length of links
+    def depth(node):
+        if node._linked is None:
+            return 0
+        else:
+            return depth(node._linked) + 1
+
+    cur = first = MatrixKindUniverse()
+    for i in range(5):
+        newroot = MatrixKindUniverse()
+        newroot.join_with(cur)
+        cur = newroot
+
+    # first knows nothing of all the stuff that's been going on since...
+    assert 5 == depth(first)
+    # but looking up the root collapses the linked list
+    assert first._get_root() is cur
+    assert 1 == depth(first)
