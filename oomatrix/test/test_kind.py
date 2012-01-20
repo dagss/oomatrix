@@ -14,21 +14,61 @@ def assert_key(expected, pattern):
 
 def test_basic():
     assert isinstance(Dense, MatrixKind)
-    assert Dense < Diagonal
-    assert Dense != Diagonal
-    assert Dense == Dense
+
+def test_ordering():
+    # kinds
+    yield ok_, Dense < Diagonal
+    yield ok_, Dense != Diagonal
+    yield ok_, Dense == Dense
+
+    # expressions always larger than kinds
+    yield ok_, Dense + Dense > Diagonal
+    yield ok_, Diagonal < Dense + Dense
+
+    # since we use @total_ordering, we're going to trust that !=, <=, >, >=
+    # works as advertised without tests...
+
+    # one operator
+    yield ok_, Dense + Dense < Diagonal + Diagonal
+    yield ok_, not Dense + Dense == Diagonal + Diagonal
+    yield ok_, Diagonal * Diagonal == Diagonal * Diagonal
+    yield ok_, Diagonal * Diagonal < Diagonal * Diagonal * Diagonal
+    yield ok_, Diagonal * Diagonal < Diagonal * Diagonal * Diagonal
+    yield ok_, Diagonal * Diagonal > Dense * Diagonal * Diagonal
+    yield ok_, Diagonal * Diagonal > Dense * Diagonal
+
+    # mixing operators
+    yield ok_, Diagonal * Diagonal > Dense * Dense
+    # but:
+    yield ok_, Diagonal * Diagonal < Dense + Dense
+    yield ok_, Diagonal * Diagonal < Dense.h * Dense
+    yield ok_, Diagonal.h * Diagonal < Dense.i * Dense
+    yield ok_, Diagonal.i * Diagonal > Dense.h * Dense
+    yield ok_, Dense.h > Diagonal + Diagonal
+    
+def test_add_permutation():
+    yield eq_, [0, 1], (Dense + Dense).child_permutation
+    yield eq_, [1, 0], (Diagonal + Dense).child_permutation
+    yield eq_, [0, 1], (Dense + Diagonal).child_permutation
+    yield eq_, [1, 2, 0], (Diagonal + Dense + Dense).child_permutation
 
 def test_tree_building():
     assert isinstance(Dense + Dense, AddPatternNode)
 
-    p = (Diagonal.i.h + Dense.h) * Diagonal * Dense
+    p = (Diagonal + Dense) * Diagonal * Dense
     eq_(('*',
-         ('+', ('h', ('i', Diagonal)),
-               ('h', Dense)),
+         ('+', Dense, Diagonal), # note reversed order!
          Diagonal,
          Dense),
         p.get_key())
 
+    p = (Diagonal.i.h + Dense.h) * Diagonal * Dense
+    eq_(('*',
+         ('+', ('h', Dense),
+               ('h', ('i', Diagonal))),
+         Diagonal,
+         Dense),
+        p.get_key())
 
 def test_tree_normalization():
     # Only A.i and A.i.h allowed for .i and .h

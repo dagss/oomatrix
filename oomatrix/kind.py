@@ -11,8 +11,19 @@ Then ``isinstance(Diagonal, MatrixKind)`` holds true. Matrix kinds
 can be used in arithmetic operations in order to create matcher
 patterns, such as::
 
-    @action(Diagonal * Diagonal + Dense.h, Dense)
+    @computation(Diagonal * Diagonal + Dense.h, Dense)
     def foo(di1, di2, de): ..
+
+The patterns implements comparison and can be sorted, in a way which ignores
+addition commutativity, i.e., ``Dense + Diagonal == Diagonal + Dense``.
+The ``get_key`` will return the same tree in both those cases.
+
+
+
+#There is
+#however a difference in how arguments are mapped, so there's a seperate
+#utility ``call_with_tree`` to call a callable with a symbolic tree.
+
 
 
 
@@ -22,14 +33,24 @@ from functools import total_ordering
 
 from .core import ConversionGraph
 
+def argsort(seq):
+    return sorted(range(len(seq)), key=seq.__getitem__)
+
+
 #
 # Core classes
 #
 
+@total_ordering # implements __ge__ and so on
 class PatternNode(object):
     def get_key(self):
         return ((self.symbol,) + 
-                tuple(child.get_key() for child in self.children))
+                tuple(child.get_key() for child in self.get_sorted_children()))
+
+    def get_sorted_children(self):
+        # overriden in AddPatternNode, which is the only one which
+        # is allowed to sort
+        return self.children
 
     def __add__(self, other):
         if not isinstance(self, PatternNode):
@@ -41,6 +62,21 @@ class PatternNode(object):
             raise TypeError('wrong type')
         return MultiplyPatternNode([self, other])
 
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return False
+        else:
+            assert not isinstance(self, MatrixKind)
+            return self.children == other.children
+
+    def __lt__(self, other):
+        if isinstance(other, MatrixKind):
+            return not other < self
+        elif self.symbol == other.symbol:
+            return self.children < other.children
+        else:
+            return self.symbol < other.symbol
+        
     @property
     def h(self):
         return ConjugateTransposePatternNode(self)
@@ -49,7 +85,6 @@ class PatternNode(object):
     def i(self):
         return InversePatternNode(self)
 
-@total_ordering # implements __ge__ and so on
 class MatrixKind(type, PatternNode):
     _transpose_classes = {}
     
@@ -74,14 +109,17 @@ class MatrixKind(type, PatternNode):
     def __eq__(cls, other_cls):
         return cls is other_cls
 
-    def __ne__(cls, other_cls):
-        return cls is not other_cls
-
     def __lt__(cls, other_cls):
-        # sort by id in this particular run...
+        # sort by id in this particular run, or _sort_id if available
+        
         if not isinstance(other_cls, MatrixKind):
-            raise TypeError('only MatrixImpl instances are '
-                            'comparable')
+            if not isinstance(other_cls, PatternNode):
+                raise TypeError('can only compare with PatternNode')
+            else:
+                # A single MatrixKind is always less than a more complicated
+                # pattern
+                return True
+
         # to provide stable sorting in testcases,
         # we have _sort_id
         key = getattr(cls, '_sort_id', id(cls))
@@ -168,9 +206,23 @@ class ArithmeticPatternNode(PatternNode):
                 unpacked_children.append(child)
         del children
         self.children = unpacked_children
+        self._init_sorting()
+
+    def _init_sorting(self):
+        pass
 
 class AddPatternNode(ArithmeticPatternNode):
     symbol = '+'
+
+    def _init_sorting(self):
+        self.child_permutation = argsort(self.children)
+        self.sorted_children = [self.children[i]
+                                for i in self.child_permutation]
+
+    def get_sorted_children(self):
+        # overriden in AddPatternNode, which is the only one which
+        # is allowed to sort
+        return self.sorted_children
 
 class MultiplyPatternNode(ArithmeticPatternNode):
     symbol = '*'
