@@ -42,7 +42,6 @@ import threading
 from .core import ConversionGraph
 from .utils import argsort
 
-
 #
 # kind universes
 #
@@ -339,18 +338,22 @@ class AddPatternNode(ArithmeticPatternNode):
 class MultiplyPatternNode(ArithmeticPatternNode):
     symbol = '*'
 
-class ConjugateTransposePatternNode(PatternNode):
+class SingleChildPatternNode(PatternNode):
+    def __init__(self, child):
+        self.child = child
+        self.children = [child]
+        self.universe = child.universe
+
+class ConjugateTransposePatternNode(SingleChildPatternNode):
     symbol = 'h'
     def __init__(self, child):
         if not isinstance(child, (InversePatternNode, MatrixKind)):
             raise IllegalPatternError(
                 '.h must be applied directly to A or A.i for a '
                 'matrix kind A; (A + B).h etc. is not allowed')
-        self.child = child
-        self.children = [child]
-        self.universe = child.universe
+        SingleChildPatternNode.__init__(self, child)
 
-class InversePatternNode(PatternNode):
+class InversePatternNode(SingleChildPatternNode):
     symbol = 'i'    
     def __init__(self, child):
         if not isinstance(child, MatrixKind):
@@ -358,6 +361,4 @@ class InversePatternNode(PatternNode):
                 '.i must be applied directly to a matrix kind; '
                 'A.h.i should be written A.i.h, (A * B).i should '
                 'be written (B.i * A.i), and so on)')
-        self.child = child
-        self.children = [child]
-        self.universe = child.universe
+        SingleChildPatternNode.__init__(self, child)

@@ -9,6 +9,9 @@ class Dense(MatrixImpl):
 class Diagonal(MatrixImpl):
     _sort_id = 2
 
+class CSC(MatrixImpl):
+    _sort_id = 3
+
 def assert_key(expected, pattern):
     eq_(expected, pattern.get_key())
 
@@ -45,12 +48,16 @@ def test_ordering():
     yield ok_, Diagonal.h * Diagonal < Dense.i * Dense
     yield ok_, Diagonal.i * Diagonal > Dense.h * Dense
     yield ok_, Dense.h > Diagonal + Diagonal
+
+    # sorting of three types
+    yield eq_, [Dense, Diagonal, CSC], sorted([CSC, Dense, Diagonal])
     
 def test_add_permutation():
     yield eq_, [0, 1], (Dense + Dense).child_permutation
     yield eq_, [1, 0], (Diagonal + Dense).child_permutation
     yield eq_, [0, 1], (Dense + Diagonal).child_permutation
     yield eq_, [1, 2, 0], (Diagonal + Dense + Dense).child_permutation
+    yield eq_, [Dense, Diagonal, CSC], (CSC + Dense + Diagonal).sorted_children
 
 def test_tree_building():
     assert isinstance(Dense + Dense, AddPatternNode)
@@ -122,3 +129,4 @@ def test_kind_universe_links_behaviour():
     # but looking up the root collapses the linked list
     assert first._get_root() is cur
     assert 1 == depth(first)
+

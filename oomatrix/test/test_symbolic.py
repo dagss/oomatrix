@@ -71,15 +71,11 @@ def test_distributive():
          (e * a + e * b + e * c) * e * c) * d * e''', out)
 
 def test_get_key():
-    class A(MatrixImpl):
+    class A(MockImpl):
         _sort_id = 1
-        nrows = ncols = 3
-        dtype = None
 
-    class B(MatrixImpl):
+    class B(MockImpl):
         _sort_id = 2
-        nrows = ncols = 3
-        dtype = None
 
     a = LeafNode('a', A())
     b = LeafNode('b', B())
@@ -95,4 +91,36 @@ def test_get_key():
     eq_(('*',
          ('+', B, A, ('h', ('i', B))),
          A), key)
+
+def test_call_func():
+    class A(MockImpl):
+        _sort_id = 1
+    class B(MockImpl):
+        _sort_id = 2
+    class C(MockImpl):
+        _sort_id = 3
+    ao = A()
+    bo = B()
+    co = C()
+    a = LeafNode('a', ao)
+    b = LeafNode('b', bo)
+    c = LeafNode('c', co)
+
+    yield eq_, [ao], I(a).as_argument_list(A.i)
+    yield assert_raises, PatternMismatchError, a.as_argument_list, A.i
+    yield eq_, [ao], H(I(a)).as_argument_list(A.i.h)
+
+    yield eq_, [co, ao, bo], add(a, b, c).as_argument_list(C + A + B)
+    yield eq_, [ao, bo, co], add(a, b, c).as_argument_list(A + B + C)
+    yield eq_, [bo, co, ao], add(a, b, c).as_argument_list(B + C + A)
+
+    yield eq_, [co, ao, bo], mul(c, a, b).as_argument_list(C * A * B)
+
+    yield eq_, [co, ao, bo, bo, co], (
+        (mul(c, add(mul(H(I(a)), b), mul(H(b), c))).as_argument_list(
+            C * (A.i.h * B + B.h * C))))
+
+    # make C appear before A and try again, should be exact same behaviour
+    C._sort_id = 0
+    yield eq_, [co, ao, bo], add(a, b, c).as_argument_list(C + A + B)
     

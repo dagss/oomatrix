@@ -1,9 +1,11 @@
-from .kind import MatrixImpl
-from .utils import argsort
+from .utils import argsort, invert_permutation
+from . import kind
 
 class TODO:
     name = 'TODO'
 
+class PatternMismatchError(ValueError):
+    pass
 
 class ExpressionNode(object):
     name = None
@@ -40,10 +42,19 @@ class ExpressionNode(object):
     def get_sorted_children(self):
         return self.children
 
+    def as_argument_list(self, pattern):
+        """Converts tree to an argument list matching `pattern` (a
+        tree from kind.py)
+        """
+        raise NotImplementedError('please override')
+
+
+
 class LeafNode(ExpressionNode):
     children = ()
     
     def __init__(self, name, matrix_impl):
+        from .kind import MatrixImpl
         if not isinstance(matrix_impl, MatrixImpl):
             raise TypeError('not isinstance(matrix_impl, MatrixImpl)')
         self.name = name
@@ -60,6 +71,11 @@ class LeafNode(ExpressionNode):
     def get_key(self):
         return type(self.matrix_impl)
 
+    def as_argument_list(self, pattern):
+        if pattern != type(self.matrix_impl):
+            raise PatternMismatchError()
+        return [self.matrix_impl]
+        
 
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):
@@ -81,7 +97,7 @@ class ArithmeticNode(ExpressionNode):
 
     def _child_sort(self):
         pass
-    
+
 class AddNode(ArithmeticNode):
     symbol = '+'
     def _child_sort(self):
@@ -107,12 +123,44 @@ class AddNode(ArithmeticNode):
         return AddNode([MultiplyNode([other, term])
                         for term in self.children])
 
+    def as_argument_list(self, pattern):
+        if not isinstance(pattern, kind.AddPatternNode):
+            raise PatternMismatchError()
+        if len(self.sorted_children) != len(pattern.sorted_children):
+            raise PatternMismatchError()
+        
+        # Now, we need to apply the inverse permutation in `pattern`
+        # to figure out how the function wants to be called and how our
+        # own arguments match
+        sorted_to_pattern = invert_permutation(pattern.child_permutation)
+        arguments_in_sorted_order = [child.as_argument_list(pattern_child)
+                                     for child, pattern_child in zip(
+                                         self.sorted_children,
+                                         pattern.sorted_children)]
+        result = []
+        for i in range(len(sorted_to_pattern)):
+            result.extend(arguments_in_sorted_order[sorted_to_pattern[i]])
+        return result
+
 class MultiplyNode(ArithmeticNode):
     symbol = '*'
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_multiply(*args, **kw)
 
-class ConjugateTransposeNode(ExpressionNode):
+    def as_argument_list(self, pattern):
+        if not isinstance(pattern, kind.MultiplyPatternNode):
+            raise PatternMismatchError()
+        if len(self.children) != len(pattern.children):
+            raise PatternMismatchError()
+        result = []
+        for expr_child, pattern_child in zip(self.children, pattern.children):
+            result.extend(expr_child.as_argument_list(pattern_child))
+        return result
+
+class SingleChildNode(ExpressionNode):
+    pass
+
+class ConjugateTransposeNode(SingleChildNode):
     """
     Note that
     ``ConjugateTransposeNode(ConjugateTransposeNode(x)) is x``,
@@ -167,7 +215,12 @@ class ConjugateTransposeNode(ExpressionNode):
     def conjugate_transpose(self):
         return self.child
 
-class InverseNode(ExpressionNode):
+    def as_argument_list(self, pattern):
+        if not isinstance(pattern, kind.ConjugateTransposePatternNode):
+            raise PatternMismatchError()
+        return self.child.as_argument_list(pattern.child)
+
+class InverseNode(SingleChildNode):
     symbol = 'i'
     
     def __new__(cls, expr):
@@ -196,6 +249,13 @@ class InverseNode(ExpressionNode):
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_inverse(*args, **kw)
 
+    def as_argument_list(self, pattern):
+        if not isinstance(pattern, kind.InversePatternNode):
+            raise PatternMismatchError()
+        return self.child.as_argument_list(pattern.child)
+
+
+
 class BracketNode(ExpressionNode):
     symbol = 'b'
     
@@ -209,6 +269,8 @@ class BracketNode(ExpressionNode):
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_bracket(*args, **kw)
 
+    def call_func(self, func, pattern):
+        raise NotImplementedError()
 
 for x, val in [
     (LeafNode, 1000),
