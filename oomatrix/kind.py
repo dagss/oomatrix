@@ -141,17 +141,8 @@ class MatrixKindUniverse(object):
             # under our nose
             root = self._get_root()
             computation_db = root._computations
-
-            try:
-                same_match_dict = computation_db[match_key]
-            except KeyError:
-                computation_db[match_key] = same_match_dict = {}
-
-            try:
-                same_out_kind_lst = same_match_dict[out_kind]
-            except KeyError:
-                same_match_dict[out_kind] = same_out_kind_lst = []
-
+            same_match_dict = computation_db.setdefault(match_key, {})
+            same_out_kind_lst = same_match_dict.setdefault(out_kind, [])
             same_out_kind_lst.append(computation)
 
     def get_computations(self, key):
@@ -207,25 +198,40 @@ class PatternNode(object):
     def i(self):
         return InversePatternNode(self)
 
+_threadvars = threading.local()
+
+def add_post_class_definition_hook(hook_func, hook_method):
+    try:
+        hooks = _threadvars.post_class_definition_hooks
+    except AttributeError:
+        hooks = _threadvars.post_class_definition_hooks = []
+    hooks.append((hook_func, hook_method))
+
 class MatrixKind(type, PatternNode):
     _transpose_classes = {}
     
     def __init__(cls, name, bases, dct):
         type.__init__(cls, name, bases, dct)
-        # Register pending conversion registrations
-        to_delete = []
-        pending = ConversionGraph._global_pending_conversion_registrations
-        for func, decorator_args in pending.iteritems():
-            if dct.get(func.__name__, None) is func:
-                graph, dest_kind = decorator_args
-                graph.conversion_decorator(cls, dest_kind)(func)
-                to_delete.append(func)
-        for func in to_delete:
-            del pending[func]
         if 'name' not in dct:
             cls.name = name
         cls.universe = MatrixKindUniverse()
         cls.universe.add_kind(cls)
+        
+        # We use post-class-definition hooks in order to support @conversion
+        # decorator on methods
+        try:
+            hooks = _threadvars.post_class_definition_hooks
+        except AttributeError:
+            hooks = []
+        for hook_func, hook_method in hooks:
+            method_name = hook_method.__name__
+            if method_name not in dct or dct[method_name] is not hook_method:
+                raise AssertionError('invalid use of '
+                                     'add_post_class_definition_hook (did you '
+                                     'use single-arg @conversion outside of '
+                                     'class definition?)')
+            dct[method_name] = hook_func(cls, hook_method)
+        del hooks[:]
 
     def __repr__(cls):
         return "<kind:%s>" % cls.name

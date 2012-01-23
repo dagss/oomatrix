@@ -64,7 +64,6 @@ class MockMatricesUniverse:
                                (result_kind.name, a.value, ah),
                                a.nrows, a.ncols)
 
-
     def new_matrix(self, name_,
                    right=(), right_h=(), add=(),
                    result='self'):
