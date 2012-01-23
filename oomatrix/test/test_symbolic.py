@@ -84,7 +84,15 @@ def test_get_key():
     a = LeafNode('a', A())
     b = LeafNode('b', B())
     key = mul(add(I(H(b)), b, a), a).get_key()
-    # note that the + is sorted (a and b changes spot)
-    eq_(key, ('*',
-              ('+', ('h', ('i', B)), A, B),
-              A))
+    # note that the + is sorted
+    eq_(('*',
+         ('+', A, B, ('h', ('i', B))),
+         A), key)
+
+    # reverse sort order and construct new tree, now the order should be B, A
+    A._sort_id = 3
+    key = mul(add(I(H(b)), b, a), a).get_key()
+    eq_(('*',
+         ('+', B, A, ('h', ('i', B))),
+         A), key)
+    

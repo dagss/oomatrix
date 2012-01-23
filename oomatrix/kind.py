@@ -183,12 +183,7 @@ class PatternNode(object):
             return self.children == other.children
 
     def __lt__(self, other):
-        if isinstance(other, MatrixKind):
-            return not other < self
-        elif self.symbol == other.symbol:
-            return self.children < other.children
-        else:
-            return self.symbol < other.symbol
+        return self.get_key() < other.get_key()
         
     @property
     def h(self):
@@ -228,12 +223,9 @@ class MatrixKind(type, PatternNode):
         # sort by id in this particular run, or _sort_id if available
         
         if not isinstance(other_cls, MatrixKind):
-            if not isinstance(other_cls, PatternNode):
-                raise TypeError('can only compare with PatternNode')
-            else:
-                # A single MatrixKind is always less than a more complicated
-                # pattern
-                return True
+            # A single MatrixKind is always less than a more complicated
+            # pattern/tuple
+            return True
 
         # to provide stable sorting in testcases,
         # we have _sort_id

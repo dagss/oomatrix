@@ -60,6 +60,7 @@ class LeafNode(ExpressionNode):
     def get_key(self):
         return type(self.matrix_impl)
 
+
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):
         # Avoid nesting arithmetic nodes of the same type;
@@ -84,10 +85,10 @@ class ArithmeticNode(ExpressionNode):
 class AddNode(ArithmeticNode):
     symbol = '+'
     def _child_sort(self):
-        self.child_permutation = argsort(self.children)
+        child_keys = [child.get_key() for child in self.children]
+        self.child_permutation = argsort(child_keys)
         self.sorted_children = [self.children[i]
                                 for i in self.child_permutation]
-        
 
     def get_sorted_children(self):
         return self.sorted_children
