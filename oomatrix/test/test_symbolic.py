@@ -1,9 +1,10 @@
 import re
 from nose.tools import eq_, ok_, assert_raises
-from ..symbolic import *
+from ..kind import MatrixImpl
 from ..formatter import BasicExpressionFormatter
+from ..symbolic import *
 
-class MockImpl:
+class MockImpl(MatrixImpl):
     nrows = ncols = 3
     dtype = None
 
@@ -69,3 +70,21 @@ def test_distributive():
         ((e * a + e * b + e * c) * e * c +
          (e * a + e * b + e * c) * e * c) * d * e''', out)
 
+def test_get_key():
+    class A(MatrixImpl):
+        _sort_id = 1
+        nrows = ncols = 3
+        dtype = None
+
+    class B(MatrixImpl):
+        _sort_id = 2
+        nrows = ncols = 3
+        dtype = None
+
+    a = LeafNode('a', A())
+    b = LeafNode('b', B())
+    key = mul(add(I(H(b)), b, a), a).get_key()
+    # note that the + is sorted (a and b changes spot)
+    eq_(key, ('*',
+              ('+', ('h', ('i', B)), A, B),
+              A))

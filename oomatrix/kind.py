@@ -40,9 +40,7 @@ from functools import total_ordering
 import threading
 
 from .core import ConversionGraph
-
-def argsort(seq):
-    return sorted(range(len(seq)), key=seq.__getitem__)
+from .utils import argsort
 
 
 #
@@ -122,14 +120,30 @@ class MatrixKindUniverse(object):
             root = self._get_root()
             root._kinds.add(kind)
 
-    def add_computation(self, computation):
+    def add_computation(self, match_pattern, out_kind, computation):
+        match_key = match_pattern.get_key()
         with MatrixKindUniverse.reentrant_write_lock:
             # Need to do this atomically, so that root doesn't become non-root
             # under our nose
             root = self._get_root()
-            root._computation.add(computation)
+            computation_db = root._computations
 
-    def get_computation(self, key):
+            try:
+                same_match_dict = computation_db[match_key]
+            except KeyError:
+                computation_db[match_key] = same_match_dict = {}
+
+            try:
+                same_out_kind_lst = same_match_dict[out_kind]
+            except KeyError:
+                same_match_dict[out_kind] = same_out_kind_lst = []
+
+            same_out_kind_lst.append(computation)
+
+    def get_computations(self, key):
+        """
+        key: A tuple-tree representation
+        """
         return self._get_root()._computations[key]
 
     def get_kinds(self):
@@ -188,7 +202,7 @@ class MatrixKind(type, PatternNode):
     _transpose_classes = {}
     
     def __init__(cls, name, bases, dct):
-        super(MatrixKind, cls).__init__(name, bases, dct)
+        type.__init__(cls, name, bases, dct)
         # Register pending conversion registrations
         to_delete = []
         pending = ConversionGraph._global_pending_conversion_registrations
@@ -307,20 +321,20 @@ class ArithmeticPatternNode(PatternNode):
                 unpacked_children.append(child)
         del children
         self.children = unpacked_children
-        self._init_sorting()
+        self._child_sort()
         # Join universes
         universe = self.children[0].universe
         for x in self.children[1:]:
             universe.join_with(x.universe)
         self.universe = universe
 
-    def _init_sorting(self):
+    def _child_sort(self):
         pass
 
 class AddPatternNode(ArithmeticPatternNode):
     symbol = '+'
 
-    def _init_sorting(self):
+    def _child_sort(self):
         self.child_permutation = argsort(self.children)
         self.sorted_children = [self.children[i]
                                 for i in self.child_permutation]

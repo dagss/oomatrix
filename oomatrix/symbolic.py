@@ -1,4 +1,5 @@
-
+from .kind import MatrixImpl
+from .utils import argsort
 
 class TODO:
     name = 'TODO'
@@ -27,11 +28,24 @@ class ExpressionNode(object):
         from .formatter import BasicExpressionFormatter
         return BasicExpressionFormatter({}).format(self)
 
+    def get_key(self):
+        """Returns the tuple-serialization of the tree, useful as a key
+
+        This is in the format given in MatrixKind.get_key; i.e., only MatrixKind
+        information is present, not instance information.
+        """
+        return ((self.symbol,) + 
+                tuple(child.get_key() for child in self.get_sorted_children()))
+
+    def get_sorted_children(self):
+        return self.children
 
 class LeafNode(ExpressionNode):
     children = ()
     
     def __init__(self, name, matrix_impl):
+        if not isinstance(matrix_impl, MatrixImpl):
+            raise TypeError('not isinstance(matrix_impl, MatrixImpl)')
         self.name = name
         self.matrix_impl = matrix_impl
         self.nrows, self.ncols = matrix_impl.nrows, matrix_impl.ncols
@@ -42,6 +56,9 @@ class LeafNode(ExpressionNode):
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_leaf(*args, **kw)
+
+    def get_key(self):
+        return type(self.matrix_impl)
 
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):
@@ -59,8 +76,22 @@ class ArithmeticNode(ExpressionNode):
         self.nrows= self.children[0].nrows
         self.ncols = self.children[-1].ncols
         self.dtype = self.children[0].dtype # TODO combine better
+        self._child_sort()
+
+    def _child_sort(self):
+        pass
     
 class AddNode(ArithmeticNode):
+    symbol = '+'
+    def _child_sort(self):
+        self.child_permutation = argsort(self.children)
+        self.sorted_children = [self.children[i]
+                                for i in self.child_permutation]
+        
+
+    def get_sorted_children(self):
+        return self.sorted_children
+    
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_add(*args, **kw)
 
@@ -76,6 +107,7 @@ class AddNode(ArithmeticNode):
                         for term in self.children])
 
 class MultiplyNode(ArithmeticNode):
+    symbol = '*'
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_multiply(*args, **kw)
 
@@ -86,6 +118,8 @@ class ConjugateTransposeNode(ExpressionNode):
     so that one does NOT always have
     ``type(ConjugateTransposeNode(x)) is ConjugateTransposeNode``.
     """
+
+    symbol = 'h'
     
     def __new__(cls, expr):
         if isinstance(expr, ConjugateTransposeNode):
@@ -133,6 +167,8 @@ class ConjugateTransposeNode(ExpressionNode):
         return self.child
 
 class InverseNode(ExpressionNode):
+    symbol = 'i'
+    
     def __new__(cls, expr):
 #        print type(child), child.__dict__
         if isinstance(expr, InverseNode):
@@ -160,6 +196,8 @@ class InverseNode(ExpressionNode):
         return visitor.visit_inverse(*args, **kw)
 
 class BracketNode(ExpressionNode):
+    symbol = 'b'
+    
     def __init__(self, child, kinds=None):
         self.child = child
         self.children = [child]
