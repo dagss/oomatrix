@@ -27,16 +27,16 @@ class NumPyWrapper(object):
         else:
             out[...] = np.dot(self.array, vec)
 
-class ColumnMajorImpl(MatrixImpl, NumPyWrapper):
+class ColumnMajor(MatrixImpl, NumPyWrapper):
     name = 'column-major'
 
-class RowMajorImpl(MatrixImpl, NumPyWrapper):
+class RowMajor(MatrixImpl, NumPyWrapper):
     name = 'row-major'
 
-class StridedImpl(MatrixImpl, NumPyWrapper):
+class Strided(MatrixImpl, NumPyWrapper):
     name = 'strided'
 
-class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
+class SymmetricContiguous(MatrixImpl, NumPyWrapper):
     """
     Matrices that are symmetric and contiguous, and stored in the full
     format, are contiguous in both column-major and row-major format.
@@ -44,13 +44,13 @@ class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
     name = 'symmetric contiguous'
     prose = ('the symmetrix contiguous', 'a symmetric contiguous')
 
-    @conversion(ColumnMajorImpl)
+    @conversion(ColumnMajor)
     def to_column_major(self):
-        return ColumnMajorImpl(self.array)
+        return ColumnMajor(self.array)
 
-    @conversion(RowMajorImpl)
+    @conversion(RowMajor)
     def to_row_major(self):
-        return RowMajorImpl(self.array)
+        return RowMajor(self.array)
 
 
 
@@ -63,26 +63,26 @@ class SymmetricContiguousImpl(MatrixImpl, NumPyWrapper):
 # thing in each case.
 #
 
-for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
+for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
     
-    @addition((T, T), RowMajorImpl)
+    @addition((T, T), RowMajor)
     def add(a, b):
         # Ensure result will be C-contiguous with any NumPy
         out = np.zeros(A.shape, order='C')
         np.add(a.array, b.array, out)
-        return RowMajorImpl(out)
+        return RowMajor(out)
 
-    @multiplication((T, T), RowMajorImpl)
+    @multiplication((T, T), RowMajor)
     def multiply(a, b):
         out = np.dot(a.array, b.array)
         if not out.flags.c_contiguous:
             raise NotImplementedError('numpy.dot returned non-C-contiguous array')
-        return RowMajorImpl(out)
+        return RowMajor(out)
 
     #
     # Then for the conjugate-transpose versions
     #
-    @addition((T.H, T), RowMajorImpl)
+    @addition((T.H, T), RowMajor)
     def add(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):
@@ -90,9 +90,9 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
         # Ensure result will be C-contiguous with any NumPy
         out = np.zeros(A.shape, order='C')
         np.add(a_arr, b.array, out)
-        return RowMajorImpl(out)
+        return RowMajor(out)
 
-    @multiplication((T.H, T), RowMajorImpl)
+    @multiplication((T.H, T), RowMajor)
     def multiply(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):
@@ -100,12 +100,12 @@ for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
         out = np.dot(a_arr, b.array)
         if not out.flags.c_contiguous:
             raise NotImplementedError('numpy.dot returned non-C-contiguous array')
-        return RowMajorImpl(out)
+        return RowMajor(out)
 
 
 
 
-## for T in [ColumnMajorImpl, RowMajorImpl, StridedImpl, SymmetricContiguousImpl]:
+## for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
     
 ##     class _(MultiplyOperation):
 ##         library = 'numpy'

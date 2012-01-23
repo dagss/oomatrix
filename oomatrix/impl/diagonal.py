@@ -3,11 +3,11 @@ import numpy as np
 from ..core import addition, conversion
 from ..kind import MatrixImpl
 from ..cost import FLOP, MEM, MEMOP
-from .dense import SymmetricContiguousImpl
+from .dense import SymmetricContiguous
 
-__all__ = ['DiagonalImpl']
+__all__ = ['Diagonal']
 
-class DiagonalImpl(MatrixImpl):
+class Diagonal(MatrixImpl):
 
     """
 
@@ -43,15 +43,15 @@ class DiagonalImpl(MatrixImpl):
         self.dtype = array.dtype
 
     def as_dtype(self, dtype):
-        return DiagonalImpl(self.array.astype(dtype))
+        return Diagonal(self.array.astype(dtype))
 
-    @conversion(SymmetricContiguousImpl)
+    @conversion(SymmetricContiguous)
     def diagonal_to_dense(D):
         n = D.ncols
         i = np.arange(n)
         out = np.zeros((n, n), dtype=D.dtype)
         out[i, i] = D.array
-        return SymmetricContiguousImpl(out)
+        return SymmetricContiguous(out)
 
     def get_element(self, i, j):
         if i != j:
@@ -66,7 +66,7 @@ class DiagonalImpl(MatrixImpl):
         else:
             out[...] = result
 
-@addition((DiagonalImpl, DiagonalImpl), DiagonalImpl)
+@addition((Diagonal, Diagonal), Diagonal)
 def diagonal_plus_diagonal(A, B):
-    return DiagonalImpl(A.array + B.array)
+    return Diagonal(A.array + B.array)
 

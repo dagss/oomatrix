@@ -28,17 +28,17 @@ class Matrix(object):
                 if obj.ndim != 1:
                     raise ValueError()
                 from .impl import diagonal
-                r = diagonal.DiagonalImpl(obj)
+                r = diagonal.Diagonal(obj)
             else:
                 if obj.ndim != 2:
                     raise ValueError("array ndim != 2")
                 from .impl import dense
                 if obj.flags.c_contiguous:
-                    r = dense.RowMajorImpl(obj)
+                    r = dense.RowMajor(obj)
                 elif obj.flags.f_contiguous:
-                    r = dense.ColMajorImpl(obj)
+                    r = dense.ColMajor(obj)
                 else:
-                    r = dense.StridedImpl(obj)
+                    r = dense.Strided(obj)
             e = LeafNode(name, r)
 
         self._expr = e
