@@ -61,14 +61,18 @@ class MatrixKindUniverse(object):
     concurrently. Writing (with associated locking) mostly only
     happens during program startup. Given the very special usecase, a
     single global lock seems appropriate.
+
+    When _linked is set, the other attributes (_kinds, _computations)
+    freeze and should not be consulted. However they are left around, in
+    case concurrent readers are currently checking them.
     """
 
     # write lock for writes to *all* universes in the process
     reentrant_write_lock = threading.RLock()
     
     def __init__(self):
-        self._kinds = set() # del-ed upon joining a root
-        self._computations = {} # del-ed upon joining a root
+        self._kinds = set()
+        self._computations = {}
         self._linked = None
 
     def _get_root(self):
@@ -107,8 +111,19 @@ class MatrixKindUniverse(object):
             # do the join between the respective roots
             my_root._kinds.update(other_root._kinds)
             my_root._computations.update(other_root._computations)
-            del other_root._kinds
-            del other_root._computations
+            # NOTE: We need to update the references in the old root
+            # as well -- another thread may well be READING on the
+            # node at this point (i.e. be right between _get_root()
+            # and accessesing the root), and need to find something. We could
+            # leave the old data, but this way the dicts will
+            # be deallocated.
+            #
+            # This means that during a race, _kinds and _computations could be
+            # out of sync, but that should be OK. We could stick them in a tuple
+            # to make the assigment atomic.
+            other._computations = my_root._computations
+            other._kinds = my_root._kinds
+            
             other_root._linked = my_root
             other._linked = my_root # not strictly necesarry
 
