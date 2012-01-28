@@ -75,7 +75,19 @@ class LeafNode(ExpressionNode):
         if pattern != type(self.matrix_impl):
             raise PatternMismatchError()
         return [self.matrix_impl]
-        
+
+class ComputableNode(ExpressionNode):
+    def __init__(self, kind, nrows, ncols, dtype, computable):
+        self.kind = kind
+        self.nrows = nrows
+        self.ncols = ncols
+        self.dtype = dtype
+        self.computable = computable
+
+    def as_argument_list(self, pattern):
+        if pattern != self.kind:
+            raise PatternMismatchError()
+        return [self.computable]
 
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):

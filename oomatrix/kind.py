@@ -39,7 +39,6 @@ one merges the implied universes.
 from functools import total_ordering
 import threading
 
-from .core import ConversionGraph
 from .utils import argsort
 
 #
@@ -149,7 +148,11 @@ class MatrixKindUniverse(object):
         """
         key: A tuple-tree representation
         """
-        return self._get_root()._computations[key]
+        root = self._get_root()
+        try:
+            return root._computations[key]
+        except KeyError:
+            return {}
 
     def get_kinds(self):
         # make a copy to be safe for now

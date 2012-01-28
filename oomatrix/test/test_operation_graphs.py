@@ -1,21 +1,14 @@
 from .common import *
 
-from ..core import ConversionGraph, AdditionGraph, MultiplyPairGraph
 from ..kind import MatrixImpl
+from ..computation import *
 from ..impl.diagonal import *
 from ..impl.dense import *
+from ..operation_graphs import *
 
 from .. import Matrix, actions
 
-mock_conversion_graph = ConversionGraph()
-mock_conversion = mock_conversion_graph.conversion_decorator
-mock_addition_graph = AdditionGraph(mock_conversion_graph)
-mock_multiply_graph = MultiplyPairGraph(mock_conversion_graph)
-mock_multiplication = mock_multiply_graph.multiplication_decorator
-mock_addition = mock_addition_graph.addition_decorator
-
 mock_kinds = []
-
 for X in 'ABCD':
     class MockImpl(MatrixImpl):
         "A 5x5 matrix of a single value in all elements"
@@ -31,25 +24,25 @@ for X in 'ABCD':
         name = X
     mock_kinds.append(MockImpl)
 
-    @mock_addition((MockImpl, MockImpl), MockImpl)
-    def _adder(a, b):
+    @computation(MockImpl + MockImpl, MockImpl)
+    def add(a, b):
         return type(a)(a.value + b.value)
 
     if X != 'D':
         # Type D does not have within-type multiplication; only
         # way to get to D result is after-operation conversion
-        @mock_multiplication((MockImpl, MockImpl), MockImpl)
-        def _multiplier(a, b):
+        @computation(MockImpl * MockImpl, MockImpl)
+        def multiply(a, b):
             return type(a)(a.value * b.value)
 
 A, B, C, D = mock_kinds
 
-@mock_multiplication((A, B), C)
+@computation(A * B, C)
 def multiply_A_B_to_C(a, b):
     return C(a.value * b.value)
 
 def make_conv(kind_a, kind_b):
-    @mock_conversion(kind_a, kind_b)
+    @conversion(kind_a, kind_b)
     def _converter(input):
         return kind_b(input.value)
 
@@ -72,19 +65,19 @@ c = C(3)
 d = D(4)
 
 def assert_add(expected, lst, target_kinds=None):
-    action = mock_addition_graph.find_cheapest_action(
-        [actions.LeafAction(x) for x in lst], target_kinds)
+    lst = [ComputableLeaf(x) for x in lst]
+    action = addition_graph.find_cheapest_action(lst, target_kinds)
     got = action.perform()
     eq_(expected, got)
 
 def assert_mul(expected, lst, target_kinds=None):
-    action = mock_multiply_graph.find_cheapest_action(
-        [actions.LeafAction(x) for x in lst], target_kinds)
-    got = action.perform()
+    lst = [ComputableLeaf(x) for x in lst]
+    action = multiplication_graph.find_cheapest_action(lst, target_kinds)
+    got = action.compute()
     eq_(expected, got)
 
 def test_addition_get_vertices():
-    V = list(mock_addition_graph.get_vertices(3, [A, B, C, D]))
+    V = list(addition_graph.get_vertices(3, [A, B, C, D]))
     V0 = [[A], [B], [C], [D],
           [A, B], [A, C], [A, D], [B, C], [B, D], [C, D],
           [A, B, C], [A, B, D], [A, C, D], [B, C, D]]
@@ -96,8 +89,8 @@ def test_addition_get_vertices():
 
 def test_add_perform_two():
 
-    #plot_add_graph(mock_addition_graph)
-    #plot_mul_graph(mock_multiply_graph)
+    #plot_add_graph(addition_graph)
+    #plot_mul_graph(multiplication_graph)
 
     yield assert_add, A(2), [a, a]
     yield assert_add, C(4), [a, c]

@@ -6,7 +6,12 @@ import numpy as np
 
 from . import formatter, symbolic, actions
 from .matrix import Matrix
-from .core import ImpossibleOperationError
+from .operation_graphs import ImpossibleOperationError
+
+
+
+
+
 
 def is_right_vector(expr):
     return expr.ncols == 1 and expr.nrows > 1
@@ -15,9 +20,8 @@ def is_left_vector(expr):
     return expr.nrows == 1 and expr.ncols > 1
 
 class SimplisticCompilation(object):
-    def __init__(self, multiply_graph, add_graph):
-        self.multiply_graph = multiply_graph
-        self.add_graph = add_graph
+    def __init__(self):
+        pass
 
     def compile(self, symbolic_node, target_kinds=None):
         assert isinstance(symbolic_node, symbolic.ExpressionNode), (
@@ -157,18 +161,9 @@ class SimplisticCompiler(object):
 
     No in-place operations or buffer reuse is ever performed.
     """
-    
-    def __init__(self, add_graph=None, multiply_graph=None):
-        if multiply_graph is None:
-            from .core import multiply_graph
-        if add_graph is None:
-            from .core import addition_conversion_graph as add_graph
-        self.multiply_graph = multiply_graph
-        self.add_graph = add_graph
 
     def compile(self, matrix):
-        operation_root = SimplisticCompilation(
-            self.multiply_graph, self.add_graph).compile(matrix._expr)
+        operation_root = SimplisticCompilation().compile(matrix._expr)
         return operation_root
 
     def compute(self, matrix):

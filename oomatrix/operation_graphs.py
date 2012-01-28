@@ -1,78 +1,15 @@
 
 from .graph.shortest_path import find_shortest_path
-from . import actions
+from . import kind
+from .computation import Computable, BaseComputable
 
 class ImpossibleOperationError(NotImplementedError):
     pass
-
-# TODO Cost model etc.
-
-# Graphs are represented as
-#   { source_key : { dest_key : value } }
-# TODO When costs are implemented, value -> [value, ...]
-#
-# source_key is a single type for conversions, tuple of
-# multiple types for operations
-
-def add_to_graph(d, source_key, target_key, value):
-    try:
-        x = d[source_key]
-    except KeyError:
-        x = {}
-        d[source_key] = x
-    if target_key in x:
-        # We should really allow more than one method and select based
-        # on cost
-        raise NotImplementedError("TODO, requires proper cost calculation")
-    x[target_key] = value
-    
 
 
 #
 # Operation graphs
 #
-
-class ConversionGraph(object):
-    # Functions in self.listeners will be called whenever
-    # a conversion is added.
-    
-    # global shared class variable:
-    _global_pending_conversion_registrations = {}
-
-    def __init__(self):
-        self.conversions = {}
-        self.all_kinds = set()
-        self.listeners = []
-
-    #
-    # Decorators
-    #
-    def conversion_method(self, dest_kind):
-        # Postpone figuring out source_type and registering to
-        # the MatrixImplMetaclass
-        def dec(func):
-            ConversionGraph._global_pending_conversion_registrations[func] = (
-                self, dest_kind)
-            return func
-        return dec
-        
-    def conversion_decorator(self, arg1, arg2=None):
-        if arg2 is None:
-            return self.conversion_method(arg1)
-        source_kind, dest_kind = arg1, arg2        
-        self.all_kinds.add(source_kind)
-        self.all_kinds.add(dest_kind)
-        def dec(func):
-            if not callable(func):
-                raise TypeError("Does not decorate callable")
-            action_type = actions.conversion_action_from_function(func,
-                                                                  source_kind,
-                                                                  dest_kind)
-            add_to_graph(self.conversions, source_kind, dest_kind, action_type)
-            for listener in self.listeners:
-                listener(self, source_kind, dest_kind, func)
-            return func
-        return dec
 
 class AdditionGraph(object):
     """
@@ -106,10 +43,6 @@ class AdditionGraph(object):
     called with arguments sorted in the order of their kind.
     
     """
-
-    def __init__(self, conversion_graph):
-        self.conversion_graph = conversion_graph
-        self.add_operations = {}
 
     def get_vertices(self, max_node_size=4, kinds=None):
         """
@@ -180,7 +113,7 @@ class AdditionGraph(object):
         operand_dict = {}
         # Sort operands by their kind
         for op in operands:
-            operand_dict.setdefault(op.get_kind(), []).append(op)
+            operand_dict.setdefault(type(op), []).append(op)
 
         # Perform all within-kind additions
         reduced_operand_dict = {}
@@ -231,48 +164,6 @@ class AdditionGraph(object):
         M, = matrices.values()
         return M
 
-    # Decorator
-    def addition_decorator(self, source_kinds, dest_kind):
-        if not isinstance(source_kinds, tuple):
-            raise TypeError("source_kinds must be a tuple")
-        self.conversion_graph.all_kinds.update(source_kinds)
-        self.conversion_graph.all_kinds.add(dest_kind)
-        def dec(func):
-            if not callable(func):
-                raise TypeError("Does not decorate callable")
-            A, B = source_kinds
-
-            if B < A:
-                # Reverse the arguments
-                def reverse_arguments(a, b):
-                    return func(b, a)
-                func = reverse_arguments
-                A, B = B, A
-            
-            if (A, B) in self.add_operations:
-                raise Exception("Already registered addition for %s" % (A, B))
-
-            action_factory = actions.addition_action_from_function(func,
-                                                                   source_kinds,
-                                                                   dest_kind)
-            add_to_graph(self.add_operations, source_kinds, dest_kind, action_factory)
-            return func
-        return dec
-
-class MatVecGraph(object):
-    def __init__(self, conversion_graph):
-        self.conversion_graph = conversion_graph
-        conversion_graph.listeners.append(self.on_conversion_added)
-
-    def on_conversion_added(self, conversion_graph, source_kind, dest_kind, func):
-        if hasattr(dest_kind, 'apply'):
-            pass
-
-    # Decorator
-    def matvec(self, matrix_impl, vec):
-        raise NotImplementedError()
-
-
 def tuple_replace(tup, idx, value):
     return tup[:idx] + (value,) + tup[idx + 1:]
 
@@ -288,10 +179,6 @@ class MultiplyPairGraph(object):
     more than two matrices. Doing that is a classical example of dynamic
     programming which can use this class in its inner step.
     """
-
-    def __init__(self, conversion_graph):
-        self.conversion_graph = conversion_graph
-        self.multiply_operations = {}
 
     # Implement graph on which to perform shortest-path
     def get_vertices(self, max_node_size=4, kinds=None):
@@ -311,37 +198,43 @@ class MultiplyPairGraph(object):
     def get_edges(self, vertex):
         # Payload: ('multiply'|0|1, func)
         # Where 0, 1 denotes conversion of left or right operand
-        conversions = self.conversion_graph.conversions
+        universe = vertex[0].universe
 
         if len(vertex) > 1:
             # Multiplication actions at this point
-            for target_kind, mul_action_factory in self.multiply_operations.get(
-                vertex, {}).iteritems():
-                yield ((target_kind,), 1, ('multiply', mul_action_factory))
+            muls = universe.get_computations(
+                kind.MultiplyPatternNode(vertex).get_key())
+            for target_kind, computation_list in muls.iteritems():
+                # just take the first one for now
+                yield ((target_kind,), 1, ('multiply', computation_list[0]))
 
         # List possible conversions of one of the elements of the tuple
         # This can happen both before multiplication (len > 1) and after (len == 1)
         for i in range(len(vertex)):
             from_kind = vertex[i]
-            for target_kind, conversion_factory in conversions.get(from_kind, {}).iteritems():
+            convs = universe.get_computations(from_kind.get_key())
+            for target_kind, conversion_list in convs.iteritems():
                 neighbour = tuple_replace(vertex, i, target_kind)
-                yield (neighbour, 1, (i, conversion_factory))
+                # just take the first one for now
+                yield (neighbour, 1, (i, conversion_list[0]))
 
     # Public-facing methods
     def find_cheapest_action(self, children, target_kinds=None):
-        assert all(isinstance(child, actions.Action)
+        assert all(isinstance(child, BaseComputable)
                    for child in children)
         assert len(children) == 2
+        universe = children[0].kind.universe
         
         # First, operate on the kinds of the child actions
-        start_vertex = tuple(x.get_kind() for x in children)
+        start_vertex = tuple(x.kind for x in children)
         if target_kinds is None:
-            target_kinds = self.conversion_graph.all_kinds
+            target_kinds = universe.get_kinds()
         stop_vertices = [(v,) for v in target_kinds]
         try:
             path = find_shortest_path(self.get_edges,
                                       start_vertex, stop_vertices)
         except ValueError:
+            # TODO!
             if target_kinds != self.conversion_graph.all_kinds:
                 postfix = ' to produce one of [%s]' % (
                     ', '.join(str(kind) for kind in target_kinds))
@@ -351,47 +244,32 @@ class MultiplyPairGraph(object):
                 "Found no way of multiplying %r with %r%s" %
                 (start_vertex + (postfix,)))
 
-        node = tuple(children)
-        for edge, action_factory in path:
-            if edge == 'multiply':
-                node = (action_factory(node),)
+        vertex = tuple(children)
+        for action, computation in path:
+            if action == 'multiply':
+                computable = Computable(computation,
+                                        children=vertex,
+                                        nrows=vertex[0].nrows,
+                                        ncols=vertex[-1].ncols,
+                                        dtype=vertex[0].dtype # todo
+                                        )
+                vertex = (computable,)
             else:
-                # edge is an int indicating which element to convert with
-                # the action
-                node = node[:edge] + (action_factory(node[edge]),) + node[edge + 1:]
-        assert len(node) == 1
-        return node[0]
+                # action is an int indicating which element to convert with
+                # the computation
+                idx = action
+                node = vertex[idx]
+                convertable = Computable(computation,
+                                         children=(node,),
+                                         nrows=node.nrows,
+                                         ncols=node.ncols,
+                                         dtype=node.dtype # todo
+                                         )
+                vertex = vertex[:idx] + (convertable,) + vertex[idx + 1:]
+        assert len(vertex) == 1
+        return vertex[0]
 
 
-    # Decorator
-    def multiplication_decorator(self, source_kinds, dest_kind):
-        if not isinstance(source_kinds, tuple) or len(source_kinds) != 2:
-            raise TypeError("source_kinds must be a tuple of length 2")
-        self.conversion_graph.all_kinds.update(source_kinds)
-        self.conversion_graph.all_kinds.add(dest_kind)
-        def dec(func):
-            if not callable(func):
-                raise TypeError("Does not decorate callable")
-            if source_kinds in self.multiply_operations:
-                raise Exception("Already registered multiplication for %s" % (source_kinds,))
-            action_factory = actions.multiplication_action_from_function(func,
-                                                                         source_kinds,
-                                                                         dest_kind)
-            add_to_graph(self.multiply_operations, source_kinds, dest_kind, action_factory)
-            return func
-        return dec
-
-
-# Create default operation graph, and define some decorators
-# as methods bounds on this graph instance
-conversion_graph = ConversionGraph()
-conversion = conversion_graph.conversion_decorator
-
-addition_conversion_graph = AdditionGraph(conversion_graph)
-addition = addition_conversion_graph.addition_decorator
-
-
-multiply_graph = MultiplyPairGraph(conversion_graph)
-multiplication = multiply_graph.multiplication_decorator
-
+addition_graph = AdditionGraph()
+multiplication_graph = MultiplyPairGraph()
 

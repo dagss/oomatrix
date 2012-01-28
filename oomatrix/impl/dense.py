@@ -1,7 +1,8 @@
 import numpy as np
 
-from ..core import conversion, addition, multiplication
+#from ..core import conversion, addition, multiplication
 from ..kind import MatrixImpl
+from ..computation import computation, conversion
 
 def array_conjugate(x):
     if x.dtype.kind == 'c':
@@ -65,14 +66,14 @@ class SymmetricContiguous(MatrixImpl, NumPyWrapper):
 
 for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
     
-    @addition((T, T), RowMajor)
+    @computation(T + T, RowMajor)
     def add(a, b):
         # Ensure result will be C-contiguous with any NumPy
         out = np.zeros(A.shape, order='C')
         np.add(a.array, b.array, out)
         return RowMajor(out)
 
-    @multiplication((T, T), RowMajor)
+    @computation(T * T, RowMajor)
     def multiply(a, b):
         out = np.dot(a.array, b.array)
         if not out.flags.c_contiguous:
@@ -82,7 +83,7 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
     #
     # Then for the conjugate-transpose versions
     #
-    @addition((T.H, T), RowMajor)
+    @computation(T.h + T, RowMajor)
     def add(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):
@@ -92,7 +93,7 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
         np.add(a_arr, b.array, out)
         return RowMajor(out)
 
-    @multiplication((T.H, T), RowMajor)
+    @computation(T.h * T, RowMajor)
     def multiply(a, b):
         a_arr = a.wrapped.array.T
         if issubclass(a_arr.dtype.type, np.complex):
@@ -103,22 +104,3 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
         return RowMajor(out)
 
 
-
-
-## for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
-    
-##     class _(MultiplyOperation):
-##         library = 'numpy'
-        
-##         @staticmethod
-##         def perform(a, b):
-##             pass
-
-##         @staticmethod
-##         def get_nnz(a, b):
-##             return a.row_count * b.column_count
-
-        
-##             def multiply(a, b):
-##         a
-    

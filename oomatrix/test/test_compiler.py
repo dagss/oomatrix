@@ -1,9 +1,9 @@
 from .common import *
 from .. import Matrix, compute, explain, symbolic
 from ..compiler import SimplisticCompiler
-from ..core import (ConversionGraph, AdditionGraph, MultiplyPairGraph,
-                    ImpossibleOperationError)
-from ..kind import MatrixImpl, credits
+
+from ..kind import MatrixImpl
+from ..computation import computation, conversion
 
 def arrayeq_(x, y):
     assert np.all(x == y)
@@ -20,16 +20,7 @@ class MockKind(MatrixImpl):
 
 class MockMatricesUniverse:
     def __init__(self):
-        self.conversion_graph = ConversionGraph()
-        self.conversion = (
-            self.conversion_graph.conversion_decorator)
-        self.add_graph = AdditionGraph(
-            self.conversion_graph)
-        self.multiply_graph = MultiplyPairGraph(
-            self.conversion_graph)
-        self.multiplication = (
-            self.multiply_graph.multiplication_decorator)
-        self.addition = self.add_graph.addition_decorator
+        pass
 
     def define_mul(self, a, b, result):
         def get_kind_and_transpose(x):
