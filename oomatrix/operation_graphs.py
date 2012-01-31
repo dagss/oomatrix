@@ -1,6 +1,15 @@
+"""
+Provides lookup of addition and multiplication operations combined with
+conversion operationsl. Dijkstra's shortest-path is used for this.
+
+One may well be able to get rid of this in the future and replace it with a
+more generic approach...
+"""
+
 
 from .graph.shortest_path import find_shortest_path
 from . import kind
+from .kind import AddPatternNode, MultiplyPatternNode
 from .computation import Computable, BaseComputable
 
 class ImpossibleOperationError(NotImplementedError):
@@ -68,21 +77,25 @@ class AdditionGraph(object):
                 yield frozenset(result)
 
     def get_edges(self, vertex):
+        # vertex is a set of kinds
+        universe = iter(vertex).next().universe
         # First, list all conversions
-        conversions = self.conversion_graph.conversions
         for kind in vertex:
-            for to_kind, conv_func in conversions.get(kind, {}).iteritems():
+            conversions = universe.get_computations(kind.get_key())
+            for to_kind, conversion_list in conversions.iteritems():
+                conversion = conversion_list[0] # just take the first for now
                 cost = 1
                 if to_kind in vertex:
                     # Converting to another kind that is already in vertex,
                     # so take into account addition immediately
-                    second_add_func = self.add_operations[(to_kind, to_kind)][to_kind]
+                    second_add = universe.get_computations(
+                        AddPatternNode([to_kind, to_kind]).get_key())[to_kind][0]
                     cost += 1
                 else:
-                    second_add_func = None
+                    second_add = None
                 new_vertex = vertex.difference([kind]).union([to_kind])
-                yield (new_vertex, cost, ('convert', kind, to_kind, conv_func,
-                                          second_add_func))
+                yield (new_vertex, cost, ('convert', kind, to_kind, conversion,
+                                          second_add))
                     
         # Then, list any cross-kind additions
         a_visited = set()
@@ -91,44 +104,50 @@ class AdditionGraph(object):
             for kind_b in vertex:
                 if kind_b in a_visited:
                     continue
-                if kind_b < kind_a:
-                    kind_ap, kind_bp = kind_b, kind_a
-                else:
-                    kind_ap, kind_bp = kind_a, kind_b
-                add_ops = self.add_operations.get((kind_ap, kind_bp), {})
-                for to_kind, add_func in add_ops.iteritems():
+                add_ops = universe.get_computations(
+                    AddPatternNode([kind_a, kind_b]).get_key())
+                for to_kind, add_list in add_ops.iteritems():
                     cost = 1
-                    if to_kind is not kind_ap and to_kind is not kind_bp and to_kind in vertex:
+                    if to_kind is not kind_a and to_kind is not kind_b and to_kind in vertex:
                         # Result overlaps with another kind, so take into account cost
                         # of subsequent addition
-                        second_add_func = self.add_operations[(to_kind, to_kind)][to_kind]
+                        second_add = universe.get_computations(
+                            AddPatternNode([to_kind, to_kind]).get_key())[to_kind][0]
                         cost += 1
                     else:
-                        second_add_func = None
+                        second_add = None
                     new_vertex = vertex.difference([kind_ap, kind_bp]).union([to_kind])
                     yield (new_vertex, cost,
-                           ('add', kind_ap, kind_bp, to_kind, add_func, second_add_func))
+                           ('add', kind_ap, kind_bp, to_kind, add_func, second_add))
 
     def find_cheapest_action(self, operands, target_kinds=None):
         operand_dict = {}
         # Sort operands by their kind
         for op in operands:
-            operand_dict.setdefault(type(op), []).append(op)
+            operand_dict.setdefault(op.kind, []).append(op)
+
+        universe = iter(operand_dict.keys()).next().universe
 
         # Perform all within-kind additions
         reduced_operand_dict = {}
         for kind, operand_list in operand_dict.iteritems():
             try:
-                add_action_factory = self.add_operations[
-                    (kind, kind)][kind]
-            except KeyError:
+                additions = universe.get_computations(
+                    AddPatternNode([kind, kind]).get_key())
+                # just take the first one
+                addition = additions[kind][0]
+            except (KeyError, IndexError):
                 raise AssertionError(
                     'Within-kind matrix addition not '
                     'defined for %s, this is a bug' % kind)
             
             u, rest = operand_list[0], operand_list[1:]
             for v in rest:
-                u = add_action_factory([u, v])
+                u = Computable(addition,
+                               children=[u, v],
+                               nrows=u.nrows,
+                               ncols=v.ncols,
+                               dtype=u.dtype)
             reduced_operand_dict[kind] = u
         del operand_dict
 
@@ -140,29 +159,45 @@ class AdditionGraph(object):
         # Find shortest path through graph to target_kinds
         start_vertex = frozenset(reduced_operand_dict) # get set of keys
         if target_kinds is None:
-            target_kinds = self.conversion_graph.all_kinds
+            target_kinds = universe.get_kinds()
         stop_vertices = [frozenset((v,)) for v in target_kinds]
         path = find_shortest_path(self.get_edges, start_vertex, stop_vertices)
         # Execute operations found
-        matrices = reduced_operand_dict
+        operands = reduced_operand_dict
         for payload in path:
             edge, args = payload[0], payload[1:]
             if edge == 'add':
-                kind_a, kind_b, to_kind, add_action_factory, second_add_action_factory = args
-                A = matrices.pop(kind_a)
-                B = matrices.pop(kind_b)
-                C = add_action_factory([A, B])
+                kind_a, kind_b, to_kind, addition, second_addition = args
+                A = operands.pop(kind_a)
+                B = operands.pop(kind_b)
+                computable = Computable(addition,
+                                        children=[A, B],
+                                        nrows=A.nrows,
+                                        ncols=A.ncols,
+                                        dtype=A.dtype # todo
+                                        )
             elif edge == 'convert':
-                kind, to_kind, conv_action_factory, second_add_action_factory = args
-                A = matrices.pop(kind)
-                C = conv_action_factory(A)
-            assert (to_kind in matrices) == (second_add_action_factory is not None)
-            if second_add_action_factory is not None:
-                C = second_add_action_factory([C, matrices[to_kind]])
-            matrices[to_kind] = C
+                kind, to_kind, conversion, second_addition = args
+                child = operands.pop(kind)
+                computable = Computable(conversion,
+                                        children=[child],
+                                        nrows=child.nrows,
+                                        ncols=child.ncols,
+                                        dtype=child.dtype # todo
+                                        )
+            assert (to_kind in operands) == (second_addition is not None)
+            if second_addition is not None:
+                computable = Computable(second_addition,
+                                        children=[computable,
+                                                  operands[to_kind]],
+                                        nrows=computable.nrows,
+                                        ncols=computable.ncols,
+                                        dtype=computable.dtype # todo
+                                        )
+            operands[to_kind] = computable
 
-        M, = matrices.values()
-        return M
+        computable, = operands.values()
+        return computable
 
 def tuple_replace(tup, idx, value):
     return tup[:idx] + (value,) + tup[idx + 1:]

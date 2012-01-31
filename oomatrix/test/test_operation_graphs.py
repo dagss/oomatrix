@@ -67,7 +67,7 @@ d = D(4)
 def assert_add(expected, lst, target_kinds=None):
     lst = [ComputableLeaf(x) for x in lst]
     action = addition_graph.find_cheapest_action(lst, target_kinds)
-    got = action.perform()
+    got = action.compute()
     eq_(expected, got)
 
 def assert_mul(expected, lst, target_kinds=None):

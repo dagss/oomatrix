@@ -86,6 +86,7 @@ class MatrixKindUniverse(object):
             return linked
         else:
             # we're left dangling from a previous join; shorten the path
+            # this requires a write lock, but happens very seldomly
             with MatrixKindUniverse.reentrant_write_lock:
                 # _linked NEVER gets set to None except in the ctor; so
                 # we don't need the typical re-check-upon-locking
@@ -148,6 +149,9 @@ class MatrixKindUniverse(object):
         """
         key: A tuple-tree representation
         """
+        if not isinstance(key, (tuple, MatrixKind)):
+            raise TypeError('computation key must be a tuple or MatrixKind '
+                            'provided by get_key')
         root = self._get_root()
         try:
             return root._computations[key]
