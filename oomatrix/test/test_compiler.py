@@ -63,11 +63,12 @@ class MockMatricesUniverse:
                               a.nrows, b.ncols)
             return x
 
-    def define_add(self, a_kind, b_kind, result_kind):
-        @computation(a_kind + b_kind, result_kind)
-        def add(a, b):
-            return result_kind('(%s + %s)' % (a.value, b.value),
-                               a.nrows, a.ncols)
+    def define(self, match, result_kind, reprtemplate):
+        reprtemplate = '(%s)' % reprtemplate
+        @computation(match, result_kind)
+        def comp(*args):
+            return result_kind(reprtemplate % tuple(arg.value for arg in args),
+                               args[0].nrows, args[-1].ncols)
 
     def define_conv(self, from_kind, to_kind):
         @conversion(from_kind, to_kind)
@@ -141,15 +142,20 @@ def test_exhaustive_compiler():
     # Addition
     test('A:(a + a)', a + a)
     assert_impossible(a + b)
-    ctx.define_add(A, B, A)
+    ctx.define(A + B, A, '%s + %s')
     test('A:(a + b)', a + b)
     test('A:(a + b)', b + a) # note how arguments are sorted
     test('A:((a + (a + b)) + b)', b + a + b + a)
 
-
-
-
-
+    # Transposed operands
+    assert_impossible(a.h + a)
+    ctx.define(A.h + A, A, '%s.h + %s')
+    test('A:(a.h + a)', a.h + a)
+    test('A:(a + (a.h + (a + (a.h + a))))', a + a.h + a + a.h + a)
+    test('A:(a.h + (a.h + a))', a.h + a.h + a)
+    ctx.define(B + B.h, B, '%s + %s.h')
+    test('B:(b + b.h)', b.h + b)
+    
 
 
 

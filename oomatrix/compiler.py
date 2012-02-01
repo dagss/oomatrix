@@ -20,6 +20,7 @@ from . import formatter, symbolic, actions
 from .matrix import Matrix
 from .kind import lookup_computations
 from .computation import ImpossibleOperationError
+from pprint import pprint
 
 def powerset(iterable):
     "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
@@ -49,14 +50,6 @@ class ExhaustiveCompilation(object):
     this into something like Dijkstra or A*.
     """
 
-    # Each visitor method simply yields (cnode, ctranspose) for all
-    # possibilities it can find, regardless of target
-    # type. `ctranspose` is True if `cnode` computes the conjugate
-    # transpose of the input.
-    #
-    # cnode: node in a computable-tree
-    # snode: node in a syntactic-tree
-
     def compile(self, snode):
         possible_cnodes = list(self.explore(snode))
         possible_cnodes.sort(key=lambda cnode: cnode.cost)
@@ -66,14 +59,21 @@ class ExhaustiveCompilation(object):
         raise ImpossibleOperationError()
 
     # Visitor implementation
-    def visit_multiply(self, snode):
-        return self.explore_multiplication(snode.children)
+    def visit_multiply(self, node):
+        return self.explore_multiplication(node.children)
 
-    def visit_add(self, snode):
-        return self.explore_addition(snode.children)
+    def visit_add(self, node):
+        return self.explore_addition(node.children)
 
-    def visit_leaf(self, snode):
-        yield snode
+    def visit_leaf(self, node):
+        yield node
+
+    def visit_conjugate_transpose(self, node):
+        # Recurse and process children, and then transpose the result
+        child = node.child
+        processed_node_gen = child.accept_visitor(self, child)
+        processed_node, = processed_node_gen
+        yield symbolic.ConjugateTransposeNode(processed_node)
 
     #
     # Exploration
