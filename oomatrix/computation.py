@@ -70,6 +70,7 @@ class ComputableLeaf(BaseComputable):
         self.nrows = matrix_impl.nrows
         self.ncols = matrix_impl.ncols
         self.dtype = matrix_impl.dtype
+        self.cost = 0
 
     def compute(self):
         return self.matrix_impl
@@ -83,6 +84,7 @@ class Computable(BaseComputable):
         self.nrows = nrows
         self.ncols = ncols
         self.dtype = dtype
+        self.cost = sum(child.cost for child in children) + 1
 
     def compute(self):
         args = [child.compute() for child in self.children]

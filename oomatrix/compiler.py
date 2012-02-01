@@ -1,16 +1,95 @@
+"""
+Compilers take a syntactic-tree (symbolic.py), an abstract description
+of the computation to be done, and turns it into a computable-tree
+(computation.py), which essentially binds together chosen computation
+routines and their arguments.
+"""
+
+
 import sys
 import numpy as np
+from itertools import izip
 
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
 
 from . import formatter, symbolic, actions
 from .matrix import Matrix
-from .operation_graphs import ImpossibleOperationError
+from .operation_graphs import (
+    ImpossibleOperationError,
+    addition_graph,
+    multiplication_graph)
+from .computation import BaseComputable, ComputableLeaf, Computable
+from .kind import lookup_computations
+from .supergenerator import supergenerator, _from
 
+class ExhaustiveCompilation(object):
+    """
+    Compiles an expression by trying all possibilities.
 
+    Currently we just generate *all* in the slowest possible way ever,
+    even without memoization, then take the cheapest. Of course,
+    memoization should be added. Also, it should be possible refactor
+    this into something like Dijkstra or A*.
+    """
 
+    # Each visitor method simply yields (cnode, ctranspose) for all
+    # possibilities it can find, regardless of target
+    # type. `ctranspose` is True if `cnode` computes the conjugate
+    # transpose of the input.
+    #
+    # cnode: node in a computable-tree
+    # snode: node in a syntactic-tree
 
+    def compile(self, snode):
+        possible_cnodes = list(self.explore(snode))
+        possible_cnodes.sort(key=lambda cnode: cnode.cost)
+        for cnode in possible_cnodes:
+            #if cnode.kind in target_kinds:
+            return cnode
+
+    def explore(self, snode):
+        return snode.accept_visitor(self, snode)
+
+    @supergenerator
+    def explore_multiplication(self, operands):
+        # TODO: Currently only explore pair-wise multiplication, will never
+        # invoke A * B * C handlers and the like
+        if len(operands) == 1:
+            yield _from(self.explore(operands[0]))
+        else:
+            for split_idx in range(1, len(operands)):
+                yield _from(self.explore_multiplication_split(operands,
+                                                              split_idx))
+                
+    @supergenerator
+    def explore_multiplication_split(self, operands, idx):
+        left_computables = self.explore_multiplication(operands[:idx])
+        right_computables = self.explore_multiplication(operands[idx:])
+        right_computables = list(right_computables) # will reuse many times
+        for left in left_computables:
+            for right in right_computables:
+                yield _from(self.explore_pair_multiplication(left, right))
+
+    @supergenerator
+    def explore_pair_multiplication(self, left, right):
+        computations_by_kind = lookup_computations(left.kind * right.kind)
+        for computations in computations_by_kind.values():
+            for computation in computations:
+                computable = Computable(computation, [left, right],
+                                        left.nrows, right.ncols,
+                                        left.dtype # todo
+                                        )
+                yield computable
+
+    # Visitor implementation
+    def visit_multiply(self, snode):
+        return self.explore_multiplication(snode.children)
+
+    def visit_leaf(self, snode):
+        yield ComputableLeaf(snode.matrix_impl)
+
+    
 
 
 def is_right_vector(expr):
@@ -26,10 +105,10 @@ class SimplisticCompilation(object):
     def compile(self, symbolic_node, target_kinds=None):
         assert isinstance(symbolic_node, symbolic.ExpressionNode), (
             '%r is not symbolic node' % symbolic_node)
-        action_node = symbolic_node.accept_visitor(
+        computable = symbolic_node.accept_visitor(
             self, symbolic_node, target_kinds=target_kinds)
-        assert isinstance(action_node, actions.Action)
-        return action_node
+        assert isinstance(computable, BaseComputable)
+        return computable
 
     def visit_add(self, expr, target_kinds):
         # Simply use self.add_graph; which deals with any number
@@ -53,16 +132,8 @@ class SimplisticCompilation(object):
 
     def multiply_pair(self, left, right, target_kinds):
         # Perform multiplications
-        try:
-            node = self.multiply_graph.find_cheapest_action(
-                (left, right), target_kinds=target_kinds)
-        except ImpossibleOperationError, e:
-            # Try the transpose product
-            left = actions.conjugate_transpose_action(left)
-            right = actions.conjugate_transpose_action(right)
-            node = self.multiply_graph.find_cheapest_action(
-                (right, left))
-            node = actions.conjugate_transpose_action(node)
+        node = multiplication_graph.find_cheapest_action(
+            (left, right), target_kinds=target_kinds)
         return node
 
     def visit_multiply(self, expr, target_kinds):
@@ -104,7 +175,7 @@ class SimplisticCompilation(object):
     def visit_leaf(self, expr, target_kinds):
         if target_kinds is not None:
             raise NotImplementedError()
-        return actions.LeafAction(expr.matrix_impl)
+        return ComputableLeaf(expr.matrix_impl)
             
     def visit_inverse(self, expr, target_kinds):
         raise NotImplementedError()
@@ -119,7 +190,7 @@ class SimplisticCompilation(object):
         return self.compile(expr.child, target_kinds=expr.kinds)
 
 
-class SimplisticCompiler(object):
+class BaseCompiler(object):
     """
     Compiles an expression using some simple syntax-level rules.
     First, we treat all matrices with one 1-length dimension as
@@ -163,8 +234,18 @@ class SimplisticCompiler(object):
     """
 
     def compile(self, matrix):
-        operation_root = SimplisticCompilation().compile(matrix._expr)
+        operation_root = self.compilation_factory().compile(matrix._expr)
         return operation_root
 
     def compute(self, matrix):
-        return Matrix(self.compile(matrix).perform())
+        return Matrix(self.compile(matrix).compute())
+
+class SimplisticCompiler(BaseCompiler):
+    compilation_factory = SimplisticCompilation
+
+class ExhaustiveCompiler(BaseCompiler):
+    compilation_factory = ExhaustiveCompilation
+
+    def compile(self, matrix):
+        operation_root = self.compilation_factory().compile(matrix._expr)
+        return operation_root

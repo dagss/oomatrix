@@ -147,7 +147,7 @@ class MatrixKindUniverse(object):
 
     def get_computations(self, key):
         """
-        key: A tuple-tree representation
+        key: A tuple-representation of a kind match pattern (see get_key)
         """
         if not isinstance(key, (tuple, MatrixKind)):
             raise TypeError('computation key must be a tuple or MatrixKind '
@@ -161,6 +161,13 @@ class MatrixKindUniverse(object):
     def get_kinds(self):
         # make a copy to be safe for now
         return set(self._get_root()._kinds)
+
+
+def lookup_computations(match_pattern):
+    if not isinstance(match_pattern, PatternNode):
+        raise TypeError()
+    key = match_pattern.get_key()
+    return match_pattern.universe.get_computations(key)
 
 #
 # Core classes
