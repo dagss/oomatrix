@@ -78,22 +78,39 @@ def test_exhaustive_compiler():
     compiler = ExhaustiveCompiler()
     def test(expected, M, target_kind=None):
         eq_(expected, repr(compiler.compute(M)._expr.matrix_impl))
+    def assert_impossible(M):
+        with assert_raises(ImpossibleOperationError):
+            compiler.compute(M)
 
     A, a, au, auh = ctx.new_matrix('A')
     B, b, bu, buh = ctx.new_matrix('B')
     C, c, cu, cuh = ctx.new_matrix('C')
 
-    # Straight multiplication
+    # Disallowed multiplication
+    assert_impossible(a * b)
+
+    # Straight pair multiplication
     ctx.define_mul(A, B, B)
     test('<B:(a * b)>', a * b)
 
+    # Multiple operands
+    ctx.define_mul(A, A, A)
+    test('<B:(a * (a * (a * (a * b))))>', a * a * a * a * b)
+
     # Multiplication with conversion
-    with assert_raises(ImpossibleOperationError):
-        test('', a * c)
+    assert_impossible(a * c)
     ctx.define_conv(A, B)
     ctx.define_mul(B, C, C)
     test('<C:(B(a) * c)>', a * c)
+    # ...and make sure there's no infinite loops of conversions
+    ctx.define_conv(B, C)
+    ctx.define_conv(C, A)
+    test('<C:(B(a) * c)>', a * c)
+    ctx.define_conv(B, A)
+    test('<C:(B(a) * c)>', a * c)
+    test('<A:(a * a)>', a * a)
 
+    
     
 
 

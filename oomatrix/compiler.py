@@ -48,24 +48,49 @@ class ExhaustiveCompilation(object):
             return cnode
         raise ImpossibleOperationError()
 
+    # Visitor implementation
+    def visit_multiply(self, snode):
+        return self.explore_multiplication(snode.children)
+
+    def visit_add(self, snode):
+        return self.explore_addition(snode.children)
+
+    def visit_leaf(self, snode):
+        yield ComputableLeaf(snode.matrix_impl)
+
+    #
     # Exploration
+    # 
+    # Naming convention: Methods that start with explore_ takes symbolic
+    # node arguments (possibly as lists), while methods that start with
+    # generate_ takes computables
+    #
 
     def explore(self, snode):
         return snode.accept_visitor(self, snode)
 
-    def explore_conversions(self, computable, avoid_kinds):
+    def generate_computations(self, match_pattern, children, avoid_kinds=(),
+                              only_kinds=None):
+        nrows = children[0].nrows
+        ncols = children[0].ncols
+        dtype = children[0].dtype # todo
+        # Generates all computables possible for the match_pattern
+        computations_by_kind = lookup_computations(match_pattern)
+        for target_kind, computations in computations_by_kind.iteritems():
+            if target_kind in avoid_kinds:
+                continue
+            if only_kinds is not None and target_kind not in only_kinds:
+                continue
+            for computation in computations:
+                yield Computable(computation, children, nrows, ncols, dtype)
+
+    def generate_conversions(self, computable, avoid_kinds):
         # Find all possible conversion computables that can be put on top
         # of the computable. Always pass a set of kinds already tried, to
         # avoid infinite loops
-        conversions_by_kind = lookup_computations(computable.kind)
-        for target_kind, conversions in conversions_by_kind.iteritems():
-            if target_kind in avoid_kinds:
-                continue
-            for conversion in conversions:
-                yield Computable(conversion, [computable],
-                                 computable.nrows, computable.ncols,
-                                 computable.dtype #todo
-                                 )
+        for x in self.generate_computations(computable.kind, [computable],
+                                            avoid_kinds=avoid_kinds):
+            yield x
 
     def explore_multiplication(self, operands):
         # TODO: Currently only explore pair-wise multiplication, will never
@@ -84,44 +109,36 @@ class ExhaustiveCompilation(object):
         right_computables = list(right_computables) # will reuse many times
         for left in left_computables:
             for right in right_computables:
-                for x in self.explore_pair_multiplication(left, [left.kind],
-                                                          right, [right.kind]):
+                for x in self.generate_pair_multiplications(
+                        left, [left.kind], right, [right.kind]):
                     yield x
 
-    def explore_pair_multiplication(self,
-                                    left, left_kinds_tried,
-                                    right, right_kinds_tried):
+    def generate_pair_multiplications(self,
+                                      left, left_kinds_tried,
+                                      right, right_kinds_tried):
         assert isinstance(left, BaseComputable)
         assert isinstance(right, BaseComputable)
         # Look up any direct computations
-        computations_by_kind = lookup_computations(left.kind * right.kind)
-        for computations in computations_by_kind.values():
-            for computation in computations:
-                computable = Computable(computation, [left, right],
-                                        left.nrows, right.ncols,
-                                        left.dtype # todo
-                                        )
-                yield computable
+        for x in self.generate_computations(left.kind * right.kind,
+                                            [left, right]):
+            yield x
         # Do all conversions of left operand
-        for new_left in self.explore_conversions(left, left_kinds_tried):
-            for x in self.explore_pair_multiplication(
+        for new_left in self.generate_conversions(left, left_kinds_tried):
+            for x in self.generate_pair_multiplications(
                     new_left, left_kinds_tried + [new_left.kind],
                     right, right_kinds_tried):
                 yield x
         # Do all conversions of right operand
-        for new_right in self.explore_conversions(right, right_kinds_tried):
-            for x in self.explore_pair_multiplication(
+        for new_right in self.generate_conversions(right, right_kinds_tried):
+            for x in self.generate_pair_multiplications(
                     left, left_kinds_tried,
                     new_right, right_kinds_tried + [new_right.kind]):
                 yield x
 
-    # Visitor implementation
-    def visit_multiply(self, snode):
-        return self.explore_multiplication(snode.children)
-
-    def visit_leaf(self, snode):
-        yield ComputableLeaf(snode.matrix_impl)
-
+#    def explore_addition(self, operands):
+#        direct_computations = lookup_computations(sum(operand.kind
+#                                                      for operand in operands))
+        
     
 
 
