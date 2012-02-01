@@ -8,7 +8,7 @@ routines and their arguments.
 
 import sys
 import numpy as np
-from itertools import izip
+from itertools import izip, chain, combinations, permutations
 
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
@@ -21,6 +21,24 @@ from .operation_graphs import (
     multiplication_graph)
 from .computation import BaseComputable, ComputableLeaf, Computable
 from .kind import lookup_computations
+
+def powerset(iterable):
+    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+
+def set_of_pairwise_nonempty_splits(iterable):
+    # TODO: Should eliminate subset vs. complement duplicates
+    pool = tuple(iterable)
+    n = len(pool)
+    for r in range(1, n):
+        for indices in permutations(range(n), r):
+            if sorted(indices) == list(indices):
+                subset = tuple(pool[i] for i in indices)
+                complement = tuple(pool[i] for i in range(n) if i not in indices)
+                yield subset, complement
+            
+
 
 class ExhaustiveCompilation(object):
     """
@@ -69,8 +87,8 @@ class ExhaustiveCompilation(object):
     def explore(self, snode):
         return snode.accept_visitor(self, snode)
 
-    def generate_computations(self, match_pattern, children, avoid_kinds=(),
-                              only_kinds=None):
+    def all_computations(self, match_pattern, children, avoid_kinds=(),
+                         only_kinds=None):
         nrows = children[0].nrows
         ncols = children[0].ncols
         dtype = children[0].dtype # todo
@@ -88,8 +106,8 @@ class ExhaustiveCompilation(object):
         # Find all possible conversion computables that can be put on top
         # of the computable. Always pass a set of kinds already tried, to
         # avoid infinite loops
-        for x in self.generate_computations(computable.kind, [computable],
-                                            avoid_kinds=avoid_kinds):
+        for x in self.all_computations(computable.kind, [computable],
+                                       avoid_kinds=avoid_kinds):
             yield x
 
     def explore_multiplication(self, operands):
@@ -98,10 +116,10 @@ class ExhaustiveCompilation(object):
         if len(operands) == 1:
             for x in self.explore(operands[0]):
                 yield x
-        else:
-            for split_idx in range(1, len(operands)):
-                for x in self.explore_multiplication_split(operands, split_idx):
-                    yield x
+
+        for split_idx in range(1, len(operands)):
+            for x in self.explore_multiplication_split(operands, split_idx):
+                yield x
                 
     def explore_multiplication_split(self, operands, idx):
         left_computables = self.explore_multiplication(operands[:idx])
@@ -119,8 +137,8 @@ class ExhaustiveCompilation(object):
         assert isinstance(left, BaseComputable)
         assert isinstance(right, BaseComputable)
         # Look up any direct computations
-        for x in self.generate_computations(left.kind * right.kind,
-                                            [left, right]):
+        for x in self.all_computations(left.kind * right.kind,
+                                       [left, right]):
             yield x
         # Do all conversions of left operand
         for new_left in self.generate_conversions(left, left_kinds_tried):
@@ -135,11 +153,36 @@ class ExhaustiveCompilation(object):
                     new_right, right_kinds_tried + [new_right.kind]):
                 yield x
 
-#    def explore_addition(self, operands):
-#        direct_computations = lookup_computations(sum(operand.kind
-#                                                      for operand in operands))
+    def explore_addition(self, operands):
+        # TODO: Currently only explores nargs =2-computations
+        if len(operands) == 1:
+            for x in self.explore(operands[0]):
+                yield x
+
+        # Try for an exact match (an addition computation that takes
+        # len(operands) arguments)
+        #for x in self.generate_additions(operands):
+        #    yield x
+
+        # Split into subsets and try again
+        gen = set_of_pairwise_nonempty_splits(operands)
+        for left_operands, right_operands in gen:
+            # TODO: This is where we want to recursively split the complement,
+            # and check for nargs>2-computations as well
+            left_computations = self.explore_addition(left_operands)
+            right_computations = self.explore_addition(right_operands)
+            right_computations = list(right_computations) # need more than once
+            for left in left_computations:
+                for right in right_computations:
+                    for x in self.generate_additions([left, right]):
+                        yield x
+            
+    def generate_additions(self, operands):
+        pattern = sum((operand.kind for operand in operands[1:]),
+                      operands[0].kind)
+        for x in self.all_computations(pattern, operands):
+            yield x
         
-    
 
 
 def is_right_vector(expr):
