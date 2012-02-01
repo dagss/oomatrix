@@ -269,8 +269,7 @@ class MultiplyPairGraph(object):
             path = find_shortest_path(self.get_edges,
                                       start_vertex, stop_vertices)
         except ValueError:
-            # TODO!
-            if target_kinds != self.conversion_graph.all_kinds:
+            if target_kinds != universe.get_kinds():
                 postfix = ' to produce one of [%s]' % (
                     ', '.join(str(kind) for kind in target_kinds))
             else:
