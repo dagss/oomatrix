@@ -1,4 +1,7 @@
 import types
+
+class ImpossibleOperationError(NotImplementedError):
+    pass
    
 
 def register_computation(match, target_kind, obj):
@@ -59,35 +62,5 @@ def conversion(arg1, arg2=None):
     else:
         return computation(arg1, arg2)
         
-
-class BaseComputable(object):
-    pass
-
-class ComputableLeaf(BaseComputable):
-    def __init__(self, matrix_impl):
-        self.matrix_impl = matrix_impl
-        self.kind = type(matrix_impl)
-        self.nrows = matrix_impl.nrows
-        self.ncols = matrix_impl.ncols
-        self.dtype = matrix_impl.dtype
-        self.cost = 0
-
-    def compute(self):
-        return self.matrix_impl
-
-class Computable(BaseComputable):
-    def __init__(self, computation, children,
-                 nrows, ncols, dtype):
-        self.computation = computation
-        self.children = children
-        self.kind = computation.target_kind
-        self.nrows = nrows
-        self.ncols = ncols
-        self.dtype = dtype
-        self.cost = sum(child.cost for child in children) + 1
-
-    def compute(self):
-        args = [child.compute() for child in self.children]
-        return self.computation.compute(*args)
 
         

@@ -1,8 +1,11 @@
 """
-Compilers take a syntactic-tree (symbolic.py), an abstract description
-of the computation to be done, and turns it into a computable-tree
-(computation.py), which essentially binds together chosen computation
-routines and their arguments.
+Compilers take a tree consisting of only symbolic operations (arithmetic
+etc.) and LeafNode's, and turns it into a tree consisting only of
+ComputableNode and LeafNode, which described the
+
+While searching for computation routines, the tree (fragments) in use
+are hybrids of sorts, treating any BaseComputable as leaf nodes and stringing
+them together with arithmetic operations to query for computation routines.
 """
 
 
@@ -15,12 +18,8 @@ from itertools import izip, chain, combinations, permutations
 
 from . import formatter, symbolic, actions
 from .matrix import Matrix
-from .operation_graphs import (
-    ImpossibleOperationError,
-    addition_graph,
-    multiplication_graph)
-from .computation import BaseComputable, ComputableLeaf, Computable
 from .kind import lookup_computations
+from .computation import ImpossibleOperationError
 
 def powerset(iterable):
     "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
@@ -74,7 +73,7 @@ class ExhaustiveCompilation(object):
         return self.explore_addition(snode.children)
 
     def visit_leaf(self, snode):
-        yield ComputableLeaf(snode.matrix_impl)
+        yield snode
 
     #
     # Exploration
@@ -87,27 +86,29 @@ class ExhaustiveCompilation(object):
     def explore(self, snode):
         return snode.accept_visitor(self, snode)
 
-    def all_computations(self, match_pattern, children, avoid_kinds=(),
-                         only_kinds=None):
-        nrows = children[0].nrows
-        ncols = children[0].ncols
-        dtype = children[0].dtype # todo
+    def all_computations(self, expr, avoid_kinds=(), only_kinds=None):
+        nrows = expr.nrows
+        ncols = expr.ncols
+        dtype = expr.dtype # todo
         # Generates all computables possible for the match_pattern
-        computations_by_kind = lookup_computations(match_pattern)
+        key = expr.get_key()
+        computations_by_kind = expr.universe.get_computations(key)
         for target_kind, computations in computations_by_kind.iteritems():
             if target_kind in avoid_kinds:
                 continue
             if only_kinds is not None and target_kind not in only_kinds:
                 continue
             for computation in computations:
-                yield Computable(computation, children, nrows, ncols, dtype)
+                matched_key = computation.match
+                args = expr.as_computable_list(matched_key)
+                yield symbolic.ComputableNode(computation, args, nrows,
+                                              ncols, dtype)
 
     def generate_conversions(self, computable, avoid_kinds):
         # Find all possible conversion computables that can be put on top
         # of the computable. Always pass a set of kinds already tried, to
         # avoid infinite loops
-        for x in self.all_computations(computable.kind, [computable],
-                                       avoid_kinds=avoid_kinds):
+        for x in self.all_computations(computable, avoid_kinds=avoid_kinds):
             yield x
 
     def explore_multiplication(self, operands):
@@ -134,11 +135,11 @@ class ExhaustiveCompilation(object):
     def generate_pair_multiplications(self,
                                       left, left_kinds_tried,
                                       right, right_kinds_tried):
-        assert isinstance(left, BaseComputable)
-        assert isinstance(right, BaseComputable)
+        assert isinstance(left, symbolic.BaseComputable)
+        assert isinstance(right, symbolic.BaseComputable)
         # Look up any direct computations
-        for x in self.all_computations(left.kind * right.kind,
-                                       [left, right]):
+        expr = symbolic.MultiplyNode([left, right])
+        for x in self.all_computations(expr):
             yield x
         # Do all conversions of left operand
         for new_left in self.generate_conversions(left, left_kinds_tried):
@@ -159,12 +160,7 @@ class ExhaustiveCompilation(object):
             for x in self.explore(operands[0]):
                 yield x
 
-        # Try for an exact match (an addition computation that takes
-        # len(operands) arguments)
-        #for x in self.generate_additions(operands):
-        #    yield x
-
-        # Split into subsets and try again
+        # Split into all possible pairs
         gen = set_of_pairwise_nonempty_splits(operands)
         for left_operands, right_operands in gen:
             # TODO: This is where we want to recursively split the complement,
@@ -178,9 +174,8 @@ class ExhaustiveCompilation(object):
                         yield x
             
     def generate_additions(self, operands):
-        pattern = sum((operand.kind for operand in operands[1:]),
-                      operands[0].kind)
-        for x in self.all_computations(pattern, operands):
+        expr = symbolic.AddNode(operands)
+        for x in self.all_computations(expr):
             yield x
         
 

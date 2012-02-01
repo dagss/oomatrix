@@ -42,52 +42,13 @@ class ExpressionNode(object):
     def get_sorted_children(self):
         return self.children
 
-    def as_argument_list(self, pattern):
+    def as_computable_list(self, pattern):
         """Converts tree to an argument list matching `pattern` (a
         tree from kind.py)
         """
         raise NotImplementedError('please override')
 
 
-
-class LeafNode(ExpressionNode):
-    children = ()
-    
-    def __init__(self, name, matrix_impl):
-        from .kind import MatrixImpl
-        if not isinstance(matrix_impl, MatrixImpl):
-            raise TypeError('not isinstance(matrix_impl, MatrixImpl)')
-        self.name = name
-        self.matrix_impl = matrix_impl
-        self.nrows, self.ncols = matrix_impl.nrows, matrix_impl.ncols
-        self.dtype = matrix_impl.dtype
-
-    def get_type(self):
-        return type(self.matrix_impl)
-
-    def accept_visitor(self, visitor, *args, **kw):
-        return visitor.visit_leaf(*args, **kw)
-
-    def get_key(self):
-        return type(self.matrix_impl)
-
-    def as_argument_list(self, pattern):
-        if pattern != type(self.matrix_impl):
-            raise PatternMismatchError()
-        return [self.matrix_impl]
-
-class ComputableNode(ExpressionNode):
-    def __init__(self, kind, nrows, ncols, dtype, computable):
-        self.kind = kind
-        self.nrows = nrows
-        self.ncols = ncols
-        self.dtype = dtype
-        self.computable = computable
-
-    def as_argument_list(self, pattern):
-        if pattern != self.kind:
-            raise PatternMismatchError()
-        return [self.computable]
 
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):
@@ -105,6 +66,8 @@ class ArithmeticNode(ExpressionNode):
         self.nrows= self.children[0].nrows
         self.ncols = self.children[-1].ncols
         self.dtype = self.children[0].dtype # TODO combine better
+        self.universe = self.children[0].universe
+        self.cost = sum(child.cost for child in self.children)
         self._child_sort()
 
     def _child_sort(self):
@@ -135,7 +98,7 @@ class AddNode(ArithmeticNode):
         return AddNode([MultiplyNode([other, term])
                         for term in self.children])
 
-    def as_argument_list(self, pattern):
+    def as_computable_list(self, pattern):
         if not isinstance(pattern, kind.AddPatternNode):
             raise PatternMismatchError()
         if len(self.sorted_children) != len(pattern.sorted_children):
@@ -145,7 +108,7 @@ class AddNode(ArithmeticNode):
         # to figure out how the function wants to be called and how our
         # own arguments match
         sorted_to_pattern = invert_permutation(pattern.child_permutation)
-        arguments_in_sorted_order = [child.as_argument_list(pattern_child)
+        arguments_in_sorted_order = [child.as_computable_list(pattern_child)
                                      for child, pattern_child in zip(
                                          self.sorted_children,
                                          pattern.sorted_children)]
@@ -159,14 +122,14 @@ class MultiplyNode(ArithmeticNode):
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_multiply(*args, **kw)
 
-    def as_argument_list(self, pattern):
+    def as_computable_list(self, pattern):
         if not isinstance(pattern, kind.MultiplyPatternNode):
             raise PatternMismatchError()
         if len(self.children) != len(pattern.children):
             raise PatternMismatchError()
         result = []
         for expr_child, pattern_child in zip(self.children, pattern.children):
-            result.extend(expr_child.as_argument_list(pattern_child))
+            result.extend(expr_child.as_computable_list(pattern_child))
         return result
 
 class SingleChildNode(ExpressionNode):
@@ -199,7 +162,9 @@ class ConjugateTransposeNode(SingleChildNode):
         self.child = child
         self.children = [child]
         self.ncols, self.nrows = child.nrows, child.ncols
+        self.universe = child.universe
         self.dtype = child.dtype
+        self.cost = child.cost
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_conjugate_transpose(*args, **kw)
@@ -227,10 +192,10 @@ class ConjugateTransposeNode(SingleChildNode):
     def conjugate_transpose(self):
         return self.child
 
-    def as_argument_list(self, pattern):
+    def as_computable_list(self, pattern):
         if not isinstance(pattern, kind.ConjugateTransposePatternNode):
             raise PatternMismatchError()
-        return self.child.as_argument_list(pattern.child)
+        return self.child.as_computable_list(pattern.child)
 
 class InverseNode(SingleChildNode):
     symbol = 'i'
@@ -256,15 +221,17 @@ class InverseNode(SingleChildNode):
         self.child = child
         self.children = [child]
         self.nrows, self.ncols = child.nrows, child.ncols
+        self.universe = child.universe
         self.dtype = child.dtype
+        self.cost = child.cost
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_inverse(*args, **kw)
 
-    def as_argument_list(self, pattern):
+    def as_computable_list(self, pattern):
         if not isinstance(pattern, kind.InversePatternNode):
             raise PatternMismatchError()
-        return self.child.as_argument_list(pattern.child)
+        return self.child.as_computable_list(pattern.child)
 
 
 
@@ -276,7 +243,9 @@ class BracketNode(ExpressionNode):
         self.children = [child]
         self.kinds = kinds
         self.nrows, self.ncols = child.nrows, child.ncols
+        self.universe = child.universe
         self.dtype = child.dtype
+        self.cost = child.cost
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_bracket(*args, **kw)
@@ -284,8 +253,70 @@ class BracketNode(ExpressionNode):
     def call_func(self, func, pattern):
         raise NotImplementedError()
 
+
+
+
+class BaseComputable(object):
+    children = ()
+
+    def get_key(self):
+        return self.kind
+
+    def as_computable_list(self, pattern):
+        if pattern != self.kind:
+            raise PatternMismatchError()
+        return [self]
+
+class LeafNode(BaseComputable):
+    cost = 0
+    
+    def __init__(self, name, matrix_impl):
+        from .kind import MatrixImpl
+        if not isinstance(matrix_impl, MatrixImpl):
+            raise TypeError('not isinstance(matrix_impl, MatrixImpl)')
+        self.name = name
+        self.matrix_impl = matrix_impl
+        self.kind = type(matrix_impl)
+        self.universe = self.kind.universe
+        self.nrows = matrix_impl.nrows
+        self.ncols = matrix_impl.ncols
+        self.dtype = matrix_impl.dtype
+        self.cost = 0
+
+    def compute(self):
+        return self.matrix_impl
+
+    def get_type(self):
+        return type(self.matrix_impl)
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_leaf(*args, **kw)
+
+    def get_key(self):
+        return type(self.matrix_impl)
+
+class ComputableNode(BaseComputable):
+    def __init__(self, computation, children,
+                 nrows, ncols, dtype):
+        self.computation = computation
+        self.children = children
+        self.kind = computation.target_kind
+        self.universe = self.kind.universe
+        self.nrows = nrows
+        self.ncols = ncols
+        self.dtype = dtype
+        self.cost = sum(child.cost for child in children) + 1
+
+    def compute(self):
+        args = [child.compute() for child in self.children]
+        return self.computation.compute(*args)
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_computable(*args, **kw)
+
+
 for x, val in [
-    (LeafNode, 1000),
+    (BaseComputable, 1000),
     (BracketNode, 1000),
     (InverseNode, 40),
     (ConjugateTransposeNode, 40),

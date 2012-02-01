@@ -12,9 +12,6 @@ from . import kind
 from .kind import AddPatternNode, MultiplyPatternNode
 from .computation import Computable, BaseComputable
 
-class ImpossibleOperationError(NotImplementedError):
-    pass
-
 
 #
 # Operation graphs

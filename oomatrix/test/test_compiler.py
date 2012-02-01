@@ -2,8 +2,7 @@ from .common import *
 from .. import Matrix, compute, explain, symbolic
 
 from ..kind import MatrixImpl, MatrixKind, ConjugateTransposePatternNode
-from ..computation import computation, conversion
-from ..operation_graphs import ImpossibleOperationError
+from ..computation import computation, conversion, ImpossibleOperationError
 
 from ..compiler import *
 
@@ -145,6 +144,7 @@ def test_exhaustive_compiler():
     ctx.define_add(A, B, A)
     test('A:(a + b)', a + b)
     test('A:(a + b)', b + a) # note how arguments are sorted
+    test('A:((a + (a + b)) + b)', b + a + b + a)
 
 
 
