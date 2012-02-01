@@ -263,30 +263,6 @@ class MatrixKind(type, PatternNode):
     def get_key(cls):
         return cls
  
-    @property
-    def H(cls):
-        # TODO: deprecate in favor of pattern-matching/lowercase .h
-        """
-        A property for creating a new MatrixKind (a new class),
-        representing the conjugate transpose.
-        """
-        result = getattr(cls, 'conjugate_transpose_class', None)
-        if result is not None:
-            return result
-        if cls not in MatrixKind._transpose_classes:
-            class NewClass(MatrixImpl):
-                name = 'conjugate transpose %s' % cls.name
-                def __init__(self, wrapped):
-                    self.wrapped = wrapped
-                    self.nrows, self.ncols = wrapped.ncols, wrapped.nrows
-                def conjugate_transpose(self):
-                    return self.wrapped 
-                def get_element(self, i, j):
-                    return self.wrapped.get_element(j, i) # TODO conj
-            NewClass.__name__ = 'ConjugateTranspose%s' % cls.__name__
-            MatrixKind._transpose_classes[cls] = NewClass
-        return MatrixKind._transpose_classes[cls]
-
 class MatrixImpl(object):
     __metaclass__ = MatrixKind
     
