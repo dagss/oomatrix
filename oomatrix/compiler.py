@@ -21,7 +21,6 @@ from .operation_graphs import (
     multiplication_graph)
 from .computation import BaseComputable, ComputableLeaf, Computable
 from .kind import lookup_computations
-from .supergenerator import supergenerator, _from
 
 class ExhaustiveCompilation(object):
     """
@@ -47,32 +46,54 @@ class ExhaustiveCompilation(object):
         for cnode in possible_cnodes:
             #if cnode.kind in target_kinds:
             return cnode
+        raise ImpossibleOperationError()
+
+    # Exploration
 
     def explore(self, snode):
         return snode.accept_visitor(self, snode)
 
-    @supergenerator
+    def explore_conversions(self, computable, avoid_kinds):
+        # Find all possible conversion computables that can be put on top
+        # of the computable. Always pass a set of kinds already tried, to
+        # avoid infinite loops
+        conversions_by_kind = lookup_computations(computable.kind)
+        for target_kind, conversions in conversions_by_kind.iteritems():
+            if target_kind in avoid_kinds:
+                continue
+            for conversion in conversions:
+                yield Computable(conversion, [computable],
+                                 computable.nrows, computable.ncols,
+                                 computable.dtype #todo
+                                 )
+
     def explore_multiplication(self, operands):
         # TODO: Currently only explore pair-wise multiplication, will never
         # invoke A * B * C handlers and the like
         if len(operands) == 1:
-            yield _from(self.explore(operands[0]))
+            for x in self.explore(operands[0]):
+                yield x
         else:
             for split_idx in range(1, len(operands)):
-                yield _from(self.explore_multiplication_split(operands,
-                                                              split_idx))
+                for x in self.explore_multiplication_split(operands, split_idx):
+                    yield x
                 
-    @supergenerator
     def explore_multiplication_split(self, operands, idx):
         left_computables = self.explore_multiplication(operands[:idx])
         right_computables = self.explore_multiplication(operands[idx:])
         right_computables = list(right_computables) # will reuse many times
         for left in left_computables:
             for right in right_computables:
-                yield _from(self.explore_pair_multiplication(left, right))
+                for x in self.explore_pair_multiplication(left, [left.kind],
+                                                          right, [right.kind]):
+                    yield x
 
-    @supergenerator
-    def explore_pair_multiplication(self, left, right):
+    def explore_pair_multiplication(self,
+                                    left, left_kinds_tried,
+                                    right, right_kinds_tried):
+        assert isinstance(left, BaseComputable)
+        assert isinstance(right, BaseComputable)
+        # Look up any direct computations
         computations_by_kind = lookup_computations(left.kind * right.kind)
         for computations in computations_by_kind.values():
             for computation in computations:
@@ -81,6 +102,18 @@ class ExhaustiveCompilation(object):
                                         left.dtype # todo
                                         )
                 yield computable
+        # Do all conversions of left operand
+        for new_left in self.explore_conversions(left, left_kinds_tried):
+            for x in self.explore_pair_multiplication(
+                    new_left, left_kinds_tried + [new_left.kind],
+                    right, right_kinds_tried):
+                yield x
+        # Do all conversions of right operand
+        for new_right in self.explore_conversions(right, right_kinds_tried):
+            for x in self.explore_pair_multiplication(
+                    left, left_kinds_tried,
+                    new_right, right_kinds_tried + [new_right.kind]):
+                yield x
 
     # Visitor implementation
     def visit_multiply(self, snode):

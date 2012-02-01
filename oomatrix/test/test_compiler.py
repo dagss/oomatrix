@@ -41,20 +41,11 @@ class MockMatricesUniverse:
                               a.nrows, b.ncols)
             return x
 
-    def define_conv(self, a, result):
-        def get_kind_and_transpose(x):
-            if isinstance(x._expr, symbolic.LeafNode):
-                return x.get_type(), ''
-            elif isinstance(x._expr, symbolic.ConjugateTransposeNode):
-                return type(x._expr.child.matrix_impl).H, '.h'
-
-        a_kind, ah = get_kind_and_transpose(a)
-        result_kind, rh = get_kind_and_transpose(result)
-        @conversion(a_kind, result_kind)
+    def define_conv(self, from_kind, to_kind):
+        @conversion(from_kind, to_kind)
         def conv(a):
-            return result_kind('%s%s%s' %
-                               (result_kind.name, a.value, ah),
-                               a.nrows, a.ncols)
+            return to_kind('%s(%s)' % (to_kind.name, a.value),
+                           a.nrows, a.ncols)
 
     def new_matrix(self, name_,
                    right=(), right_h=(), add=(),
@@ -90,15 +81,20 @@ def test_exhaustive_compiler():
 
     A, a, au, auh = ctx.new_matrix('A')
     B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
 
     # Straight multiplication
     ctx.define_mul(A, B, B)
     test('<B:(a * b)>', a * b)
 
     # Multiplication with conversion
+    with assert_raises(ImpossibleOperationError):
+        test('', a * c)
+    ctx.define_conv(A, B)
+    ctx.define_mul(B, C, C)
+    test('<C:(B(a) * c)>', a * c)
+
     
-
-
 
 
 
