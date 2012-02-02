@@ -17,7 +17,7 @@ from itertools import izip, chain, combinations, permutations
 # be assigned to a global configuration variable.
 
 from . import formatter, symbolic, actions
-from .kind import lookup_computations
+from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
 
@@ -95,14 +95,23 @@ class ExhaustiveCompilation(object):
     def explore(self, snode):
         return snode.accept_visitor(self, snode)
 
-    def all_computations(self, expr, avoid_kinds=(), only_kinds=None):
+    def all_computations(self, expr, avoid_kinds=(), only_kinds=None,
+                         tried_kinds=()):
+        # tried_kinds is typically used to avoid infinite loops (and
+        # can be done away with if we do memoization with "gray-marking").
+        # It is like avoid_kinds in that it avoids going *to* any of the kinds,
+        # but it only does so if expr is trivial (so that "kind.h -> kind" is
+        # allowed).
         nrows = expr.nrows
         ncols = expr.ncols
         dtype = expr.dtype # todo
         # Generates all computables possible for the match_pattern
         key = expr.get_key()
+        trivial = isinstance(key, MatrixKind)
         computations_by_kind = expr.universe.get_computations(key)
         for target_kind, computations in computations_by_kind.iteritems():
+            if trivial and target_kind in tried_kinds:
+                continue
             if target_kind in avoid_kinds:
                 continue
             if only_kinds is not None and target_kind not in only_kinds:
@@ -113,11 +122,11 @@ class ExhaustiveCompilation(object):
                 yield symbolic.ComputableNode(computation, args, nrows,
                                               ncols, dtype)
 
-    def generate_conversions(self, computable, avoid_kinds):
+    def generate_conversions(self, computable, tried_kinds):
         # Find all possible conversion computables that can be put on top
         # of the computable. Always pass a set of kinds already tried, to
         # avoid infinite loops
-        for x in self.all_computations(computable, avoid_kinds=avoid_kinds):
+        for x in self.all_computations(computable, tried_kinds=tried_kinds):
             yield x
 
     def explore_multiplication(self, operands):

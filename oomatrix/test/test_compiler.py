@@ -114,6 +114,10 @@ def test_exhaustive_compiler():
     A, a, au, auh = ctx.new_matrix('A')
     B, b, bu, buh = ctx.new_matrix('B')
     C, c, cu, cuh = ctx.new_matrix('C')
+    S, s, su, suh = ctx.new_matrix('S')
+    
+    ctx.define(S.h, S, 'sym(%s)') # S is symmetric
+    ctx.define(S * S, S, '%s * %s')
 
     # Disallowed multiplication
     assert_impossible(a * b)
@@ -143,6 +147,11 @@ def test_exhaustive_compiler():
     assert_impossible(a * a.h)
     ctx.define(A * A.h, A, '%s * %s.h')
     test('A:(a * a.h)', a * a.h)
+    # transpose only through symmetry conversion
+    test('S:(s * (sym(s)))', s * s.h)
+    test('S:((sym(s)) * (sym(s)))', s.h * s.h)
+    
+    
 
     # Addition
     test('A:(a + a)', a + a)
