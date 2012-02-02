@@ -248,3 +248,12 @@ class Matrix(object):
     #
     factor = decompositions.make_matrix_method(decompositions.Factor)
         
+
+#
+# Constructors
+#
+
+def identity_matrix(n):
+    from .impl.scaled_identity import ScaledIdentity
+    return Matrix(ScaledIdentity(1, n))
+
