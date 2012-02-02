@@ -161,6 +161,10 @@ def test_exhaustive_compiler():
     test('A:(a + b)', b + a) # note how arguments are sorted
     test('A:((a + (a + b)) + b)', b + a + b + a)
 
+    # Addition through conversion
+    ctx.define_conv(C, A)
+    test('A:(a + c)', a + c)
+
     # Transposed operands in addition
     assert_impossible(a.h + a)
     ctx.define(A.h + A, A, '%s.h + %s')
@@ -169,6 +173,8 @@ def test_exhaustive_compiler():
     test('A:(a.h + (a.h + a))', a.h + a.h + a)
     ctx.define(B + B.h, B, '%s + %s.h')
     test('B:(b + b.h)', b.h + b)
+    # transpose only thorugh symmetry conversion
+    test('S:(s + (sym(s)))', s + s.h)
     
     # Nested expressions
     test('A:((a * a) + (a * a))', a * a + a * a)

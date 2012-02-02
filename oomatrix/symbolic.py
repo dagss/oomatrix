@@ -9,6 +9,7 @@ class PatternMismatchError(ValueError):
 
 class ExpressionNode(object):
     name = None
+    kind = None
 
     def get_type(self):
         return TODO
@@ -313,7 +314,7 @@ class ComputableNode(BaseComputable):
         return visitor.visit_computable(*args, **kw)
 
 
-class DecompositionNode(BaseComputable):
+class DecompositionNode(ExpressionNode):
     """
     Represents a promise to perform a matrix decomposition. The node
     fills two roles: In a symbolic tree simply represents the decomposition,
@@ -330,6 +331,7 @@ class DecompositionNode(BaseComputable):
         self.universe = child.universe
         self.dtype = child.dtype
         self.cost = child.cost
+        self.kind = child.kind
 
     def compute(self):
         assert isinstance(self.child, BaseComputable)

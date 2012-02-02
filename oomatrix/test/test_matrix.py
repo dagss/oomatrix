@@ -129,6 +129,13 @@ def test_matvec():
 
     #explain(De * (Di + Di) * a)
 
+
+
+def test_scalar():
+    A = Di * 2
+    print A
+    print A.diagonal()
+
     
 def test_decompositions():
     F = Di.factor()
