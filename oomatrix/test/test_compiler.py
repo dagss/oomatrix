@@ -106,10 +106,10 @@ def test_exhaustive_compiler():
     ctx = MockMatricesUniverse()
     compiler = ExhaustiveCompiler()
     def test(expected, M, target_kind=None):
-        eq_(expected, repr(compiler.compute(M)._expr.matrix_impl))
+        eq_(expected, repr(M.compute(compiler=compiler)._expr.matrix_impl))
     def assert_impossible(M):
         with assert_raises(ImpossibleOperationError):
-            compiler.compute(M)
+            compiler.compile(M._expr)
 
     A, a, au, auh = ctx.new_matrix('A')
     B, b, bu, buh = ctx.new_matrix('B')
@@ -139,6 +139,11 @@ def test_exhaustive_compiler():
     test('C:(B(a) * c)', a * c)
     test('A:(a * a)', a * a)
 
+    # Transposed operands in multiplication
+    assert_impossible(a * a.h)
+    ctx.define(A * A.h, A, '%s * %s.h')
+    test('A:(a * a.h)', a * a.h)
+
     # Addition
     test('A:(a + a)', a + a)
     assert_impossible(a + b)
@@ -147,7 +152,7 @@ def test_exhaustive_compiler():
     test('A:(a + b)', b + a) # note how arguments are sorted
     test('A:((a + (a + b)) + b)', b + a + b + a)
 
-    # Transposed operands
+    # Transposed operands in addition
     assert_impossible(a.h + a)
     ctx.define(A.h + A, A, '%s.h + %s')
     test('A:(a.h + a)', a.h + a)
@@ -156,7 +161,14 @@ def test_exhaustive_compiler():
     ctx.define(B + B.h, B, '%s + %s.h')
     test('B:(b + b.h)', b.h + b)
     
-
+    # Nested expressions
+    test('A:((a * a) + (a * a))', a * a + a * a)
+    test('B:((a + a) * b)', (a + a) * b)
+    # force use of distributive law...
+    #ctx.define(A * C, C, '%s * %s')
+    #ctx.define(C * C, C, '%s * %s')
+    #test('B:((a + a) * b)', (a + c) * c)
+    
 
 
 def test_stupid_compiler_mock():

@@ -1,6 +1,6 @@
 import numpy as np
 
-from . import symbolic
+from . import symbolic, decompositions
 from .kind import MatrixImpl
 from .symbolic import ExpressionNode, LeafNode
 from .formatter import default_formatter_factory
@@ -88,12 +88,11 @@ class Matrix(object):
             lines.append('[%s]' % s)
         return '\n'.join(lines)
 
-    def compute(self):
-        print self
-        if type(self._expr) is LeafNode:
-            return self
-        else:
-            raise NotImplementedError()
+    def compute(self, compiler=None):
+        if compiler is None:
+            from .compiler import ExhaustiveCompiler
+            compiler = ExhaustiveCompiler()
+        return Matrix(compiler.compile(self._expr).compute())
 
     def __getitem__(self, index):
         if self.is_expression():
@@ -230,4 +229,8 @@ class Matrix(object):
     def bracket(self):
         return Matrix(symbolic.BracketNode(self._expr, kinds=None))
 
+    #
+    # decompositions
+    #
+    factor = decompositions.make_matrix_method(decompositions.Factor)
         

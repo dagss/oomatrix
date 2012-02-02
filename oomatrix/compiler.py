@@ -17,7 +17,6 @@ from itertools import izip, chain, combinations, permutations
 # be assigned to a global configuration variable.
 
 from . import formatter, symbolic, actions
-from .matrix import Matrix
 from .kind import lookup_computations
 from .computation import ImpossibleOperationError
 from pprint import pprint
@@ -70,18 +69,28 @@ class ExhaustiveCompilation(object):
 
     def visit_conjugate_transpose(self, node):
         # Recurse and process children, and then transpose the result
-        child = node.child
-        processed_node_gen = child.accept_visitor(self, child)
-        processed_node, = processed_node_gen
-        yield symbolic.ConjugateTransposeNode(processed_node)
+        new_node = self.process_single_child(node)
+        yield symbolic.ConjugateTransposeNode(new_node)
+
+    def visit_decomposition(self, node):
+        # Compile child tree and leave the decomposition node intact
+        new_node = self.process_single_child(node)
+        yield symbolic.DecompositionNode(new_node, node.decomposition)
+        
 
     #
     # Exploration
     # 
     # Naming convention: Methods that start with explore_ takes symbolic
     # node arguments (possibly as lists), while methods that start with
-    # generate_ takes computables
+    # generate_ takes computables. process_... returns single nodes, are not
+    # generators
     #
+    def process_single_child(self, node):
+        child = node.child
+        processed_node_gen = child.accept_visitor(self, child)
+        processed_node, = processed_node_gen
+        return processed_node
 
     def explore(self, snode):
         return snode.accept_visitor(self, snode)
@@ -135,8 +144,9 @@ class ExhaustiveCompilation(object):
     def generate_pair_multiplications(self,
                                       left, left_kinds_tried,
                                       right, right_kinds_tried):
-        assert isinstance(left, symbolic.BaseComputable)
-        assert isinstance(right, symbolic.BaseComputable)
+        for x in (left, right):
+            assert isinstance(x, (symbolic.BaseComputable,
+                                  symbolic.ConjugateTransposeNode))
         # Look up any direct computations
         expr = symbolic.MultiplyNode([left, right])
         for x in self.all_computations(expr):
@@ -196,7 +206,6 @@ class SimplisticCompilation(object):
         computable = symbolic_node.accept_visitor(
             self, symbolic_node, target_kinds=target_kinds)
         assert isinstance(computable, BaseComputable)
-        return computable
 
     def visit_add(self, expr, target_kinds):
         # Simply use self.add_graph; which deals with any number
@@ -321,12 +330,9 @@ class BaseCompiler(object):
     No in-place operations or buffer reuse is ever performed.
     """
 
-    def compile(self, matrix):
-        operation_root = self.compilation_factory().compile(matrix._expr)
+    def compile(self, expression):
+        operation_root = self.compilation_factory().compile(expression)
         return operation_root
-
-    def compute(self, matrix):
-        return Matrix(self.compile(matrix).compute())
 
 class SimplisticCompiler(BaseCompiler):
     compilation_factory = SimplisticCompilation
@@ -334,6 +340,3 @@ class SimplisticCompiler(BaseCompiler):
 class ExhaustiveCompiler(BaseCompiler):
     compilation_factory = ExhaustiveCompilation
 
-    def compile(self, matrix):
-        operation_root = self.compilation_factory().compile(matrix._expr)
-        return operation_root
