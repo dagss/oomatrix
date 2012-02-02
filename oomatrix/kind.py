@@ -222,8 +222,6 @@ def add_post_class_definition_hook(hook_func, hook_method):
     hooks.append((hook_func, hook_method))
 
 class MatrixKind(type, PatternNode):
-    _transpose_classes = {}
-    
     def __init__(cls, name, bases, dct):
         type.__init__(cls, name, bases, dct)
         if 'name' not in dct:

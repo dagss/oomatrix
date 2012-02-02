@@ -11,7 +11,8 @@ def assert_not_raises(func, *args):
     except:
         raise AssertionError()
 
-
+def alleq_(a, b):
+    assert np.all(a == b)
 
 def ndrange(shape, dtype=np.double):
     return np.arange(np.prod(shape)).reshape(shape).astype(dtype)

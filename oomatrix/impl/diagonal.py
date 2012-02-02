@@ -66,7 +66,22 @@ class Diagonal(MatrixImpl):
         else:
             out[...] = result
 
-@computation(Diagonal + Diagonal, Diagonal)
-def diagonal_plus_diagonal(A, B):
-    return Diagonal(A.array + B.array)
+    def square_root(self):
+        return Diagonal(np.sqrt(self.array))
 
+    def diagonal(self):
+        return self.array
+
+    factor = cholesky = square_root
+
+@computation(Diagonal.h, Diagonal)
+def conjugate_transpose(a):
+    return Diagonal(a.array.conjugate())
+
+@computation(Diagonal + Diagonal, Diagonal)
+def diagonal_plus_diagonal(a, b):
+    return Diagonal(a.array + b.array)
+
+@computation(Diagonal * Diagonal, Diagonal)
+def diagonal_times_diagonal(a, b):
+    return Diagonal(a.array * b.array)

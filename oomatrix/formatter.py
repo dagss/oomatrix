@@ -20,25 +20,29 @@ class BasicExpressionFormatter(object):
                 if expr.precedence > childexpr.precedence:
                     s = '(%s)' % s
                 child_strs.append(s)
-            return expr.accept_visitor(self, child_strs)
+            return expr.accept_visitor(self, expr, child_strs)
 
-    def visit_add(self, terms):
+    def visit_add(self, expr, terms):
         return ' + '.join(terms)
 
-    def visit_multiply(self, terms):
+    def visit_multiply(self, expr, terms):
         return ' * '.join(terms)
 
-    def visit_conjugate_transpose(self, terms):
+    def visit_conjugate_transpose(self, expr, terms):
         assert len(terms) == 1
         return terms[0] + '.h'
 
-    def visit_inverse(self, terms):
+    def visit_inverse(self, expr, terms):
         assert len(terms) == 1
         return terms[0] + '.i'
 
-    def visit_bracket(self, terms):
+    def visit_bracket(self, expr, terms):
         assert terms
         return '[%s]' % terms[0]
+
+    def visit_decomposition(self, expr, terms):
+        assert len(terms) == 1
+        return '%s.%s()' % (terms[0], expr.decomposition.name)
 
 class ExpressionFormatterFactory(object):
     def format(self, expr):

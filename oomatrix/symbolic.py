@@ -165,6 +165,7 @@ class ConjugateTransposeNode(SingleChildNode):
         self.universe = child.universe
         self.dtype = child.dtype
         self.cost = child.cost
+        self.kind = child.kind
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_conjugate_transpose(*args, **kw)
@@ -253,10 +254,7 @@ class BracketNode(ExpressionNode):
     def call_func(self, func, pattern):
         raise NotImplementedError()
 
-
-
-
-class BaseComputable(object):
+class BaseComputable(ExpressionNode):
     children = ()
 
     def get_key(self):
@@ -313,6 +311,33 @@ class ComputableNode(BaseComputable):
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_computable(*args, **kw)
+
+
+class DecompositionNode(BaseComputable):
+    """
+    Represents a promise to perform a matrix decomposition. The node
+    fills two roles: In a symbolic tree simply represents the decomposition,
+    while the node also dispatches the actual computation if the child
+    is. Compilers would typically "walk through" it and process the child
+    node, but leave the DecompositionNode in its place in the tree.
+    
+    """
+    def __init__(self, child, decomposition):
+        self.child = child
+        self.children = [child]
+        self.decomposition = decomposition
+        self.nrows, self.ncols = child.nrows, child.ncols
+        self.universe = child.universe
+        self.dtype = child.dtype
+        self.cost = child.cost
+
+    def compute(self):
+        assert isinstance(self.child, BaseComputable)
+        arg = self.child.compute()
+        return self.decomposition.dispatch(arg)
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_decomposition(*args, **kw)
 
 
 for x, val in [

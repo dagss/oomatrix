@@ -230,6 +230,20 @@ class Matrix(object):
         return Matrix(symbolic.BracketNode(self._expr, kinds=None))
 
     #
+    # array conversion
+    #
+    def diagonal(self):
+        """Return the diagonal as an array
+
+        If `self` is an expression, this may trigger computation of the
+        entire matrix.
+        """
+        matrix = self.compute()
+        if not isinstance(matrix._expr, LeafNode):
+            raise NotImplementedError()
+        return matrix._expr.matrix_impl.diagonal()
+
+    #
     # decompositions
     #
     factor = decompositions.make_matrix_method(decompositions.Factor)
