@@ -77,6 +77,24 @@ def test_tree_building():
          Dense),
         p.get_key())
 
+def test_scalar():
+    with assert_raises(IllegalPatternError):
+        Scalar * Scalar
+    with assert_raises(IllegalPatternError):
+        Dense * Scalar
+    eq_(('s', Dense), (Scalar * Dense).get_key())
+
+def test_identity():
+    with assert_raises(IllegalPatternError):
+        Identity * Identity
+    with assert_raises(IllegalPatternError):
+        Identity * Scalar
+    with assert_raises(IllegalPatternError):
+        Identity * Dense
+    eq_(('1',), Identity.get_key())
+    eq_(('+', Dense, ('1',)), (Dense + Identity).get_key())
+    eq_(('s', ('1',)), (Scalar * Identity).get_key())
+
 def test_tree_normalization():
     # Only A.i and A.i.h allowed for .i and .h
     yield assert_raises, IllegalPatternError, getattr, Dense.h, 'h'

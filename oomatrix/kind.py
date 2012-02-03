@@ -190,7 +190,11 @@ class PatternNode(object):
         return AddPatternNode([self, other])
 
     def __mul__(self, other):
-        if not isinstance(self, PatternNode):
+        if other is Scalar:
+            raise IllegalPatternError('Cannot multiply Scalar on right side')
+        elif other is Identity:
+            raise IllegalPatternError('Cannot multiply Identity on right side')
+        elif not isinstance(self, PatternNode):
             raise TypeError('wrong type')
         return MultiplyPatternNode([self, other])
 
@@ -323,10 +327,14 @@ class ArithmeticPatternNode(PatternNode):
         self.children = unpacked_children
         self._child_sort()
         # Join universes
-        universe = self.children[0].universe
-        for x in self.children[1:]:
-            universe.join_with(x.universe)
-        self.universe = universe
+        first_universe = None
+        for x in self.children:
+            if x.universe is not None:
+                if first_universe is None:
+                    first_universe = x.universe
+                else:
+                    first_universe.join_with(x.universe)
+        self.universe = first_universe
 
     def _child_sort(self):
         pass
@@ -371,3 +379,38 @@ class InversePatternNode(SingleChildPatternNode):
                 'A.h.i should be written A.i.h, (A * B).i should '
                 'be written (B.i * A.i), and so on)')
         SingleChildPatternNode.__init__(self, child)
+
+
+class ScalarPatternNode(SingleChildPatternNode):
+    symbol = 's'
+
+class IdentityPatternNode(PatternNode):
+    symbol = '1'
+    children = ()
+    universe = None
+
+    def __new__(self):
+        return Identity
+
+    def __mul__(self, other):
+        raise IllegalPatternError('Identity can only be multiplied with '
+                                  '"Scalar"')
+
+Identity = object.__new__(IdentityPatternNode)
+
+class ScalarType(object):
+    def __new__(self):
+        return Scalar
+
+    def __mul__(self, other):
+        if other is Scalar:
+            raise IllegalPatternError('Scalar * Scalar is illegal')
+        elif other is Identity:
+            return ScalarPatternNode(IdentityPatternNode())
+        elif not isinstance(other, PatternNode):
+            raise TypeError('invalid type')
+        else:
+            return ScalarPatternNode(other)
+
+Scalar = object.__new__(ScalarType)
+
