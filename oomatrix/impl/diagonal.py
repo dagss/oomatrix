@@ -9,27 +9,6 @@ __all__ = ['Diagonal']
 
 class Diagonal(MatrixImpl):
 
-    """
-
-
-    Example
-    -------
-
-    >>> D = Matrix('D', [1, 2, 3], diagonal=True)
-    >>> D
-    3-by-3 diagonal matrix 'D' of int64
-    [0 0 0]
-    [0 1 0]
-    [0 0 2]
-    >>> (D + D).compute()
-    3-by-3 diagonal matrix 'D' of int64
-    [0 0 0]
-    [0 2 0]
-    [0 0 4]
-
-    
-    """
-
     
     name = 'diagonal'
     prose = ('the diagonal matrix', 'a diagonal matrix')
@@ -85,3 +64,4 @@ def diagonal_plus_diagonal(a, b):
 @computation(Diagonal * Diagonal, Diagonal)
 def diagonal_times_diagonal(a, b):
     return Diagonal(a.array * b.array)
+

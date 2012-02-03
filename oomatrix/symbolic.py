@@ -235,8 +235,6 @@ class InverseNode(SingleChildNode):
             raise PatternMismatchError()
         return self.child.as_computable_list(pattern.child)
 
-
-
 class BracketNode(ExpressionNode):
     symbol = 'b'
     

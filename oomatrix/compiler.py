@@ -16,7 +16,7 @@ from itertools import izip, chain, combinations, permutations
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
 
-from . import formatter, symbolic, actions
+from . import formatter, symbolic
 from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
@@ -198,104 +198,6 @@ class ExhaustiveCompilation(object):
             yield x
         
 
-
-def is_right_vector(expr):
-    return expr.ncols == 1 and expr.nrows > 1
-
-def is_left_vector(expr):
-    return expr.nrows == 1 and expr.ncols > 1
-
-class SimplisticCompilation(object):
-    def __init__(self):
-        pass
-
-    def compile(self, symbolic_node, target_kinds=None):
-        assert isinstance(symbolic_node, symbolic.ExpressionNode), (
-            '%r is not symbolic node' % symbolic_node)
-        computable = symbolic_node.accept_visitor(
-            self, symbolic_node, target_kinds=target_kinds)
-        assert isinstance(computable, BaseComputable)
-
-    def visit_add(self, expr, target_kinds):
-        # Simply use self.add_graph; which deals with any number
-        # of operands. But we do try both transposed and
-        # non-transposed. (TODO: This should perhaps be refactored
-        # to add_graph, since any *pair* could be pre- and
-        # post-transposed)
-        children = [self.compile(child) for child in expr.children]
-        try:
-            result = self.add_graph.find_cheapest_action(
-                children, target_kinds)
-        except ImpossibleOperationError:
-            # Try the transpose sum
-            transposed_children = [
-                actions.conjugate_transpose_action(child)
-                for child in children]
-            result = self.add_graph.find_cheapest_action(
-                transposed_children, target_kinds)
-            result = acions.conjugate_transpose_action(result)
-        return result
-
-    def multiply_pair(self, left, right, target_kinds):
-        # Perform multiplications
-        node = multiplication_graph.find_cheapest_action(
-            (left, right), target_kinds=target_kinds)
-        return node
-
-    def visit_multiply(self, expr, target_kinds):
-        # First, use the distributive law on expr
-        # (this may create a lot of common subexpressions)
-        # TODO: Eliminate common subexpressions (in a *seperate*
-        # path which also picks up such created by user)
-        old_expr = expr
-        if is_right_vector(expr):
-            expr = symbolic.apply_right_distributive_rule(expr)
-        elif is_left_vector(expr):
-            expr = symbolic.apply_left_distributive_rule(expr)
-        if not isinstance(expr, symbolic.MultiplyNode):
-            # Did apply distributive rule and we now have an AddNode,
-            # so we don't want to be in visit_multiply. Otherwise,
-            # continue, so that we avoid infinite recursion
-            return self.compile(expr, target_kinds)
-            
-        # OK, now we first compute each element, and then do the
-        # product 2 and 2 terms, either right-to-left or left-to-right
-        assert len(expr.children) >= 2
-        children = [self.compile(x) for x in expr.children]
-        
-        # Figure out if this is a "matrix-vector" product, in which
-        # case we change the order of multiplication.
-        if is_right_vector(expr):
-            # Right-to-left
-            right = children[-1]
-            for left in children[-2::-1]:
-                right = self.multiply_pair(left, right, target_kinds)
-            return right
-        else:
-            # Left-to-right
-            left = children[0]
-            for right in children[1:]:
-                left = self.multiply_pair(left, right, target_kinds)
-            return left
-
-    def visit_leaf(self, expr, target_kinds):
-        if target_kinds is not None:
-            raise NotImplementedError()
-        return ComputableLeaf(expr.matrix_impl)
-            
-    def visit_inverse(self, expr, target_kinds):
-        raise NotImplementedError()
-
-    def visit_conjugate_transpose(self, expr, target_kinds): 
-        if target_kinds is not None:
-            raise NotImplementedError()
-        child_action = self.compile(expr.child)
-        return actions.ConjugateTransposeAction(child_action)
-
-    def visit_bracket(self, expr, target_kinds):
-        return self.compile(expr.child, target_kinds=expr.kinds)
-
-
 class BaseCompiler(object):
     """
     Compiles an expression using some simple syntax-level rules.
@@ -342,9 +244,6 @@ class BaseCompiler(object):
     def compile(self, expression):
         operation_root = self.compilation_factory().compile(expression)
         return operation_root
-
-class SimplisticCompiler(BaseCompiler):
-    compilation_factory = SimplisticCompilation
 
 class ExhaustiveCompiler(BaseCompiler):
     compilation_factory = ExhaustiveCompilation

@@ -1,5 +1,8 @@
 from .common import *
 
+# DISABLED, WILL BITROT
+raise SkipTest()
+
 from ..kind import MatrixImpl
 from ..computation import *
 from ..impl.diagonal import *

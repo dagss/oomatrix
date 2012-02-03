@@ -106,21 +106,27 @@ def test_call_func():
     b = LeafNode('b', bo)
     c = LeafNode('c', co)
 
-    yield eq_, [ao], I(a).as_argument_list(A.i)
-    yield assert_raises, PatternMismatchError, a.as_argument_list, A.i
-    yield eq_, [ao], H(I(a)).as_argument_list(A.i.h)
+    def assert_argslist(expected, expr, match):
+        args = expr.as_computable_list(match)
+        for arg in args:
+            assert isinstance(arg, LeafNode)
+        eq_(expected, [x.matrix_impl for x in args])
 
-    yield eq_, [co, ao, bo], add(a, b, c).as_argument_list(C + A + B)
-    yield eq_, [ao, bo, co], add(a, b, c).as_argument_list(A + B + C)
-    yield eq_, [bo, co, ao], add(a, b, c).as_argument_list(B + C + A)
+    yield assert_argslist, [ao], I(a), A.i
+    yield assert_raises, PatternMismatchError, a.as_computable_list, A.i
+    yield assert_argslist, [ao], H(I(a)), A.i.h
 
-    yield eq_, [co, ao, bo], mul(c, a, b).as_argument_list(C * A * B)
+    yield assert_argslist, [co, ao, bo], add(a, b, c), C + A + B
+    yield assert_argslist, [ao, bo, co], add(a, b, c), A + B + C
+    yield assert_argslist, [bo, co, ao], add(a, b, c), B + C + A
 
-    yield eq_, [co, ao, bo, bo, co], (
-        (mul(c, add(mul(H(I(a)), b), mul(H(b), c))).as_argument_list(
-            C * (A.i.h * B + B.h * C))))
+    yield assert_argslist, [co, ao, bo], mul(c, a, b), C * A * B
+
+    yield (assert_argslist, [co, ao, bo, bo, co], 
+           mul(c, add(mul(H(I(a)), b), mul(H(b), c))), 
+           C * (A.i.h * B + B.h * C))
 
     # make C appear before A and try again, should be exact same behaviour
     C._sort_id = 0
-    yield eq_, [co, ao, bo], add(a, b, c).as_argument_list(C + A + B)
+    yield assert_argslist, [co, ao, bo], add(a, b, c), C + A + B
     

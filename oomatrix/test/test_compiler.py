@@ -161,9 +161,9 @@ def test_exhaustive_compiler():
     test('A:(a + b)', b + a) # note how arguments are sorted
     test('A:((a + (a + b)) + b)', b + a + b + a)
 
-    # Addition through conversion
-    ctx.define_conv(C, A)
-    test('A:(a + c)', a + c)
+    # Addition through conversion TODO
+    #ctx.define_conv(C, A)
+    #test('A:(a + c)', a + c)
 
     # Transposed operands in addition
     assert_impossible(a.h + a)
@@ -174,7 +174,7 @@ def test_exhaustive_compiler():
     ctx.define(B + B.h, B, '%s + %s.h')
     test('B:(b + b.h)', b.h + b)
     # transpose only thorugh symmetry conversion
-    test('S:(s + (sym(s)))', s + s.h)
+    #test('S:(s + (sym(s)))', s + s.h) addition through conversion todo
     
     # Nested expressions
     test('A:((a * a) + (a * a))', a * a + a * a)
@@ -184,79 +184,6 @@ def test_exhaustive_compiler():
     #ctx.define(C * C, C, '%s * %s')
     #test('B:((a + a) * b)', (a + c) * c)
     
-
-
-def test_stupid_compiler_mock():
-    return
-    ctx = MockMatricesUniverse()
-    compiler = SimplisticCompiler()
-    co = compiler.compute
-#    ex = compiler.explain
-    def test(expected, M, target_kind=None):
-        eq_(expected, repr(co(M)._expr.matrix_impl))
-
-    A, a, au, auh = ctx.new_matrix('A')
-    B, b, bu, buh = ctx.new_matrix('B')
-
-    #
-    # Straight multiplication
-    #
-
-    # A * B - B
-    ctx.define_mul(A, B, B)
-    test('B:(a * b)', a * b)
-
-    with assert_raises(ImpossibleOperationError):
-        test('', b * a)
-
-    # order of multiplication (mat-mat vs. mat-vec)
-    ctx.define_mul(A, A, A)
-    test('A:(((a * a) * a) * a)', a * a * a * a)
-    test('A:(a * (a * (a * au)))', a * a * a * au)
-    test('A:(((auh * a) * a) * a)', auh * a * a * a)
-    return
-    #
-    # Transpose multiplication
-    #
-    # Straightforward conjugate -- doesn't work until mul action
-    # is registered
-    with assert_raises(ImpossibleOperationError):
-        test('', a * a.h)
-    return
-
-    ctx.define_mul(A, A.h, A)
-    yield test, 'A:(A * A.h)', A * A.h
-
-    yield (assert_raises, ImpossibleOperationError,
-           test, '', A.h * A)
-    ctx.define_mul(A.h, A, A)
-    yield test, 'A:(A.h * A)', A.h * A
-
-
-    #
-    # Post-multiply conversion
-    #
-    S, s, sh = ctx.new_matrix('S') # only used as conversion 'sink'
-    ctx.define_conv(A, S)
-    yield test, 'S:S(A * A)', (A * A).as_kind(S.get_type())
-
-    #
-    # Addition
-    #
-
-    # Normal add
-    yield test, 'A:(A + A)', A + A
-
-    # Do not use distributive rule for matrices
-    yield test, 'A:((A + A) * A)', (A + A) * A
-    yield test, 'A:(A * (A + A))', A * (A + A)
-
-    # But, use it for vectors
-    yield test, 'A:((A * a) + (A * a))', (A + A) * a
-    yield test, 'A:((ah * A) + (ah * A))', ah * (A + A)
-    yield (test, 'A:(((((ah * A) + (ah * A)) * A) + '
-                      '(((ah * A) + (ah * A)) * A)) * A)',
-           ah * (A + A) * (A + A) * A)
 
 def test_stupid_compiler_numpy():
     return

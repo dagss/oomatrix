@@ -10,7 +10,7 @@ more generic approach...
 from .graph.shortest_path import find_shortest_path
 from . import kind
 from .kind import AddPatternNode, MultiplyPatternNode
-from .computation import Computable, BaseComputable
+#from .computation import Computable, BaseComputable
 
 
 #
