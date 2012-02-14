@@ -96,6 +96,9 @@ def test_repr():
            Matrix(np.ones((4, 1))) + Matrix(np.ones((4, 1))))
 
 
+def test_as_array():
+    alleq_([[0, 0, 0], [0, 2, 0], [0, 0, 4]], (Di + Di).as_array())
+
 def test_symbolic():
     raise SkipTest()
     namemap0 = dict(De=De, Di=Di)

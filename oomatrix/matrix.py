@@ -212,13 +212,11 @@ class Matrix(object):
     #
     # Conversion
     #
-    def as_array(self, order='C'):
-        from .impl.dense import NumPyWrapper
-        if (not self.is_expression() and
-            isinstance(self._expr.matrix_impl, NumPyWrapper)):
-            return self._expr.matrix_impl.array.copy(order)
-        else:
-            raise NotImplementedError()
+    def as_array(self, order=None):
+        from .impl.dense import RowMajor, ColumnMajor, Strided
+        computed = self.as_kind([RowMajor, ColumnMajor, Strided]).compute()
+        # todo: do not make copy if we own result
+        return computed._expr.matrix_impl.array.copy(order)
 
     def as_kind(self, kinds):
         if isinstance(kinds, tuple):
