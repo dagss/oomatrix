@@ -49,12 +49,12 @@ class ExhaustiveCompilation(object):
     this into something like Dijkstra or A*.
     """
 
-    def compile(self, snode):
-        possible_cnodes = list(self.explore(snode))
-        possible_cnodes.sort(key=lambda cnode: cnode.cost)
-        for cnode in possible_cnodes:
-            #if cnode.kind in target_kinds:
-            return cnode
+    def compile(self, node):
+        possible_nodes = list(self.explore(node))
+        possible_nodes.sort(key=lambda node: node.cost)
+        for node in possible_nodes:
+            #if target_kinds is None or node.kind in target_kinds:
+            return node
         raise ImpossibleOperationError()
 
     # Visitor implementation
@@ -69,14 +69,16 @@ class ExhaustiveCompilation(object):
 
     def visit_conjugate_transpose(self, node):
         # Recurse and process children, and then transpose the result
-        new_node = self.process_single_child(node)
-        yield symbolic.ConjugateTransposeNode(new_node)
+        child = node.child
+        for new_node in child.accept_visitor(self, child):
+            yield symbolic.ConjugateTransposeNode(new_node)
 
     def visit_decomposition(self, node):
         # Compile child tree and leave the decomposition node intact
-        new_node = self.process_single_child(node)
-        yield symbolic.DecompositionNode(new_node, node.decomposition)
-        
+        child = node.child
+        for new_node in child.accept_visitor(self, child):
+            yield symbolic.DecompositionNode(new_node, node.decomposition)
+
 
     #
     # Exploration
@@ -86,11 +88,6 @@ class ExhaustiveCompilation(object):
     # generate_ takes computables. process_... returns single nodes, are not
     # generators
     #
-    def process_single_child(self, node):
-        child = node.child
-        processed_node_gen = child.accept_visitor(self, child)
-        processed_node, = processed_node_gen
-        return processed_node
 
     def explore(self, snode):
         return snode.accept_visitor(self, snode)
