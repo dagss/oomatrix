@@ -238,10 +238,10 @@ class InverseNode(SingleChildNode):
 class BracketNode(ExpressionNode):
     symbol = 'b'
     
-    def __init__(self, child, kinds=None):
+    def __init__(self, child, allowed_kinds=None):
         self.child = child
         self.children = [child]
-        self.kinds = kinds
+        self.allowed_kinds = allowed_kinds
         self.nrows, self.ncols = child.nrows, child.ncols
         self.universe = child.universe
         self.dtype = child.dtype

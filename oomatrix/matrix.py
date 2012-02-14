@@ -92,7 +92,8 @@ class Matrix(object):
         if compiler is None:
             from .compiler import ExhaustiveCompiler
             compiler = ExhaustiveCompiler()
-        return Matrix(compiler.compile(self._expr).compute())
+        computable = compiler.compile(self._expr)
+        return Matrix(computable.compute())
 
     def __getitem__(self, index):
         if self.is_expression():
@@ -224,10 +225,10 @@ class Matrix(object):
             raise TypeError('kinds argument should be a kind or a list')
         if not isinstance(kinds, list):
             kinds = [kinds]
-        return Matrix(symbolic.BracketNode(self._expr, kinds=kinds))
+        return Matrix(symbolic.BracketNode(self._expr, allowed_kinds=kinds))
 
     def bracket(self):
-        return Matrix(symbolic.BracketNode(self._expr, kinds=None))
+        return Matrix(symbolic.BracketNode(self._expr, allowed_kinds=None))
 
     #
     # array conversion

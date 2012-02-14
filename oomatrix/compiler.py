@@ -79,6 +79,26 @@ class ExhaustiveCompilation(object):
         for new_node in child.accept_visitor(self, child):
             yield symbolic.DecompositionNode(new_node, node.decomposition)
 
+    def visit_bracket(self, node):
+        # Compile child tree, and filter the resulting options with respect
+        # to the target kinds requested here. Bracket nodes serves two
+        # purposes: a) Enforcing specific matrix kinds as specific places
+        # in the tree, b) ensure that the wrapped subtree doesn't participate
+        # when using the distributive law, terms cancelling etc.
+        child = node.child
+        allowed_kinds = node.allowed_kinds
+        for new_node in child.accept_visitor(self, child):
+            if allowed_kinds is None:
+                yield new_node
+            else:
+                if new_node.kind in allowed_kinds:
+                    yield new_node
+                else:
+                    # post-operation conversion
+                    for converted_node in self.generate_conversions_recursive(
+                        new_node, [new_node.kind], only_kinds=allowed_kinds):
+                        yield converted_node
+            
 
     #
     # Exploration
@@ -119,12 +139,30 @@ class ExhaustiveCompilation(object):
                 yield symbolic.ComputableNode(computation, args, nrows,
                                               ncols, dtype)
 
-    def generate_conversions(self, computable, tried_kinds):
+    def generate_conversions(self, computable, tried_kinds, only_kinds=None):
         # Find all possible conversion computables that can be put on top
         # of the computable. Always pass a set of kinds already tried, to
         # avoid infinite loops
-        for x in self.all_computations(computable, tried_kinds=tried_kinds):
+        for x in self.all_computations(computable, tried_kinds=tried_kinds,
+                                       only_kinds=only_kinds):
             yield x
+
+    def generate_conversions_recursive(self, computable, tried_kinds,
+                                       only_kinds=None):
+        # Find all possible *chains* of conversion computables that
+        # can be put on top of the computable. I.e., like generate_conversions,
+        # but allow more than one conversion.
+
+        # For each possible conversion target...
+        for x in self.generate_conversions(computable, tried_kinds):
+            # Yield this conversion
+            if only_kinds is None or x.kind in only_kinds:
+                yield x
+            # ...and recurse to add more conversions
+            for y in self.generate_conversions_recursive(x,
+                                                         tried_kinds + [x.kind],
+                                                         only_kinds):
+                yield y
 
     def explore_multiplication(self, operands):
         # TODO: Currently only explore pair-wise multiplication, will never

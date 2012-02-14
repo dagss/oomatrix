@@ -111,12 +111,17 @@ def test_exhaustive_compiler():
         with assert_raises(ImpossibleOperationError):
             compiler.compile(M._expr)
 
+    # D: only exists as a conversion target and source. No ops
+    # E: only way to E is through conversion from D. No ops.
+    # S: symmetric matrix; no ops with others
     A, a, au, auh = ctx.new_matrix('A')
     B, b, bu, buh = ctx.new_matrix('B')
     C, c, cu, cuh = ctx.new_matrix('C')
+    D, d, du, duh = ctx.new_matrix('D')
+    E, e, eu, euh = ctx.new_matrix('E')
     S, s, su, suh = ctx.new_matrix('S')
     
-    ctx.define(S.h, S, 'sym(%s)') # S is symmetric
+    ctx.define(S.h, S, 'sym(%s)')
     ctx.define(S * S, S, '%s * %s')
 
     # Disallowed multiplication
@@ -142,6 +147,14 @@ def test_exhaustive_compiler():
     ctx.define_conv(B, A)
     test('C:(B(a) * c)', a * c)
     test('A:(a * a)', a * a)
+    # Multiplication with forced target kind
+    test('C:(B(a) * c)', a * c)
+    test('A:(a * A(c))', (a * c).as_kind(A))
+    # Forced post-conversion
+    ctx.define_conv(C, D)
+    ctx.define_conv(D, E)
+    test('D:D((B(a) * c))', (a * c).as_kind(D))
+    test('E:E(D((B(a) * c)))', (a * c).as_kind(E))
 
     # Transposed operands in multiplication
     assert_impossible(a * a.h)
