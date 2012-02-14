@@ -252,7 +252,7 @@ class Matrix(object):
 # Constructors
 #
 
-def identity_matrix(n):
+def Id(n):
     from .impl.scaled_identity import ScaledIdentity
     return Matrix(ScaledIdentity(1, n))
 

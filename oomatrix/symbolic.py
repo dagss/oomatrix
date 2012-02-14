@@ -49,8 +49,6 @@ class ExpressionNode(object):
         """
         raise NotImplementedError('please override')
 
-
-
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):
         # Avoid nesting arithmetic nodes of the same type;
@@ -322,6 +320,7 @@ class DecompositionNode(ExpressionNode):
     
     """
     def __init__(self, child, decomposition):
+        self.symbol = 'decomposition:%s' % decomposition.name
         self.child = child
         self.children = [child]
         self.decomposition = decomposition
@@ -342,6 +341,7 @@ class DecompositionNode(ExpressionNode):
 
 for x, val in [
     (BaseComputable, 1000),
+    (DecompositionNode, 1000),
     (BracketNode, 1000),
     (InverseNode, 40),
     (ConjugateTransposeNode, 40),

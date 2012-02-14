@@ -1,5 +1,5 @@
 # Re-exports
-from .matrix import Matrix, identity_matrix
+from .matrix import Matrix, Id
 
 mat = Matrix
 
