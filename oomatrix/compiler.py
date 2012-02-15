@@ -72,6 +72,10 @@ class ExhaustiveCompilation(object):
         child = node.child
         for new_node in child.accept_visitor(self, child):
             yield symbolic.ConjugateTransposeNode(new_node)
+        # Also look at A.h -> A-style computations
+        #for new_node in self.all_computations(node):
+        #    yield new_node
+        # TODO: write test for above two lines and uncomment
 
     def visit_decomposition(self, node):
         # Compile child tree and leave the decomposition node intact
@@ -114,6 +118,8 @@ class ExhaustiveCompilation(object):
 
     def all_computations(self, expr, avoid_kinds=(), only_kinds=None,
                          tried_kinds=()):
+        # Looks up all *directly* matching computations
+        #
         # tried_kinds is typically used to avoid infinite loops (and
         # can be done away with if we do memoization with "gray-marking").
         # It is like avoid_kinds in that it avoids going *to* any of the kinds,
@@ -187,7 +193,8 @@ class ExhaustiveCompilation(object):
 
     def generate_pair_multiplications(self,
                                       left, left_kinds_tried,
-                                      right, right_kinds_tried):
+                                      right, right_kinds_tried,
+                                      transpose_tried=False):
         for x in (left, right):
             assert isinstance(x, (symbolic.BaseComputable,
                                   symbolic.ConjugateTransposeNode))
@@ -195,17 +202,26 @@ class ExhaustiveCompilation(object):
         expr = symbolic.MultiplyNode([left, right])
         for x in self.all_computations(expr):
             yield x
-        # Do all conversions of left operand
+        # Look at conjugating back and forth
+        if not transpose_tried:
+            for x in self.generate_pair_multiplications(
+                symbolic.ConjugateTransposeNode(right), [],
+                symbolic.ConjugateTransposeNode(left), [],
+                transpose_tried=True):
+                yield symbolic.ConjugateTransposeNode(x)
+        # Recurse with all conversions of left operand
         for new_left in self.generate_conversions(left, left_kinds_tried):
             for x in self.generate_pair_multiplications(
                     new_left, left_kinds_tried + [new_left.kind],
-                    right, right_kinds_tried):
+                    right, right_kinds_tried,
+                    transpose_tried=transpose_tried):
                 yield x
-        # Do all conversions of right operand
+        # Recurse with all conversions of right operand
         for new_right in self.generate_conversions(right, right_kinds_tried):
             for x in self.generate_pair_multiplications(
                     left, left_kinds_tried,
-                    new_right, right_kinds_tried + [new_right.kind]):
+                    new_right, right_kinds_tried + [new_right.kind],
+                    transpose_tried=transpose_tried):
                 yield x
 
     def explore_addition(self, operands):

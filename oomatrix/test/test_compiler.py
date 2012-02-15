@@ -107,7 +107,12 @@ def assert_impossible(M):
 
 def co_(expected, M, target_kind=None):
     compiler = ExhaustiveCompiler()
-    eq_(expected, repr(M.compute(compiler=compiler)._expr.matrix_impl))
+    expr = M.compute(compiler=compiler)._expr
+    if isinstance(expr, symbolic.ConjugateTransposeNode):
+        r = '[%r].h' % expr.child.matrix_impl
+    else:
+        r = repr(expr.matrix_impl)
+    eq_(expected, r)
 
 def test_exhaustive_compiler():
     ctx = MockMatricesUniverse()
@@ -161,10 +166,9 @@ def test_exhaustive_compiler():
     assert_impossible(a * a.h)
     ctx.define(A * A.h, A, '%s * %s.h')
     co_('A:(a * a.h)', a * a.h)
-    # transpose only through symmetry conversion
-    co_('S:(s * (sym(s)))', s * s.h)
-    co_('S:((sym(s)) * (sym(s)))', s.h * s.h)
-    
+
+    co_('[S:(s * (sym(s)))].h', s * s.h) # TODO: prefer 'S:(s * (sym(s)))'
+    co_('[S:(s * s)].h', s.h * s.h)
     
 
     # Addition
@@ -198,7 +202,7 @@ def test_exhaustive_compiler():
     #ctx.define(C * C, C, '%s * %s')
     #co_('B:((a + a) * b)', (a + c) * c)
 
-def test_exhaustive_compiler_mul_ordering():
+def test_exhaustive_compiler_more_mul():
     ctx = MockMatricesUniverse()
     # check that ((ab)c) is found when only option
     A, a, au, auh = ctx.new_matrix('A')
@@ -207,6 +211,10 @@ def test_exhaustive_compiler_mul_ordering():
     ctx.define(A * B, A, '%s * %s')
     ctx.define(A * C, A, '%s * %s')
     co_('A:((a * b) * c)', a * b * c)
+    # check that the conjugate is attempted
+    ctx.define(A.h * B, A, '%s.h * %s')
+    ctx.define(B.h, B, '%s.h')
+    co_('[A:(a.h * (b.h))].h', b * a)
     
 
 def test_stupid_compiler_numpy():

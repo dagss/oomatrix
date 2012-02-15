@@ -197,6 +197,9 @@ class ConjugateTransposeNode(SingleChildNode):
             raise PatternMismatchError()
         return self.child.as_computable_list(pattern.child)
 
+    def compute(self):
+        return ConjugateTransposeNode(LeafNode(None, self.child.compute()))
+
 class InverseNode(SingleChildNode):
     symbol = 'i'
     
@@ -304,13 +307,15 @@ class ComputableNode(BaseComputable):
 
     def compute(self):
         args = [child.compute() for child in self.children]
-        return self.computation.compute(*args)
+        result = self.computation.compute(*args)
+        assert isinstance(result, kind.MatrixImpl)
+        return result
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_computable(*args, **kw)
 
 
-class DecompositionNode(ExpressionNode):
+class DecompositionNode(BaseComputable):
     """
     Represents a promise to perform a matrix decomposition. The node
     fills two roles: In a symbolic tree simply represents the decomposition,
