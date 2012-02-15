@@ -215,8 +215,12 @@ class Matrix(object):
     def as_array(self, order=None):
         from .impl.dense import RowMajor, ColumnMajor, Strided
         computed = self.as_kind([RowMajor, ColumnMajor, Strided]).compute()
-        # todo: do not make copy if we own result
-        return computed._expr.matrix_impl.array.copy(order)
+        if isinstance(computed._expr, symbolic.ConjugateTransposeNode):
+            array = computed._expr.child.matrix_impl.array.T.conjugate()
+        else:
+            array = computed._expr.matrix_impl.array.copy(order)
+            # todo: do not make copy if we own result
+        return array
 
     def as_kind(self, kinds):
         if isinstance(kinds, tuple):

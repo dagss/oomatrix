@@ -98,6 +98,8 @@ def test_repr():
 
 def test_as_array():
     alleq_([[0, 0, 0], [0, 2, 0], [0, 0, 4]], (Di + Di).as_array())
+    alleq_([[0, 3, 6], [1, 4, 7], [2, 5, 8]], De.h.as_array())
+    
 
 def test_symbolic():
     raise SkipTest()
