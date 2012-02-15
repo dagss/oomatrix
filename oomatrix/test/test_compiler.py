@@ -100,16 +100,17 @@ class MockMatricesUniverse:
         
 
 
+def assert_impossible(M):
+    compiler = ExhaustiveCompiler()
+    with assert_raises(ImpossibleOperationError):
+        compiler.compile(M._expr)
 
+def co_(expected, M, target_kind=None):
+    compiler = ExhaustiveCompiler()
+    eq_(expected, repr(M.compute(compiler=compiler)._expr.matrix_impl))
 
 def test_exhaustive_compiler():
     ctx = MockMatricesUniverse()
-    compiler = ExhaustiveCompiler()
-    def test(expected, M, target_kind=None):
-        eq_(expected, repr(M.compute(compiler=compiler)._expr.matrix_impl))
-    def assert_impossible(M):
-        with assert_raises(ImpossibleOperationError):
-            compiler.compile(M._expr)
 
     # D: only exists as a conversion target and source. No ops
     # E: only way to E is through conversion from D. No ops.
@@ -129,73 +130,83 @@ def test_exhaustive_compiler():
 
     # Straight pair multiplication
     ctx.define_mul(A, B, B)
-    test('B:(a * b)', a * b)
+    co_('B:(a * b)', a * b)
 
     # Multiple operands
     ctx.define_mul(A, A, A)
-    test('B:(a * (a * (a * (a * b))))', a * a * a * a * b)
+    co_('B:(a * (a * (a * (a * b))))', a * a * a * a * b)
 
     # Multiplication with conversion
     assert_impossible(a * c)
     ctx.define_conv(A, B)
     ctx.define_mul(B, C, C)
-    test('C:(B(a) * c)', a * c)
+    co_('C:(B(a) * c)', a * c)
     # ...and make sure there's no infinite loops of conversions
     ctx.define_conv(B, C)
     ctx.define_conv(C, A)
-    test('C:(B(a) * c)', a * c)
+    co_('C:(B(a) * c)', a * c)
     ctx.define_conv(B, A)
-    test('C:(B(a) * c)', a * c)
-    test('A:(a * a)', a * a)
+    co_('C:(B(a) * c)', a * c)
+    co_('A:(a * a)', a * a)
     # Multiplication with forced target kind
-    test('C:(B(a) * c)', a * c)
-    test('A:(a * A(c))', (a * c).as_kind(A))
+    co_('C:(B(a) * c)', a * c)
+    co_('A:(a * A(c))', (a * c).as_kind(A))
     # Forced post-conversion
     ctx.define_conv(C, D)
     ctx.define_conv(D, E)
-    test('D:D((B(a) * c))', (a * c).as_kind(D))
-    test('E:E(D((B(a) * c)))', (a * c).as_kind(E))
+    co_('D:D((B(a) * c))', (a * c).as_kind(D))
+    co_('E:E(D((B(a) * c)))', (a * c).as_kind(E))
 
     # Transposed operands in multiplication
     assert_impossible(a * a.h)
     ctx.define(A * A.h, A, '%s * %s.h')
-    test('A:(a * a.h)', a * a.h)
+    co_('A:(a * a.h)', a * a.h)
     # transpose only through symmetry conversion
-    test('S:(s * (sym(s)))', s * s.h)
-    test('S:((sym(s)) * (sym(s)))', s.h * s.h)
+    co_('S:(s * (sym(s)))', s * s.h)
+    co_('S:((sym(s)) * (sym(s)))', s.h * s.h)
     
     
 
     # Addition
-    test('A:(a + a)', a + a)
+    co_('A:(a + a)', a + a)
     assert_impossible(a + b)
     ctx.define(A + B, A, '%s + %s')
-    test('A:(a + b)', a + b)
-    test('A:(a + b)', b + a) # note how arguments are sorted
-    test('A:((a + (a + b)) + b)', b + a + b + a)
+    co_('A:(a + b)', a + b)
+    co_('A:(a + b)', b + a) # note how arguments are sorted
+    co_('A:((a + (a + b)) + b)', b + a + b + a)
 
     # Addition through conversion TODO
     #ctx.define_conv(C, A)
-    #test('A:(a + c)', a + c)
+    #co_('A:(a + c)', a + c)
 
     # Transposed operands in addition
     assert_impossible(a.h + a)
     ctx.define(A.h + A, A, '%s.h + %s')
-    test('A:(a.h + a)', a.h + a)
-    test('A:(a + (a.h + (a + (a.h + a))))', a + a.h + a + a.h + a)
-    test('A:(a.h + (a.h + a))', a.h + a.h + a)
+    co_('A:(a.h + a)', a.h + a)
+    co_('A:(a + (a.h + (a + (a.h + a))))', a + a.h + a + a.h + a)
+    co_('A:(a.h + (a.h + a))', a.h + a.h + a)
     ctx.define(B + B.h, B, '%s + %s.h')
-    test('B:(b + b.h)', b.h + b)
+    co_('B:(b + b.h)', b.h + b)
     # transpose only thorugh symmetry conversion
-    #test('S:(s + (sym(s)))', s + s.h) addition through conversion todo
+    #co_('S:(s + (sym(s)))', s + s.h) addition through conversion todo
     
     # Nested expressions
-    test('A:((a * a) + (a * a))', a * a + a * a)
-    test('B:((a + a) * b)', (a + a) * b)
+    co_('A:((a * a) + (a * a))', a * a + a * a)
+    co_('B:((a + a) * b)', (a + a) * b)
     # force use of distributive law...
     #ctx.define(A * C, C, '%s * %s')
     #ctx.define(C * C, C, '%s * %s')
-    #test('B:((a + a) * b)', (a + c) * c)
+    #co_('B:((a + a) * b)', (a + c) * c)
+
+def test_exhaustive_compiler_mul_ordering():
+    ctx = MockMatricesUniverse()
+    # check that ((ab)c) is found when only option
+    A, a, au, auh = ctx.new_matrix('A')
+    B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
+    ctx.define(A * B, A, '%s * %s')
+    ctx.define(A * C, A, '%s * %s')
+    co_('A:((a * b) * c)', a * b * c)
     
 
 def test_stupid_compiler_numpy():
