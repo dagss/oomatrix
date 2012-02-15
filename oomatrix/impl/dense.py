@@ -104,3 +104,15 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
         return RowMajor(out)
 
 
+#
+# Transpose
+#
+@computation(ColumnMajor.h, ColumnMajor)
+def transpose(self):
+    assert self.dtype != np.complex128 and self.dtype != np.complex64
+    return ColumnMajor(self.array.T.copy('F'))
+
+@computation(RowMajor.h, RowMajor)
+def transpose(self):
+    assert self.dtype != np.complex128 and self.dtype != np.complex64
+    return ColumnMajor(self.array.T.copy('C'))
