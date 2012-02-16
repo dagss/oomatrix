@@ -1,8 +1,9 @@
+from .common import *
 import re
-from nose.tools import eq_, ok_, assert_raises
 from ..kind import MatrixImpl
 from ..formatter import BasicExpressionFormatter
 from ..symbolic import *
+from ..computation import computation
 
 class MockImpl(MatrixImpl):
     nrows = ncols = 3
@@ -130,3 +131,45 @@ def test_call_func():
     C._sort_id = 0
     yield assert_argslist, [co, ao, bo], add(a, b, c), C + A + B
     
+def test_hash_and_eq():
+    from ..symbolic import (add, multiply, conjugate_transpose, inverse,
+                            ComputableNode)
+
+    def eq_and_hash(a, b):
+        eq_(a, b)
+        eq_(hash(a), hash(b))
+
+    class A(MockImpl):
+        _sort_id = 1
+    ao = A()
+    a = LeafNode('a', ao)
+    b = LeafNode('a', ao)
+
+    # Leafnode eq
+    ne_(a, b)
+    ok_(not a == b)
+    # Plus eq
+    eq_and_hash(add(a, a), add(a, a))
+    ne_(add(a, a), add(a, b))
+    # More complicated eq
+    eq_and_hash(add(a, a, conjugate_transpose(mul(a, b))),
+                add(a, a, conjugate_transpose(mul(a, b))))
+    ne_(add(a, a, conjugate_transpose(mul(a, b))),
+        add(a, a, conjugate_transpose(mul(b, b))))
+    ne_(add(a, a, conjugate_transpose(mul(a, b))),
+        add(a, a, conjugate_transpose(mul(a, inverse(b)))))
+    
+    # Computables
+    @computation(A, A)
+    def comp():
+        pass
+    @computation(A, A)
+    def other_comp():
+        pass
+    c1 = ComputableNode(comp, [a, a], None, None, None)
+    c2 = ComputableNode(comp, [a, a], None, None, None)
+    c3 = ComputableNode(other_comp, [a, a], None, None, None)
+    eq_and_hash(add(a, c1), add(a, c1))
+    eq_and_hash(add(a, c1), add(a, c2))
+    ne_(c1, c3)
+

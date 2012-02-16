@@ -1,5 +1,27 @@
+"""
+Symbolic tree...
+
+Hashing/equality: Leaf nodes compares by object identity, the rest compares
+by contents.
+
+"""
+
 from .utils import argsort, invert_permutation
 from . import kind
+
+
+# Factory functions
+def add(*args):
+    return AddNode(args)
+
+def multiply(*args):
+    return MultiplyNode(args)
+
+def conjugate_transpose(x):
+    return ConjugateTransposeNode(x)
+
+def inverse(x):
+    return InverseNode(x)
 
 class TODO:
     name = 'TODO'
@@ -10,7 +32,8 @@ class PatternMismatchError(ValueError):
 class ExpressionNode(object):
     name = None
     kind = None
-
+    _hash = None
+    
     def get_type(self):
         return TODO
 
@@ -48,6 +71,31 @@ class ExpressionNode(object):
         tree from kind.py)
         """
         raise NotImplementedError('please override')
+
+    def __hash__(self):
+        if self._hash is None:
+            self._hash = hash((self.symbol,
+                               tuple(hash(child)
+                                     for child in self.get_sorted_children())))
+        return self._hash
+
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return False
+        if len(self.children) != len(other.children):
+            return False
+        for a, b in zip(self.children, other.children):
+            if not a == b:
+                return False
+        # Given the same arithmetic going on, and the same leaf nodes (by id),
+        # then propagated properties like ncols, nrows, dtype, cost
+        # and so on should also be the same.
+        # We need to override in all BaseComputable nodes though.
+        return True
+
+    def __ne__(self, other):
+        return not self == other
+      
 
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):
@@ -293,6 +341,15 @@ class LeafNode(BaseComputable):
     def get_key(self):
         return type(self.matrix_impl)
 
+    def __hash__(self):
+        return id(self)
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
 class ComputableNode(BaseComputable):
     def __init__(self, computation, children,
                  nrows, ncols, dtype):
@@ -313,6 +370,27 @@ class ComputableNode(BaseComputable):
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_computable(*args, **kw)
+
+    def __hash__(self):
+        return hash((id(self.computation),
+                     tuple(hash(child) for child in self.children)))
+
+    def __eq__(self, other):
+        if type(self) is not type(other):
+            return False
+        if self.computation is not other.computation:
+            return False
+        if len(self.children) != len(other.children):
+            return False
+        for a, b in zip(self.children, other.children):
+            if not a == b:
+                return False
+        # Given the same arithmetic going on, and the same leaf nodes (by id),
+        # then propagated properties like ncols, nrows, dtype, cost
+        # and so on should also be the same.
+        # We need to override in all BaseComputable nodes though.
+        return True
+        
 
 
 class DecompositionNode(BaseComputable):
