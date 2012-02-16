@@ -17,6 +17,8 @@ def alleq_(a, b):
 def ndrange(shape, dtype=np.double):
     return np.arange(np.prod(shape)).reshape(shape).astype(dtype)
 
+def ne_(a, b):
+    ok_(a != b)
 
 def plot_add_graph(graph, max_node_size=4, block=False):
     # Plot the addition graph, for use during debugging
