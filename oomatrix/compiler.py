@@ -39,6 +39,29 @@ def set_of_pairwise_nonempty_splits(iterable):
             
 
 
+
+def memoizegenerator(method):
+    """Used for decorating methods in ExhaustiveCompilation in order
+    to use memoization.
+
+    The results of
+
+    #not sure yet: NOTE: If the same decorated method is re-entered
+    #with the same arguments, it will return []. Thus the memoization
+    #also automatically avoids infinite loops.
+    """
+    def new_method(self, *args):
+        # no keyword args allowed
+        key = (id(method), tuple(args))
+        #print key
+        x = self.cache.get(key, None)
+        if x is None:
+            x = tuple(method(self, *args))
+            self.cache[key] = x
+        return x
+    new_method.__name__ = method.__name__
+    return new_method
+
 class ExhaustiveCompilation(object):
     """
     Compiles an expression by trying all possibilities.
@@ -48,6 +71,10 @@ class ExhaustiveCompilation(object):
     memoization should be added. Also, it should be possible refactor
     this into something like Dijkstra or A*.
     """
+    _level = 0
+
+    def __init__(self):
+        self.cache = {}
 
     def compile(self, node):
         possible_nodes = list(self.explore(node))
@@ -59,7 +86,7 @@ class ExhaustiveCompilation(object):
 
     # Visitor implementation
     def visit_multiply(self, node):
-        return self.explore_multiplication(node.children)
+        return self.explore_multiplication(tuple(node.children))
 
     def visit_add(self, node):
         return self.explore_addition(node.children)
@@ -170,6 +197,7 @@ class ExhaustiveCompilation(object):
                                                          only_kinds):
                 yield y
 
+    @memoizegenerator
     def explore_multiplication(self, operands):
         # TODO: Currently only explore pair-wise multiplication, will never
         # invoke A * B * C handlers and the like
@@ -182,19 +210,22 @@ class ExhaustiveCompilation(object):
                 yield x
                 
     def explore_multiplication_split(self, operands, idx):
+        print self._level, idx, len(operands) - idx
+        self._level += 1
         left_computables = self.explore_multiplication(operands[:idx])
         right_computables = self.explore_multiplication(operands[idx:])
-        right_computables = list(right_computables) # will reuse many times
+        self._level -= 1
         for left in left_computables:
             for right in right_computables:
                 for x in self.generate_pair_multiplications(
-                        left, [left.kind], right, [right.kind]):
+                        left, (left.kind,), right, (right.kind,), False):
                     yield x
 
+    @memoizegenerator
     def generate_pair_multiplications(self,
                                       left, left_kinds_tried,
                                       right, right_kinds_tried,
-                                      transpose_tried=False):
+                                      transpose_tried):
         for x in (left, right):
             assert isinstance(x, (symbolic.BaseComputable,
                                   symbolic.ConjugateTransposeNode))
@@ -205,23 +236,23 @@ class ExhaustiveCompilation(object):
         # Look at conjugating back and forth
         if not transpose_tried:
             for x in self.generate_pair_multiplications(
-                symbolic.ConjugateTransposeNode(right), [],
-                symbolic.ConjugateTransposeNode(left), [],
-                transpose_tried=True):
+                symbolic.ConjugateTransposeNode(right), (),
+                symbolic.ConjugateTransposeNode(left), (),
+                True):
                 yield symbolic.ConjugateTransposeNode(x)
         # Recurse with all conversions of left operand
         for new_left in self.generate_conversions(left, left_kinds_tried):
             for x in self.generate_pair_multiplications(
-                    new_left, left_kinds_tried + [new_left.kind],
+                    new_left, left_kinds_tried + (new_left.kind,),
                     right, right_kinds_tried,
-                    transpose_tried=transpose_tried):
+                    transpose_tried):
                 yield x
         # Recurse with all conversions of right operand
         for new_right in self.generate_conversions(right, right_kinds_tried):
             for x in self.generate_pair_multiplications(
                     left, left_kinds_tried,
-                    new_right, right_kinds_tried + [new_right.kind],
-                    transpose_tried=transpose_tried):
+                    new_right, right_kinds_tried + (new_right.kind,),
+                    transpose_tried):
                 yield x
 
     def explore_addition(self, operands):
