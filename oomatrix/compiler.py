@@ -38,26 +38,31 @@ def set_of_pairwise_nonempty_splits(iterable):
                 yield subset, complement
             
 
+GRAY = object()
 
+def filter_results(generator):
+    # Only pick the first result for each kind; ignore the rest
+    results_by_kind = {}
+    for node in generator:
+        results_by_kind.setdefault(node.kind, node)
+    return tuple(results_by_kind.values())
 
 def memoizegenerator(method):
     """Used for decorating methods in ExhaustiveCompilation in order
     to use memoization.
 
-    The results of
-
-    #not sure yet: NOTE: If the same decorated method is re-entered
-    #with the same arguments, it will return []. Thus the memoization
-    #also automatically avoids infinite loops.
+    Also, filters the results so that only one result per kind is returned.
     """
     def new_method(self, *args):
         # no keyword args allowed
         key = (id(method), tuple(args))
-        #print key
         x = self.cache.get(key, None)
         if x is None:
-            x = tuple(method(self, *args))
+            self.cache[key] = GRAY
+            x = filter_results(method(self, *args))
             self.cache[key] = x
+        elif x is GRAY:
+            raise AssertionError('Infinite loop')
         return x
     new_method.__name__ = method.__name__
     return new_method
@@ -210,7 +215,6 @@ class ExhaustiveCompilation(object):
                 yield x
                 
     def explore_multiplication_split(self, operands, idx):
-        print self._level, idx, len(operands) - idx
         self._level += 1
         left_computables = self.explore_multiplication(operands[:idx])
         right_computables = self.explore_multiplication(operands[idx:])
