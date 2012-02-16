@@ -112,7 +112,10 @@ def co_(expected, M, target_kind=None):
         r = '[%r].h' % expr.child.matrix_impl
     else:
         r = repr(expr.matrix_impl)
-    eq_(expected, r)
+    if isinstance(expected, list):
+        ok_(r in expected)
+    else:
+        eq_(expected, r)
 
 def test_exhaustive_compiler():
     ctx = MockMatricesUniverse()
@@ -149,12 +152,12 @@ def test_exhaustive_compiler():
     # ...and make sure there's no infinite loops of conversions
     ctx.define_conv(B, C)
     ctx.define_conv(C, A)
-    co_('C:(B(a) * c)', a * c)
+    co_(['C:(B(a) * c)', 'A:(a * A(c))'], a * c)
     ctx.define_conv(B, A)
-    co_('C:(B(a) * c)', a * c)
+    co_(['C:(B(a) * c)', 'A:(a * A(c))'], a * c)
     co_('A:(a * a)', a * a)
     # Multiplication with forced target kind
-    co_('C:(B(a) * c)', a * c)
+    co_(['C:(B(a) * c)', 'A:(a * A(c))'], a * c)
     co_('A:(a * A(c))', (a * c).as_kind(A))
     # Forced post-conversion
     ctx.define_conv(C, D)
@@ -170,6 +173,23 @@ def test_exhaustive_compiler():
     co_('[S:(s * (sym(s)))].h', s * s.h) # TODO: prefer 'S:(s * (sym(s)))'
     co_('[S:(s * s)].h', s.h * s.h)
     
+    # Nested expressions
+    co_('A:((a * a) + (a * a))', a * a + a * a)
+    co_('B:((a + a) * b)', (a + a) * b)
+
+    # transpose only thorugh symmetry conversion
+    #co_('S:(s + (sym(s)))', s + s.h) addition through conversion todo
+    
+    # force use of distributive law...
+    #ctx.define(A * C, C, '%s * %s')
+    #ctx.define(C * C, C, '%s * %s')
+    #co_('B:((a + a) * b)', (a + c) * c)
+
+def test_exhaustive_compiler_add():
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A')
+    B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
 
     # Addition
     co_('A:(a + a)', a + a)
@@ -179,9 +199,9 @@ def test_exhaustive_compiler():
     co_('A:(a + b)', b + a) # note how arguments are sorted
     co_('A:((a + (a + b)) + b)', b + a + b + a)
 
-    # Addition through conversion TODO
-    #ctx.define_conv(C, A)
-    #co_('A:(a + c)', a + c)
+    # Addition through conversion
+    ctx.define_conv(C, A)
+    co_('A:(a + A(c))', a + c)
 
     # Transposed operands in addition
     assert_impossible(a.h + a)
@@ -191,16 +211,6 @@ def test_exhaustive_compiler():
     co_('A:(a.h + (a.h + a))', a.h + a.h + a)
     ctx.define(B + B.h, B, '%s + %s.h')
     co_('B:(b + b.h)', b.h + b)
-    # transpose only thorugh symmetry conversion
-    #co_('S:(s + (sym(s)))', s + s.h) addition through conversion todo
-    
-    # Nested expressions
-    co_('A:((a * a) + (a * a))', a * a + a * a)
-    co_('B:((a + a) * b)', (a + a) * b)
-    # force use of distributive law...
-    #ctx.define(A * C, C, '%s * %s')
-    #ctx.define(C * C, C, '%s * %s')
-    #co_('B:((a + a) * b)', (a + c) * c)
 
 def test_exhaustive_compiler_more_mul():
     ctx = MockMatricesUniverse()

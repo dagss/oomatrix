@@ -94,7 +94,7 @@ class ExhaustiveCompilation(object):
         return self.explore_multiplication(tuple(node.children))
 
     def visit_add(self, node):
-        return self.explore_addition(node.children)
+        return self.explore_addition(tuple(node.children))
 
     def visit_leaf(self, node):
         yield node
@@ -222,7 +222,8 @@ class ExhaustiveCompilation(object):
         for left in left_computables:
             for right in right_computables:
                 for x in self.generate_pair_multiplications(
-                        left, (left.kind,), right, (right.kind,), False):
+                        left, frozenset([left.kind]),
+                        right, frozenset([right.kind]), False):
                     yield x
 
     @memoizegenerator
@@ -240,14 +241,14 @@ class ExhaustiveCompilation(object):
         # Look at conjugating back and forth
         if not transpose_tried:
             for x in self.generate_pair_multiplications(
-                symbolic.ConjugateTransposeNode(right), (),
-                symbolic.ConjugateTransposeNode(left), (),
+                symbolic.ConjugateTransposeNode(right), frozenset([right.kind]),
+                symbolic.ConjugateTransposeNode(left), frozenset([left.kind]),
                 True):
                 yield symbolic.ConjugateTransposeNode(x)
         # Recurse with all conversions of left operand
         for new_left in self.generate_conversions(left, left_kinds_tried):
             for x in self.generate_pair_multiplications(
-                    new_left, left_kinds_tried + (new_left.kind,),
+                    new_left, left_kinds_tried.union([new_left.kind]),
                     right, right_kinds_tried,
                     transpose_tried):
                 yield x
@@ -255,10 +256,11 @@ class ExhaustiveCompilation(object):
         for new_right in self.generate_conversions(right, right_kinds_tried):
             for x in self.generate_pair_multiplications(
                     left, left_kinds_tried,
-                    new_right, right_kinds_tried + (new_right.kind,),
+                    new_right, right_kinds_tried.union([new_right.kind]),
                     transpose_tried):
                 yield x
 
+    @memoizegenerator
     def explore_addition(self, operands):
         # TODO: Currently only explores nargs =2-computations
         if len(operands) == 1:
@@ -272,16 +274,32 @@ class ExhaustiveCompilation(object):
             # and check for nargs>2-computations as well
             left_computations = self.explore_addition(left_operands)
             right_computations = self.explore_addition(right_operands)
-            right_computations = list(right_computations) # need more than once
+            # right_computations is used multiple times, but the
+            # @memoizegenerator ensures it is a tuple
+            assert type(right_computations) is tuple
             for left in left_computations:
                 for right in right_computations:
-                    for x in self.generate_additions([left, right]):
+                    for x in self.generate_pair_additions(
+                        left, frozenset([left.kind]),
+                        right, frozenset([right.kind])):
                         yield x
             
-    def generate_additions(self, operands):
-        expr = symbolic.AddNode(operands)
+    def generate_pair_additions(self, left, left_kinds_tried,
+                                right, right_kinds_tried):
+        expr = symbolic.AddNode([left, right])
         for x in self.all_computations(expr):
             yield x
+        for new_left in self.generate_conversions(left, left_kinds_tried):
+            for x in self.generate_pair_additions(
+                new_left, left_kinds_tried.union([new_left.kind]),
+                right, right_kinds_tried):
+                yield x
+        for new_right in self.generate_conversions(right, right_kinds_tried):
+            for x in self.generate_pair_additions(
+                left, left_kinds_tried,
+                new_right, right_kinds_tried.union([new_right.kind])):
+                yield x
+                
         
 
 class BaseCompiler(object):
