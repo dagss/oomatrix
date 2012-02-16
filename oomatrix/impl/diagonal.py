@@ -3,7 +3,7 @@ import numpy as np
 from ..kind import MatrixImpl
 from ..computation import computation, conversion
 from ..cost import FLOP, MEM, MEMOP
-from .dense import SymmetricContiguous
+from .dense import SymmetricContiguous, ColumnMajor, RowMajor, Strided
 
 __all__ = ['Diagonal']
 
@@ -65,3 +65,10 @@ def diagonal_plus_diagonal(a, b):
 def diagonal_times_diagonal(a, b):
     return Diagonal(a.array * b.array)
 
+for T in [ColumnMajor, RowMajor, Strided]:
+    @computation(Diagonal + T, T)
+    def diagonal_plus_dense(diagonal, dense):
+        array = dense.array.copy('F' if T is ColumnMajor else 'C')
+        i = np.arange(array.shape[0])
+        array[i, i] = diagonal.array
+        return T(array)

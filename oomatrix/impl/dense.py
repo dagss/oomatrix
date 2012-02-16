@@ -85,17 +85,17 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
     #
     @computation(T.h + T, RowMajor)
     def add(a, b):
-        a_arr = a.wrapped.array.T
+        a_arr = a.array.T
         if issubclass(a_arr.dtype.type, np.complex):
             a_arr = a_arr.conjugate()
         # Ensure result will be C-contiguous with any NumPy
-        out = np.zeros(A.shape, order='C')
+        out = np.zeros(a.array.shape, order='C')
         np.add(a_arr, b.array, out)
         return RowMajor(out)
 
     @computation(T.h * T, RowMajor)
     def multiply(a, b):
-        a_arr = a.wrapped.array.T
+        a_arr = a.array.T
         if issubclass(a_arr.dtype.type, np.complex):
             a_arr = a_arr.conjugate()
         out = np.dot(a_arr, b.array)
