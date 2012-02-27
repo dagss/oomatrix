@@ -6,12 +6,12 @@ dense matrix multiply may be
 
 """
 
-class Cost(object):
+class CostValue(object):
     def __init__(self, **entries):
         self.entries = entries
 
     def __eq__(self, other):
-        if not isinstance(other, Cost):
+        if not isinstance(other, CostValue):
             return False
         return self.entries == other.entries
 
@@ -22,21 +22,21 @@ class Cost(object):
         raise Exception("Not supported, please use weigh method and compare resulting scalars")
 
     def __add__(self, other):
-        if not isinstance(other, Cost):
-            raise TypeError("Cannot add Cost with %s" % type(other))
+        if not isinstance(other, CostValue):
+            raise TypeError("Cannot add CostValue with %s" % type(other))
         units = set(self.entries.keys() + other.entries.keys())
         result = {}
         for unit in units:
             result[unit] = self.entries.get(unit, 0) + other.entries.get(unit, 0)
-        return Cost(**result)
+        return CostValue(**result)
 
     def __mul__(self, other):
-        if isinstance(other, Cost):
-            raise TypeError("Product of Cost with Cost not supported")
+        if isinstance(other, CostValue):
+            raise TypeError("Product of CostValue with CostValue not supported")
         result = dict(self.entries)
         for key in result:
             result[key] *= other
-        return Cost(**result)
+        return CostValue(**result)
 
     def __rmul__(self, other):
         return self * other
@@ -50,7 +50,7 @@ class Cost(object):
 
         E.g.::
 
-            >>> Cost(FLOP=1, MEM=2).weigh(MEM=2, FLOP=1)
+            >>> CostValue(FLOP=1, MEM=2).weigh(MEM=2, FLOP=1)
             5
 
         Parameters
@@ -72,15 +72,15 @@ class Cost(object):
         lst = list(self.entries.items())
         lst.sort()
         s = ' + '.join(['%s %s' % (value, unit) for unit, value in lst])
-        return 'Cost(%s)' % s
+        return 'CostValue(%s)' % s
         
-FLOP = Cost(FLOP=1)
-MEM = Cost(MEM=1)
-MEMOP = Cost(MEMOP=1)
-PRIORITY = Cost(PRIORITY=1)
+FLOP = CostValue(FLOP=1)
+MEM = CostValue(MEM=1)
+MEMOP = CostValue(MEMOP=1)
+UGLY = CostValue(UGLY=1)
 
 default_cost_map = dict(
     FLOP=1,
     MEMOP=0.5,
     MEM=0,
-    PRIORITY=1e-3)
+    UGLY=1e-3)

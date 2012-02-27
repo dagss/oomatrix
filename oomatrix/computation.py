@@ -1,5 +1,7 @@
 import types
 
+from .cost_value import CostValue, FLOP, MEM, MEMOP, UGLY
+
 class ImpossibleOperationError(NotImplementedError):
     pass
    
@@ -11,7 +13,7 @@ def register_computation(match, target_kind, obj):
 def register_conversion(from_kind, to_kind, obj):
     register_computation(from_kind, to_kind, obj)
 
-def computation(match, target_kind):
+def computation(match, target_kind, name=None, cost=None):
     def dec(obj):
         # obj is expected to have a compute method; if not, assume it is
         # callable, and wrap it to provide it
@@ -21,11 +23,11 @@ def computation(match, target_kind):
                 @staticmethod
                 def compute(*args):
                     return func(*args)
-                @staticmethod
-                def cost(*args):
-                    return 1
             Result.__name__ = obj.__name__
             Result.__module__ = obj.__module__
+            Result.name = (name if name is not None
+                           else '%s.%s' % (obj.__module__, obj.__name__))
+            Result.cost = staticmethod(cost)
             obj = Result
 
         obj.match = match

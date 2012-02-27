@@ -2,7 +2,6 @@ import numpy as np
 
 from ..kind import MatrixImpl
 from ..computation import computation, conversion
-from ..cost import FLOP, MEM, MEMOP
 from .dense import SymmetricContiguous, ColumnMajor, RowMajor, Strided
 
 __all__ = ['Diagonal']
