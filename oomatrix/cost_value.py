@@ -22,6 +22,8 @@ class CostValue(object):
         raise Exception("Not supported, please use weigh method and compare resulting scalars")
 
     def __add__(self, other):
+        if other == 0:
+            return self
         if not isinstance(other, CostValue):
             raise TypeError("Cannot add CostValue with %s" % type(other))
         units = set(self.entries.keys() + other.entries.keys())
@@ -72,7 +74,7 @@ class CostValue(object):
         lst = list(self.entries.items())
         lst.sort()
         s = ' + '.join(['%s %s' % (value, unit) for unit, value in lst])
-        return 'CostValue(%s)' % s
+        return s
         
 FLOP = CostValue(FLOP=1)
 MEM = CostValue(MEM=1)

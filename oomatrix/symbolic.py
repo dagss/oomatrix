@@ -6,6 +6,7 @@ by contents.
 
 """
 
+from .cost_value import FLOP
 from .utils import argsort, invert_permutation
 from . import kind
 
@@ -95,6 +96,19 @@ class ExpressionNode(object):
 
     def __ne__(self, other):
         return not self == other
+
+    def __repr__(self):
+        return '\n'.join(self._repr(indent=''))
+
+    def _attr_repr(self):
+        return ''
+
+    def _repr(self, indent):
+        lines = [indent + '<%s: %s' % (type(self).__name__, self._attr_repr())]
+        for child in self.children:
+            lines.extend(child._repr(indent + '   '))
+        lines[-1] += '>'
+        return lines
       
 
 class ArithmeticNode(ExpressionNode):
@@ -302,6 +316,22 @@ class BracketNode(ExpressionNode):
     def call_func(self, func, pattern):
         raise NotImplementedError()
 
+class BlockedNode(ExpressionNode):
+    def __init__(self, blocks, nrows, ncols):
+        # blocks should be a list of (node, selector, selector)
+        nrows = 0
+        ncols = 0
+        for node, row_selector, col_selector in blocks:
+            pass # just assert shape
+        first_node = blocks[0][0]
+        self.blocks = blocks
+        self.nrows = nrows
+        self.ncols = ncols
+        self.universe = first_node.universe
+        self.dtype = first_node.dtype
+        self.cost = None
+        
+
 class BaseComputable(ExpressionNode):
     children = ()
 
@@ -314,7 +344,7 @@ class BaseComputable(ExpressionNode):
         return [self]
 
 class LeafNode(BaseComputable):
-    cost = 0
+    cost = 0 * FLOP
     
     def __init__(self, name, matrix_impl):
         from .kind import MatrixImpl
@@ -327,7 +357,6 @@ class LeafNode(BaseComputable):
         self.nrows = matrix_impl.nrows
         self.ncols = matrix_impl.ncols
         self.dtype = matrix_impl.dtype
-        self.cost = 0
 
     def compute(self):
         return self.matrix_impl
@@ -350,9 +379,12 @@ class LeafNode(BaseComputable):
     def __ne__(self, other):
         return self is not other
 
+    def _attr_repr(self):
+        return self.matrix_impl.name
+
 class ComputableNode(BaseComputable):
     def __init__(self, computation, children,
-                 nrows, ncols, dtype):
+                 nrows, ncols, dtype, symbolic_expr):
         self.computation = computation
         self.children = children
         self.kind = computation.target_kind
@@ -360,8 +392,13 @@ class ComputableNode(BaseComputable):
         self.nrows = nrows
         self.ncols = ncols
         self.dtype = dtype
-        self.cost = sum(child.cost for child in children) + 1
+        self.symbolic_expr = symbolic_expr
 
+        assert computation.cost is not None
+        self.computation_cost = computation.cost(*children)
+        self.cost = (sum(child.cost for child in children) +
+                     self.computation_cost)
+        
     def compute(self):
         args = [child.compute() for child in self.children]
         result = self.computation.compute(*args)
@@ -390,7 +427,9 @@ class ComputableNode(BaseComputable):
         # and so on should also be the same.
         # We need to override in all BaseComputable nodes though.
         return True
-        
+
+    def _attr_repr(self):
+        return '%s; %s' % (self.computation.name, self.cost)
 
 
 class DecompositionNode(BaseComputable):

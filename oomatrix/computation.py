@@ -14,6 +14,12 @@ def register_conversion(from_kind, to_kind, obj):
     register_computation(from_kind, to_kind, obj)
 
 def computation(match, target_kind, name=None, cost=None):
+    if isinstance(cost, int):
+        cost = cost * UGLY
+    if isinstance(cost, CostValue):
+        _cost = lambda *args: cost
+    else:
+        _cost = cost
     def dec(obj):
         # obj is expected to have a compute method; if not, assume it is
         # callable, and wrap it to provide it
@@ -27,7 +33,7 @@ def computation(match, target_kind, name=None, cost=None):
             Result.__module__ = obj.__module__
             Result.name = (name if name is not None
                            else '%s.%s' % (obj.__module__, obj.__name__))
-            Result.cost = staticmethod(cost)
+            Result.cost = staticmethod(_cost)
             obj = Result
 
         obj.match = match
@@ -38,16 +44,16 @@ def computation(match, target_kind, name=None, cost=None):
     return dec
 
 
-def conversion_method(target_kind):
+def conversion_method(target_kind, name=None, cost=None):
     from .kind import add_post_class_definition_hook
     def dec(method):
         def doit(cls, method):
-            return computation(cls, target_kind)(method)
+            return computation(cls, target_kind, name=name, cost=cost)(method)
         add_post_class_definition_hook(doit, method)
         return method
     return dec
 
-def conversion(arg1, arg2=None):
+def conversion(arg1, arg2=None, name=None, cost=None):
     """Decorator for registering conversions
     
     A @conversion is really a computation from one kind to another::
@@ -60,9 +66,9 @@ def conversion(arg1, arg2=None):
     class as the first argument
     """
     if arg2 is None:
-        return conversion_method(arg1)
+        return conversion_method(arg1, name=name, cost=cost)
     else:
-        return computation(arg1, arg2)
+        return computation(arg1, arg2, name=name, cost=cost)
         
 
         
