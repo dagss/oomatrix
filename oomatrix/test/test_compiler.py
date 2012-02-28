@@ -2,7 +2,8 @@ from .common import *
 from .. import Matrix, compute, explain, symbolic
 
 from ..kind import MatrixImpl, MatrixKind, ConjugateTransposePatternNode
-from ..computation import computation, conversion, ImpossibleOperationError
+from ..computation import (computation, conversion, ImpossibleOperationError,
+                           FLOP, UGLY)
 
 from ..compiler import *
 
@@ -45,33 +46,17 @@ class MockMatricesUniverse:
     def __init__(self):
         pass
 
-    def define_mul(self, a, b, result_kind):
-        def get_kind_and_transpose(x):
-            if isinstance(x, ConjugateTransposePatternNode):
-                return x.child, '.h'
-            else:
-                return x, ''
-        
-        a_kind, ah = get_kind_and_transpose(a)
-        b_kind, bh = get_kind_and_transpose(b)
-        assert isinstance(result_kind, MatrixKind)
-
-        @computation(a_kind * b_kind, result_kind)
-        def mul(a, b):
-            x = result_kind('(%s%s * %s%s)' %
-                              (a.value, ah, b.value, bh),
-                              a.nrows, b.ncols)
-            return x
-
-    def define(self, match, result_kind, reprtemplate):
+    def define(self, match, result_kind, reprtemplate, cost=1 * FLOP):
         reprtemplate = '(%s)' % reprtemplate
-        @computation(match, result_kind)
+        @computation(match, result_kind, cost=cost,
+                     name='%r:%r' % (result_kind, match.get_key()))
         def comp(*args):
             return result_kind(reprtemplate % tuple(arg.value for arg in args),
                                args[0].nrows, args[-1].ncols)
 
-    def define_conv(self, from_kind, to_kind):
-        @conversion(from_kind, to_kind)
+    def define_conv(self, from_kind, to_kind, cost=1 * FLOP):
+        @conversion(from_kind, to_kind, cost=cost, name='%s:%s(%s)' %
+                    (to_kind, to_kind, from_kind))
         def conv(a):
             return to_kind('%s(%s)' % (to_kind.name, a.value),
                            a.nrows, a.ncols)
@@ -88,7 +73,9 @@ class MockMatricesUniverse:
             result_kind = result.get_type()
 
         # Always have within-kind addition
-        @computation(NewKind + NewKind, NewKind)
+        @computation(NewKind + NewKind, NewKind,
+                     cost=lambda a, b: 1 * FLOP,
+                     name='%s+%s' % (name_, name_))
         def add(a, b):
             return NewKind('(%s + %s)' % (a.value, b.value),
                            a.nrows, b.ncols)
@@ -130,24 +117,24 @@ def test_exhaustive_compiler():
     E, e, eu, euh = ctx.new_matrix('E')
     S, s, su, suh = ctx.new_matrix('S')
     
-    ctx.define(S.h, S, 'sym(%s)')
+    ctx.define(S.h, S, 'sym(%s)', cost=0)
     ctx.define(S * S, S, '%s * %s')
 
     # Disallowed multiplication
     assert_impossible(a * b)
 
     # Straight pair multiplication
-    ctx.define_mul(A, B, B)
+    ctx.define(A * B, B, '%s * %s')
     co_('B:(a * b)', a * b)
 
     # Multiple operands
-    ctx.define_mul(A, A, A)
+    ctx.define(A * A, A, '%s * %s')
     co_('B:(a * (a * (a * (a * b))))', a * a * a * a * b)
 
     # Multiplication with conversion
     assert_impossible(a * c)
     ctx.define_conv(A, B)
-    ctx.define_mul(B, C, C)
+    ctx.define(B * C, C, '%s * %s')
     co_('C:(B(a) * c)', a * c)
     # ...and make sure there's no infinite loops of conversions
     ctx.define_conv(B, C)
@@ -173,9 +160,6 @@ def test_exhaustive_compiler():
     co_('[S:(s * (sym(s)))].h', s * s.h) # TODO: prefer 'S:(s * (sym(s)))'
     co_('[S:(s * s)].h', s.h * s.h)
     
-    # Nested expressions
-    co_('A:((a * a) + (a * a))', a * a + a * a)
-    co_('B:((a + a) * b)', (a + a) * b)
 
     # transpose only thorugh symmetry conversion
     #co_('S:(s + (sym(s)))', s + s.h) addition through conversion todo
@@ -184,6 +168,32 @@ def test_exhaustive_compiler():
     #ctx.define(A * C, C, '%s * %s')
     #ctx.define(C * C, C, '%s * %s')
     #co_('B:((a + a) * b)', (a + c) * c)
+
+def test_nested():
+    ctx = MockMatricesUniverse()
+
+    # D: only exists as a conversion target and source. No ops
+    # E: only way to E is through conversion from D. No ops.
+    # S: symmetric matrix; no ops with others
+    A, a, au, auh = ctx.new_matrix('A')
+    B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
+    D, d, du, duh = ctx.new_matrix('D')
+    E, e, eu, euh = ctx.new_matrix('E')
+
+    ctx.define(A * B, B, '%s * %s')
+    ctx.define(A * A, A, '%s * %s')
+    ctx.define_conv(A, B)
+    ctx.define_conv(B, C)
+    ctx.define_conv(B, A)
+    ctx.define_conv(C, A)
+    ctx.define_conv(C, D)
+    ctx.define_conv(D, E)
+
+    # Nested expressions
+    co_('A:((a * a) + (a * a))', a * a + a * a)
+    #co_('B:((a + a) * b)', (a + a) * b)
+    
 
 def test_exhaustive_compiler_add():
     ctx = MockMatricesUniverse()

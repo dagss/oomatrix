@@ -16,7 +16,7 @@ from itertools import izip, chain, combinations, permutations
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
 
-from . import formatter, symbolic
+from . import formatter, symbolic, cost_value
 from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
@@ -40,12 +40,28 @@ def set_of_pairwise_nonempty_splits(iterable):
 
 GRAY = object()
 
-def filter_results(generator):
-    # Only pick the first result for each kind; ignore the rest
+def get_cheapest_node(nodes, cost_map):
+    min_cost = np.inf
+    min_node = None
+    for node in nodes:
+        cost = node.cost.weigh(**cost_map)
+        if cost < min_cost:
+            min_cost = cost
+            min_node = node
+    if min_node is None:
+        raise ImpossibleOperationError('empty node list')
+    return min_node
+
+def filter_results(generator, cost_map):
+    # Sort by kind
     results_by_kind = {}
     for node in generator:
-        results_by_kind.setdefault(node.kind, node)
-    return tuple(results_by_kind.values())
+        lst = results_by_kind.setdefault(node.kind, [])
+        lst.append(node)
+    # Only take cheapest for each kind
+    result = tuple(get_cheapest_node(lst, cost_map)
+                   for key, lst in results_by_kind.iteritems())
+    return result
 
 def memoizegenerator(method):
     """Used for decorating methods in ExhaustiveCompilation in order
@@ -59,7 +75,7 @@ def memoizegenerator(method):
         x = self.cache.get(key, None)
         if x is None:
             self.cache[key] = GRAY
-            x = filter_results(method(self, *args))
+            x = filter_results(method(self, *args), self.cost_map)
             self.cache[key] = x
         elif x is GRAY:
             raise AssertionError('Infinite loop')
@@ -80,14 +96,11 @@ class ExhaustiveCompilation(object):
 
     def __init__(self):
         self.cache = {}
+        self.cost_map = cost_value.default_cost_map
 
     def compile(self, node):
-        possible_nodes = list(self.explore(node))
-        possible_nodes.sort(key=lambda node: node.cost)
-        for node in possible_nodes:
-            #if target_kinds is None or node.kind in target_kinds:
-            return node
-        raise ImpossibleOperationError()
+        gen = self.explore(node)
+        return get_cheapest_node(gen, self.cost_map)
 
     # Visitor implementation
     def visit_multiply(self, node):
@@ -175,7 +188,7 @@ class ExhaustiveCompilation(object):
                 matched_key = computation.match
                 args = expr.as_computable_list(matched_key)
                 yield symbolic.ComputableNode(computation, args, nrows,
-                                              ncols, dtype)
+                                              ncols, dtype, expr)
 
     def generate_conversions(self, computable, tried_kinds, only_kinds=None):
         # Find all possible conversion computables that can be put on top
