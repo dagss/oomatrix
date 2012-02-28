@@ -7,6 +7,9 @@ dense matrix multiply may be
 """
 
 class CostValue(object):
+    # invariant: entries does never contain items that are exactly 0;
+    # an empty entries means a (unitless) zero value
+    
     def __init__(self, **entries):
         self.entries = entries
 
@@ -29,12 +32,19 @@ class CostValue(object):
         units = set(self.entries.keys() + other.entries.keys())
         result = {}
         for unit in units:
-            result[unit] = self.entries.get(unit, 0) + other.entries.get(unit, 0)
+            x = self.entries.get(unit, 0) + other.entries.get(unit, 0)
+            if x != 0:
+                result[unit] = x
         return CostValue(**result)
+
+    def __sub__(self, other):
+        return self + -1 * other
 
     def __mul__(self, other):
         if isinstance(other, CostValue):
             raise TypeError("Product of CostValue with CostValue not supported")
+        if other == 0:
+            return CostValue()
         result = dict(self.entries)
         for key in result:
             result[key] *= other
@@ -46,13 +56,13 @@ class CostValue(object):
     def __radd__(self, other):
         return self + other
 
-    def weigh(self, **weights):
+    def weigh(self, weights):
         """
         Yield a scalar value for the cost usable for comparison with other costs.
 
         E.g.::
 
-            >>> CostValue(FLOP=1, MEM=2).weigh(MEM=2, FLOP=1)
+            >>> CostValue(FLOP=1, MEM=2).weigh(dict(MEM=2, FLOP=1))
             5
 
         Parameters
@@ -71,6 +81,8 @@ class CostValue(object):
         return result
 
     def __repr__(self):
+        if len(self.entries) == 0:
+            return '0'
         lst = list(self.entries.items())
         lst.sort()
         s = ' + '.join(['%s %s' % (value, unit) for unit, value in lst])
