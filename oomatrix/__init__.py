@@ -1,7 +1,7 @@
 # Re-exports
 from .matrix import Matrix, Id
 
-mat = Matrix
+#mat = Matrix
 
 def compute(x, *args, **kw):
     return x.compute(*args, **kw)

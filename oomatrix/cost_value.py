@@ -95,6 +95,6 @@ UGLY = CostValue(UGLY=1)
 
 default_cost_map = dict(
     FLOP=1,
-    MEMOP=0.5,
+    MEMOP=1,
     MEM=0,
     UGLY=1e-3)

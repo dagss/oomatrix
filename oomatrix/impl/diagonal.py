@@ -57,16 +57,19 @@ class Diagonal(MatrixImpl):
 def conjugate_transpose(a):
     return Diagonal(a.array.conjugate())
 
-@computation(Diagonal + Diagonal, Diagonal)
+@computation(Diagonal + Diagonal, Diagonal,
+             cost=lambda a, b: a.ncols * FLOP)
 def diagonal_plus_diagonal(a, b):
     return Diagonal(a.array + b.array)
 
-@computation(Diagonal * Diagonal, Diagonal)
+@computation(Diagonal * Diagonal, Diagonal,
+             cost=lambda a, b: a.ncols * FLOP)
 def diagonal_times_diagonal(a, b):
     return Diagonal(a.array * b.array)
 
 for T in [ColumnMajor, RowMajor, Strided]:
-    @computation(Diagonal + T, T)
+    @computation(Diagonal + T, T,
+                 cost=lambda a, b: a.ncols * FLOP + a.ncols * a.nrows * MEMOP)
     def diagonal_plus_dense(diagonal, dense):
         array = dense.array.copy('F' if T is ColumnMajor else 'C')
         i = np.arange(array.shape[0])

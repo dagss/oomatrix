@@ -7,7 +7,7 @@ from ..computation import *
 def test_single_arg_computation():
     class A(MatrixImpl): pass
     class B(MatrixImpl): pass
-    @computation(A, B)
+    @computation(A, B, cost=0)
     def convert_A_to_B(x):
         return 3
     assert A.universe._get_root() is B.universe._get_root()
@@ -17,7 +17,7 @@ def test_single_arg_computation():
 def test_conversion_method_decorator():
     class B(MatrixImpl): pass
     class A(MatrixImpl):
-        @conversion(B)
+        @conversion(B, cost=0)
         def to_B(self):
             return 'B'
     conv = A.universe.get_computations(A)[B][0]
@@ -27,7 +27,7 @@ def test_conversion_method_decorator():
 def test_decorate_class():
     class A(MatrixImpl): pass
     class B(MatrixImpl): pass
-    @computation(A + B, A)
+    @computation(A + B, A, cost=0)
     class A_plus_B:
         @staticmethod
         def compute(a, b):
@@ -43,7 +43,7 @@ def test_decorate_class():
 def test_decorate_function():
     class A(MatrixImpl): pass
     class B(MatrixImpl): pass
-    @computation(A + B, A)
+    @computation(A + B, A, cost=0)
     def A_plus_B(a, b):
         return a + b
     obj = A.universe.get_computations((A + B).get_key())[A][0]

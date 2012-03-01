@@ -256,9 +256,17 @@ class Matrix(object):
         entire matrix.
         """
         matrix = self.compute()
-        if not isinstance(matrix._expr, LeafNode):
+        expr = matrix._expr
+        should_conjugate = False
+        if isinstance(expr, symbolic.ConjugateTransposeNode):
+            should_conjugate = True
+            expr = expr.child
+        if not isinstance(expr, LeafNode):
             raise NotImplementedError()
-        return matrix._expr.matrix_impl.diagonal()
+        diagonal = expr.matrix_impl.diagonal()
+        if should_conjugate:
+            diagonal = diagonal.conjugate()
+        return diagonal
 
     #
     # decompositions

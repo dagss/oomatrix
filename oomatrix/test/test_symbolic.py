@@ -160,15 +160,15 @@ def test_hash_and_eq():
         add(a, a, conjugate_transpose(mul(a, inverse(b)))))
     
     # Computables
-    @computation(A, A)
+    @computation(A, A, cost=0)
     def comp():
         pass
-    @computation(A, A)
+    @computation(A, A, cost=0)
     def other_comp():
         pass
-    c1 = ComputableNode(comp, [a, a], None, None, None)
-    c2 = ComputableNode(comp, [a, a], None, None, None)
-    c3 = ComputableNode(other_comp, [a, a], None, None, None)
+    c1 = ComputableNode(comp, [a, a], None, None, None, 0)
+    c2 = ComputableNode(comp, [a, a], None, None, None, 0)
+    c3 = ComputableNode(other_comp, [a, a], None, None, None, 0)
     eq_and_hash(add(a, c1), add(a, c1))
     eq_and_hash(add(a, c1), add(a, c2))
     ne_(c1, c3)

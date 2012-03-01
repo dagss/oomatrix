@@ -14,6 +14,8 @@ def register_conversion(from_kind, to_kind, obj):
     register_computation(from_kind, to_kind, obj)
 
 def computation(match, target_kind, name=None, cost=None):
+    if cost is None:
+        raise ValueError('Must provide a cost')
     if isinstance(cost, CostValue) or cost == 0:
         _cost = lambda *args: cost
     else:
