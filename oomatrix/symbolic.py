@@ -8,7 +8,7 @@ by contents.
 
 from .cost_value import FLOP
 from .utils import argsort, invert_permutation
-from . import kind
+from . import kind, cost_value
 
 
 # Factory functions
@@ -394,10 +394,12 @@ class ComputableNode(BaseComputable):
         self.dtype = dtype
         self.symbolic_expr = symbolic_expr
 
-        assert computation.cost is not None
+        if computation.cost is None:
+            raise AssertionError('%s has no cost set' % computation.name)
         self.computation_cost = computation.cost(*children)
         self.cost = (sum(child.cost for child in children) +
                      self.computation_cost)
+        assert isinstance(self.cost, cost_value.CostValue)
         
     def compute(self):
         args = [child.compute() for child in self.children]

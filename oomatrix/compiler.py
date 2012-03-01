@@ -44,7 +44,7 @@ def get_cheapest_node(nodes, cost_map):
     min_cost = np.inf
     min_node = None
     for node in nodes:
-        cost = node.cost.weigh(**cost_map)
+        cost = node.cost.weigh(cost_map)
         if cost < min_cost:
             min_cost = cost
             min_node = node

@@ -1,7 +1,7 @@
 import numpy as np
 
 from ..kind import MatrixImpl
-from ..computation import computation, conversion
+from ..computation import computation, conversion, FLOP, MEMOP
 from .dense import SymmetricContiguous, ColumnMajor, RowMajor, Strided
 
 __all__ = ['Diagonal']
@@ -23,7 +23,8 @@ class Diagonal(MatrixImpl):
     def as_dtype(self, dtype):
         return Diagonal(self.array.astype(dtype))
 
-    @conversion(SymmetricContiguous)
+    @conversion(SymmetricContiguous,
+                cost=lambda node: node.ncols * node.nrows * MEMOP)
     def diagonal_to_dense(D):
         n = D.ncols
         i = np.arange(n)
@@ -52,7 +53,7 @@ class Diagonal(MatrixImpl):
 
     factor = cholesky = square_root
 
-@computation(Diagonal.h, Diagonal)
+@computation(Diagonal.h, Diagonal, cost=0)
 def conjugate_transpose(a):
     return Diagonal(a.array.conjugate())
 
@@ -71,3 +72,21 @@ for T in [ColumnMajor, RowMajor, Strided]:
         i = np.arange(array.shape[0])
         array[i, i] = diagonal.array
         return T(array)
+
+# Optimized diagonal-times-dense
+for T in [ColumnMajor, RowMajor, Strided]:
+    @computation(Diagonal * T, T,
+                 cost=lambda a, b: b.ncols * b.nrows * FLOP)
+    def diagonal_times_dense(a, b):
+        out = np.empty_like(b.array)
+        np.multiply(a.array[:, None], b.array, out)
+        return T(out)
+
+# Optimized dense-times-diagonal
+for T in [ColumnMajor, RowMajor, Strided]:
+    @computation(T * Diagonal, T,
+                 cost=lambda a, b: a.ncols * a.nrows * FLOP)
+    def dense_times_diagonal(a, b):
+        out = np.empty_like(a.array)
+        np.multiply(a.array, a.array[None, :], out)
+        return T(out)

@@ -1,4 +1,6 @@
-
+from .kind import MatrixImpl
+from .symbolic import LeafNode
+from . import cost_value
 
 class BasicExpressionFormatter(object):
     def __init__(self, name_to_symbol):
@@ -53,55 +55,85 @@ class ExpressionFormatterFactory(object):
 default_formatter_factory = ExpressionFormatterFactory()
 
     
-        
-
-
-
 
 #
-# Operation formatter
+# explain()
 #
 
-class DescriptionWriter(object):
-    def __init__(self, stream):
+class Explainer(object):
+    def __init__(self, stream, symbolic_root, computable_root, margin=''):
         self.stream = stream
-        self._indent = ''
-        self._names = {}
+        self.symbolic_root = symbolic_root
+        self.computable_root = computable_root
+        self.overview_name_to_expr = {}
+        self.expression_formatter = BasicExpressionFormatter(
+            self.overview_name_to_expr)
+        self.num_indents = 0
+        self.margin = margin
+        self.computable_names = {}
+        self.temp_name_counter = 0
 
-    def format_arg(self, arg):
-        if isinstance(arg, (str, int)):
-            return arg
-        name = self._names.get(id(arg), None)
-        if name is not None:
-            return name
-        elif isinstance(arg, LeafNode):
-            return arg.name
-        elif isinstance(arg, ExpressionNode):
-            name_to_matrix = {}
-            s = formatter.default_formatter.format(arg, name_to_matrix)
-            return s
-        else:
-            return arg
+    def explain(self):
+        expr_str = self.format_expression(self.symbolic_root)
+        for name, expr in self.overview_name_to_expr.iteritems():
+            self.computable_names[expr] = name
+        self.stream.write('Computing expression:\n\n    %s\n\n' % expr_str)
+        self.stream.write('by:\n\n')
+        self.process(self.computable_root, 'Root')
+
+    def format_expression(self, expr):
+        return self.expression_formatter.format(expr)
+
+    def get_label(self, computable):
+        label = self.computable_names.get(computable, None)
+        if label is None:
+            label = '$tmp%d' % self.temp_name_counter
+            self.temp_name_counter += 1
+            #print 'creating label', label, computable
+            self.computable_names[computable] = label
+        return label
 
     def putln(self, line, *args, **kw):
-        args = list(args)
-        for idx, arg in enumerate(args):
-            args[idx] = self.format_arg(arg)
-        for key, arg in kw.iteritems():
-            kw[key] = self.format_arg(arg)
-        self.stream.write('%s%s\n' % (self._indent, line.format(*args, **kw)))
-        
+        self.stream.write(self.margin + '    ' * self.num_indents +
+                          line.format(*args, **kw) + '\n')
+
     def indent(self):
-        if self._indent == '':
-            self._indent = ' - '
-        else:
-            self._indent = '  ' + self._indent
+        self.num_indents += 1
 
     def dedent(self):
-        self._indent = self._indent[2:]
+        self.num_indents -= 1
 
-    def register_buffer(self, name, obj):
-        self._names[id(obj)] = name
+    def process(self, node, prefix):
+        node.accept_visitor(self, node, prefix)
+
+    def visit_computable(self, node, prefix):
+        labels = []
+        for child in node.children:
+            labels.append(child.accept_visitor(self, child, ''))
+        label = self.get_label(node)
+        self.putln('{0} = {1}({2}) [{3} result, cost={4}]',
+                   label,
+                   node.computation.name,
+                   ', '.join(labels),
+                   node.kind.name,
+                   node.cost,
+                   )
+        return label
+        
+        #self.dedent()    
+        #self.putln()
+        #print 'Computable', node, node.__dict__
+
+    def visit_leaf(self, node, prefix):
+        label = self.get_label(node)
+        return label
+        #name = node.name
+        #if name is None:
+        #    name = 'a %s matrix' % node.matrix_impl.name
+        #return name
+
+    def visit_conjugate_transpose(self, node, prefix):
+        node.child.accept_visitor(self, node.child, prefix)
 
 class NoopWriter(object):
     def putln(self, line, *args, **kw):

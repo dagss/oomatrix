@@ -1,9 +1,10 @@
 import numpy as np
+from StringIO import StringIO
 
 from . import symbolic, decompositions
 from .kind import MatrixImpl
 from .symbolic import ExpressionNode, LeafNode
-from .formatter import default_formatter_factory
+from .formatter import default_formatter_factory, Explainer
 
 __all__ = ['Matrix']
 
@@ -22,6 +23,9 @@ class Matrix(object):
         elif isinstance(obj, (str, bool, int, tuple)):
             # Simply protect against common misuses
             raise TypeError('first argument should contain matrix data')
+        elif (isinstance(obj, list) and len(obj) > 0 and
+              isinstance(obj[1], (Matrix, tuple))):
+            pass
         else:
             obj = np.asarray(obj)
             if diagonal:
@@ -88,12 +92,22 @@ class Matrix(object):
             lines.append('[%s]' % s)
         return '\n'.join(lines)
 
-    def compute(self, compiler=None):
+    def compile(self, compiler=None): 
         if compiler is None:
             from .compiler import ExhaustiveCompiler
             compiler = ExhaustiveCompiler()
         computable = compiler.compile(self._expr)
+        return computable
+
+    def compute(self, compiler=None):
+        computable = self.compile(compiler=compiler)
         return Matrix(computable.compute())
+
+    def explain(self, compiler=None):
+        computable = self.compile(compiler=compiler)
+        stream = StringIO()
+        Explainer(stream, self._expr, computable, margin='    ').explain()
+        return stream.getvalue()
 
     def __getitem__(self, index):
         if self.is_expression():
