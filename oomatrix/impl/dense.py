@@ -87,7 +87,7 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
     # Then for the conjugate-transpose versions
     #
     @computation(T.h + T, RowMajor,
-                 cost=lambda a, b: a.nrows * a.ncols)
+                 cost=lambda a, b: a.nrows * a.ncols * FLOP)
     def add(a, b):
         a_arr = a.array.T
         if issubclass(a_arr.dtype.type, np.complex):
