@@ -1,4 +1,5 @@
 from . import symbolic
+from .computation import ImpossibleOperationError
 
 class Decomposition(object):
     pass
@@ -25,6 +26,14 @@ class Factor(Decomposition):
     @staticmethod
     def dispatch(matrix_impl):
         return matrix_impl.factor()
+
+    @staticmethod
+    def get_name(kind):
+        return '%s.%s' % (kind.__name__, kind.factor.__name__)
+
+    @staticmethod
+    def is_supported_by_kind(kind):
+        return hasattr(kind, 'factor')
     
 def make_matrix_method(decomposition_cls, name=None):
     if name is None:
@@ -33,6 +42,10 @@ def make_matrix_method(decomposition_cls, name=None):
     
     def method(matrix):
         from .matrix import Matrix
+        kind = matrix.get_type()
+        if not decomposition_cls.is_supported_by_kind(kind):
+            raise ImpossibleOperationError('%s matrices does not support %s'
+                                           % (kind.name, name))
         return Matrix(symbolic.DecompositionNode(matrix._expr,
                                                  decomposition_cls))
 
