@@ -40,7 +40,7 @@ class Matrix(object):
                 if obj.flags.c_contiguous:
                     r = dense.RowMajor(obj)
                 elif obj.flags.f_contiguous:
-                    r = dense.ColMajor(obj)
+                    r = dense.ColumnMajor(obj)
                 else:
                     r = dense.Strided(obj)
             e = LeafNode(name, r)
