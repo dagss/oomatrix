@@ -235,7 +235,17 @@ def test_exhaustive_compiler_more_mul():
     ctx.define(A.h * B, A, '%s.h * %s')
     ctx.define(B.h, B, '%s.h')
     co_('[A:(a.h * (b.h))].h', b * a)
-    
+
+def test_exhaustive_compiler_transitive():
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A')
+    B, b, bu, buh = ctx.new_matrix('B')
+    # (a + b) * a, with no sum between A and B, so must use distributive
+    ctx.define(A * A, A, "%s * %s")
+    ctx.define(B * A, A, "%s * %s")
+    co_('A:((a * a) + (b * a))', (a + b) * a)
+    co_('A:((a * a) + (b * a))', (a.h + b.h).h * a)
+
 
 def test_stupid_compiler_numpy():
     return

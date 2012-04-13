@@ -222,10 +222,25 @@ class ExhaustiveCompilation(object):
         if len(operands) == 1:
             for x in self.explore(operands[0]):
                 yield x
-
+        # Direct computations
         for split_idx in range(1, len(operands)):
             for x in self.explore_multiplication_split(operands, split_idx):
                 yield x
+        # Look for opportunities to apply the distributive law
+        for i, op in enumerate(operands):
+            if op.can_distribute():
+                for x in self.explore_distributive(operands[:i], op,
+                                                   operands[i + 1:]):
+                    yield x
+
+    def explore_distributive(self, left_ops, op, right_ops):
+        if len(left_ops) > 0:
+            raise NotImplementedError()
+        if len(right_ops) > 0:
+            right = symbolic.MultiplyNode(right_ops)
+            for x in self.explore(op.distribute_right(right)):
+                yield x
+            
                 
     def explore_multiplication_split(self, operands, idx):
         self._level += 1
