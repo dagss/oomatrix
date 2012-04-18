@@ -125,12 +125,10 @@ def test_symbolic():
     yield test, '(De + Di).i', (De + Di).h.i.h
 
 def test_matvec():
-    raise SkipTest()
-    a = np.arange(3)
-    yield ok_, type(De * a) is Vector
-    yield ok_, type(compute(De * a)) is np.ndarray
-    yield ok_, np.all(compute(De * a) == np.dot(De_array, a))
-    yield ok_, np.all(compute(De * (Di + Di) * a) == np.dot(De_array, Di_array * a + Di_array * a))
+    a = np.arange(3)[:, None].copy('C')
+    assert type(compute(De * a)) is np.ndarray
+    #assert np.all(compute(De * a) == np.dot(De_array, a))
+    #assert np.all(compute(De * (Di + Di) * a) == np.dot(De_array, Di_array * a + Di_array * a))
 
     #explain(De * (Di + Di) * a)
 

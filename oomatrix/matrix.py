@@ -8,12 +8,17 @@ from .formatter import default_formatter_factory, Explainer
 
 __all__ = ['Matrix']
 
+def resolve_result_type(a, b):
+    if (a is not None and b is not None and a is not b):
+        raise NotImplementedError(
+            "Unable to prioritize result types %r and %r" % (a, b))
+    return a if a is not None else b
 
 class Matrix(object):
 
     __array_priority__ = 10000
     
-    def __init__(self, obj, name=None, diagonal=False):
+    def __init__(self, obj, name=None, diagonal=False, result_type=None):
         if isinstance(obj, ExpressionNode):
             if (name, diagonal) != (None, False):
                 raise TypeError("cannot provide options when passing an ExpressionNode")
@@ -48,6 +53,7 @@ class Matrix(object):
         self._expr = e
         self.ncols, self.nrows = e.ncols, e.nrows
         self.dtype = e.dtype
+        self.result_type = result_type
 
     def _construct(self, *args, **kw):
         return type(self)(*args, **kw)
@@ -101,7 +107,11 @@ class Matrix(object):
 
     def compute(self, compiler=None):
         computable = self.compile(compiler=compiler)
-        return Matrix(computable.compute())
+        result = Matrix(computable.compute())
+        if self.result_type == np.ndarray:
+            return result.as_array()
+        else:
+            return result
 
     def explain(self, compiler=None):
         computable = self.compile(compiler=compiler)
@@ -189,13 +199,18 @@ class Matrix(object):
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
             other = Matrix(other)
+            result_type = np.ndarray
         elif not isinstance(other, Matrix):
             # TODO implement some conversion framework for registering vector types
             raise TypeError('Type not recognized')
+        else: # Matrix
+            result_type = resolve_result_type(self.result_type,
+                                              other.result_type)            
         if self.ncols != other.nrows:
             raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
                 self.ncols, other.nrows))
-        return Matrix(symbolic.MultiplyNode([self._expr, other._expr]))
+        return Matrix(symbolic.MultiplyNode([self._expr, other._expr]),
+                      result_type=result_type)
 
     def __rmul__(self, other):
         raise NotImplementedError()
