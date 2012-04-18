@@ -219,8 +219,15 @@ class ExhaustiveCompilation(object):
     def explore_multiplication(self, operands):
         # TODO: Currently only explore pair-wise multiplication, will never
         # invoke A * B * C handlers and the like
+        # EXCEPT for a special case of no conversions..., see below
         if len(operands) == 1:
             for x in self.explore(operands[0]):
+                yield x
+        if len(operands) > 2:
+            # TODO this is to detect *exact* match of A * B * C, however
+            # a three-term computation needing conversions won't be detected...
+            expr = symbolic.MultiplyNode(operands)
+            for x in self.all_computations(expr):
                 yield x
         # Direct computations
         for split_idx in range(1, len(operands)):
