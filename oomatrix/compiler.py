@@ -282,10 +282,10 @@ class ExhaustiveCompilation(object):
         # Look at conjugating back and forth
         if not transpose_tried:
             for x in self.generate_pair_multiplications(
-                symbolic.ConjugateTransposeNode(right), frozenset([right.kind]),
-                symbolic.ConjugateTransposeNode(left), frozenset([left.kind]),
+                symbolic.conjugate_transpose(right), frozenset([right.kind]),
+                symbolic.conjugate_transpose(left), frozenset([left.kind]),
                 True):
-                yield symbolic.ConjugateTransposeNode(x)
+                yield symbolic.conjugate_transpose(x)
         # Recurse with all conversions of left operand
         for new_left in self.generate_conversions(left, left_kinds_tried):
             for x in self.generate_pair_multiplications(
