@@ -4,22 +4,53 @@ Symbolic tree...
 Hashing/equality: Leaf nodes compares by object identity, the rest compares
 by contents.
 
+
+By using the factory functions (add, multiply, conjugate_transpose,
+inverse, etc.), one ensures that the tree is in a canonical shape,
+meaning it has a certain number of "obvious" expression simplifications which
+only requires looking at the symbolic structure. Some code expects
+trees to be in this canonical state.  (TODO: Move all such
+simplification from constructors to factories)
+
+ - No nested multiplies or adds; A * B * C, not (A * B) * C
+ - No nested transposes or inverses; A.h.h and A.i.i is simplified
+ - Never A.h.i, but instead A.i.h
+ - (A * B).h -> B.h * A.h, (A + B).h -> A.h + B.h. This makes the
+   "no nested multiplies or adds rules" stronger
+
 """
 
 from .cost_value import FLOP
 from .utils import argsort, invert_permutation
 from . import kind, cost_value
 
+import numpy as np
 
 # Factory functions
-def add(*args):
-    return AddNode(args)
+def add(children):
+    return AddNode(children)
 
-def multiply(*args):
-    return MultiplyNode(args)
+def multiply(children):
+    return MultiplyNode(children)
 
-def conjugate_transpose(x):
-    return ConjugateTransposeNode(x)
+def conjugate_transpose(expr):
+    if isinstance(expr, ConjugateTransposeNode):
+        # a.h.h -> a
+        return expr.child
+    elif (isinstance(expr, InverseNode) and 
+          isinstance(expr.child, ConjugateTransposeNode)):
+        # a.h.i.h -> a.i
+        return InverseNode(expr.child.child)
+    elif isinstance(expr, MultiplyNode):
+        transposed_children = [conjugate_transpose(x)
+                               for x in expr.children]
+        return multiply(transposed_children[::-1])
+    elif isinstance(expr, AddNode):
+        transposed_children = [conjugate_transpose(x)
+                               for x in expr.children]
+        return add(transposed_children)
+    else:
+        return ConjugateTransposeNode(expr)
 
 def inverse(x):
     return InverseNode(x)

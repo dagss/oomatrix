@@ -224,7 +224,7 @@ class Matrix(object):
 
     @property
     def h(self):
-        return Matrix(symbolic.ConjugateTransposeNode(self._expr))
+        return Matrix(symbolic.conjugate_transpose(self._expr))
 
     @property
     def i(self):
