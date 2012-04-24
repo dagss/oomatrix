@@ -128,6 +128,10 @@ class ExhaustiveCompilation(object):
         for new_node in child.accept_visitor(self, child):
             yield symbolic.DecompositionNode(new_node, node.decomposition)
 
+    def visit_inverse(self, node):
+        # TODO: recurse!!; apply inverse to multiplication
+        return self.all_computations(node)
+
     def visit_bracket(self, node):
         # Compile child tree, and filter the resulting options with respect
         # to the target kinds requested here. Bracket nodes serves two
@@ -242,10 +246,12 @@ class ExhaustiveCompilation(object):
 
     def explore_distributive(self, left_ops, op, right_ops):
         if len(left_ops) > 0:
-            raise NotImplementedError()
+            import warnings
+            warnings.warn('need to implement right-distributive')
         if len(right_ops) > 0:
             right = symbolic.MultiplyNode(right_ops)
-            for x in self.explore(op.distribute_right(right)):
+            new_node = op.distribute_right(right)
+            for x in self.explore(new_node):
                 yield x
             
                 
