@@ -236,7 +236,7 @@ def test_exhaustive_compiler_more_mul():
     ctx.define(B.h, B, '%s.h')
     co_('[A:(a.h * (b.h))].h', b * a)
 
-def test_exhaustive_compiler_transitive():
+def test_exhaustive_compiler_distributive():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A')
     B, b, bu, buh = ctx.new_matrix('B')
@@ -245,6 +245,33 @@ def test_exhaustive_compiler_transitive():
     ctx.define(B * A, A, "%s * %s")
     co_('A:((a * a) + (b * a))', (a + b) * a)
     co_('A:((a * a) + (b * a))', (a.h + b.h).h * a)
+
+def test_exhaustive_compiler_mixed():
+    # check that we can safely mix mul and add
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A')
+    B, b, bu, buh = ctx.new_matrix('B')
+    ctx.define(A * A, A, "%s * %s")
+    ctx.define(A.h * A, A, "%s.h * %s")
+    co_('A:((a * a) + (a * a))', (a * a) + (a * a))
+    co_('A:(a + (a.h * (a.h * (a * a))))', a + (a * a).h * (a * a))
+
+def test_commander_failure():
+    # This used to fail due to loosing nodes when applying distributive
+    # law
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A')
+    B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
+    ctx.define(A * A, A, "%s * %s")
+    #ctx.define(A.h * A, A, "%s.h * %s")
+    ctx.define(B * C, C, '%s * %s')
+    ctx.define(A * C, C, '%s * %s')
+    ctx.define(A.h * C, C, '%s.h * %s')
+    ctx.define(B.h * C, C, '%s.h * %s')
+    # Force distributive law (there's no A+B)
+    co_('C:((b * c) + ((a.h * ((a * c) + (b * c))) + (b.h * ((a * c) + (b * c)))))',
+        (b + ((a + b).h * (a + b))) * c)
 
 
 def test_stupid_compiler_numpy():

@@ -249,8 +249,9 @@ class ExhaustiveCompilation(object):
             import warnings
             warnings.warn('need to implement right-distributive')
         if len(right_ops) > 0:
-            right = symbolic.MultiplyNode(right_ops)
+            right = symbolic.multiply(right_ops)
             new_node = op.distribute_right(right)
+            new_node = symbolic.multiply(left_ops + (new_node,))
             for x in self.explore(new_node):
                 yield x
             
