@@ -20,7 +20,7 @@ simplification from constructors to factories)
 
 """
 
-from .cost_value import FLOP
+from .cost_value import FLOP, INVOCATION
 from .utils import argsort, invert_permutation
 from . import kind, cost_value
 
@@ -411,7 +411,7 @@ class LeafNode(BaseComputable):
         return self is not other
 
     def _attr_repr(self):
-        return self.matrix_impl.name
+        return self.name
 
 class ComputableNode(BaseComputable):
     def __init__(self, computation, children,
@@ -427,7 +427,11 @@ class ComputableNode(BaseComputable):
 
         if computation.cost is None:
             raise AssertionError('%s has no cost set' % computation.name)
-        self.computation_cost = computation.cost(*children)
+        self.computation_cost = computation.cost(*children) + INVOCATION
+        if (not isinstance(self.computation_cost, cost_value.CostValue) and
+            self.computation_cost != 0):
+            raise TypeError('cost function %s for %s did not return 0 or a '
+                            'CostValue' % (computation, computation.cost))
         self.cost = (sum(child.cost for child in children) +
                      self.computation_cost)
         assert isinstance(self.cost, cost_value.CostValue)
@@ -435,7 +439,11 @@ class ComputableNode(BaseComputable):
     def compute(self):
         args = [child.compute() for child in self.children]
         result = self.computation.compute(*args)
-        assert isinstance(result, kind.MatrixImpl)
+        if (not isinstance(result, kind.MatrixImpl) or
+            result.ncols != self.ncols or
+            result.nrows != self.nrows):
+            raise AssertionError("Bug in computation (wrong result type or "
+                                 "shape): %r" % self.computation)
         return result
 
     def accept_visitor(self, visitor, *args, **kw):
@@ -479,11 +487,13 @@ class DecompositionNode(BaseComputable):
         self.child = child
         self.children = [child]
         self.decomposition = decomposition
+        self.computation_cost = 0 # TODO!decomposition.cost
         self.nrows, self.ncols = child.nrows, child.ncols
         self.universe = child.universe
         self.dtype = child.dtype
-        self.cost = child.cost
+        self.cost = child.cost + self.computation_cost
         self.kind = child.kind
+        self.symbolic_expr = self
 
     def compute(self):
         assert isinstance(self.child, BaseComputable)

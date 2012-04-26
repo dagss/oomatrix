@@ -85,16 +85,18 @@ class CostValue(object):
             return '0'
         lst = list(self.entries.items())
         lst.sort()
-        s = ' + '.join(['%s %s' % (value, unit) for unit, value in lst])
+        s = ' + '.join(['%.2e %s' % (value, unit) for unit, value in lst])
         return s
         
 FLOP = CostValue(FLOP=1)
 MEM = CostValue(MEM=1)
 MEMOP = CostValue(MEMOP=1)
 UGLY = CostValue(UGLY=1)
+INVOCATION = CostValue(INVOCATION=1)
 
 default_cost_map = dict(
     FLOP=1,
     MEMOP=1,
     MEM=0,
-    UGLY=1e-3)
+    UGLY=1e-3,
+    INVOCATION=1e-4)
