@@ -65,12 +65,17 @@ class SymmetricContiguous(MatrixImpl, NumPyWrapper):
 #
 
 for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
+
+    @computation(T.i, RowMajor,
+                 cost=lambda self: self.ncols**3 * FLOP)
+    def inverse(self):
+        return RowMajor(np.linalg.inv(self.array))    
     
     @computation(T + T, RowMajor,
                  cost=lambda a, b: a.ncols * a.nrows * FLOP)
     def add(a, b):
         # Ensure result will be C-contiguous with any NumPy
-        out = np.zeros(A.shape, order='C')
+        out = np.zeros(a.array.shape, order='C')
         np.add(a.array, b.array, out)
         return RowMajor(out)
 
@@ -93,7 +98,7 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
         if issubclass(a_arr.dtype.type, np.complex):
             a_arr = a_arr.conjugate()
         # Ensure result will be C-contiguous with any NumPy
-        out = np.zeros(a.array.shape, order='C')
+        out = np.zeros(a_arr.shape, order='C')
         np.add(a_arr, b.array, out)
         return RowMajor(out)
 
@@ -108,6 +113,15 @@ for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
             raise NotImplementedError('numpy.dot returned non-C-contiguous array')
         return RowMajor(out)
 
+@computation(ColumnMajor * RowMajor, RowMajor,
+             cost=lambda a, b: a.nrows * b.ncols * a.ncols * FLOP)
+def multiply(a, b):
+    return RowMajor(np.dot(a.array, b.array))
+
+@computation(RowMajor * ColumnMajor, RowMajor,
+             cost=lambda a, b: a.nrows * b.ncols * a.ncols * FLOP)
+def multiply(a, b):
+    return RowMajor(np.dot(a.array, b.array))
 
 #
 # Transpose

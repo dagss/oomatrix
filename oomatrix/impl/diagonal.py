@@ -53,6 +53,10 @@ class Diagonal(MatrixImpl):
 
     factor = cholesky = square_root
 
+@computation(Diagonal.i, Diagonal, cost=lambda self: self.nrows * FLOP)
+def inverse(self):
+    return Diagonal(1 / self.array)
+
 @computation(Diagonal.h, Diagonal, cost=0)
 def conjugate_transpose(a):
     return Diagonal(a.array.conjugate())
@@ -91,5 +95,5 @@ for T in [ColumnMajor, RowMajor, Strided]:
                  cost=lambda a, b: a.ncols * a.nrows * FLOP)
     def dense_times_diagonal(a, b):
         out = np.empty_like(a.array)
-        np.multiply(a.array, a.array[None, :], out)
+        np.multiply(a.array, b.array[None, :], out)
         return T(out)
