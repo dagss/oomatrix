@@ -3,6 +3,7 @@ from nose.tools import ok_, eq_, assert_raises
 from nose import SkipTest
 from textwrap import dedent
 import contextlib
+import os, sys, re
 
 def assert_not_raises(func, *args):
     "Turn any exception into AssertionError"

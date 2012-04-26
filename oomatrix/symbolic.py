@@ -424,6 +424,7 @@ class ComputableNode(BaseComputable):
         self.ncols = ncols
         self.dtype = dtype
         self.symbolic_expr = symbolic_expr
+        self.precedence = symbolic_expr.precedence
 
         if computation.cost is None:
             raise AssertionError('%s has no cost set' % computation.name)

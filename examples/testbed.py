@@ -11,8 +11,8 @@ A = om.Matrix(ndarray((n, n)), 'A')
 D = om.Matrix(3 * np.ones(n), 'D', diagonal=True)
 u = ndarray((n, 1))
 
-expr = A.factor() * D * u
+expr = A * D * u
 
 print explain(expr)
-#print compute(expr)
+print compute(expr)
 

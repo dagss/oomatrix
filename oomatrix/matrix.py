@@ -64,6 +64,9 @@ class Matrix(object):
         """
         return self._expr.get_type()
 
+    def get_kind(self):
+        return self._expr.get_type()
+
     def get_impl(self):
         if self.is_expression():
             raise ValueError("Matrix not computed")
@@ -108,10 +111,10 @@ class Matrix(object):
     def compute(self, compiler=None):
         computable = self.compile(compiler=compiler)
         result = Matrix(computable.compute())
-        if self.result_type == np.ndarray:
-            return result.as_array()
-        else:
-            return result
+        #if self.result_type == np.ndarray:
+        #    return result.as_array()
+        #else:
+        return result
 
     def explain(self, compiler=None):
         computable = self.compile(compiler=compiler)
@@ -186,8 +189,14 @@ class Matrix(object):
     # basic simplifications (elimination of double inverses and transposes)
     # here.
     #
+    def __radd__(self, other):
+        if other == 0:
+            return self
+        raise NotImplementedError()
 
     def __add__(self, other):
+        if other == 0:
+            return self
         if not isinstance(other, Matrix):
             raise TypeError('Matrix instance needed') # TODO implement conversions
 
@@ -200,12 +209,14 @@ class Matrix(object):
         if isinstance(other, np.ndarray):
             other = Matrix(other)
             result_type = np.ndarray
-        elif not isinstance(other, Matrix):
-            # TODO implement some conversion framework for registering vector types
-            raise TypeError('Type not recognized')
-        else: # Matrix
+        elif isinstance(other, Matrix):
             result_type = resolve_result_type(self.result_type,
-                                              other.result_type)            
+                                              other.result_type)
+        elif other == 1:
+            return self
+        else: # Matrix
+            # TODO implement some conversion framework for registering vector types
+            raise TypeError('Type not recognized: %s' % type(other))
         if self.ncols != other.nrows:
             raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
                 self.ncols, other.nrows))
@@ -213,6 +224,8 @@ class Matrix(object):
                       result_type=result_type)
 
     def __rmul__(self, other):
+        if other == 1:
+            return self
         raise NotImplementedError()
         # TODO: Made tricky by not wanting to conjugate a complex result
         

@@ -144,6 +144,9 @@ class Explainer(object):
 
     def process_operation(self, node, computation_name):
         labels = []
+        expr_str = self.format_expression(node.symbolic_expr)
+        self.putln('Compute {0} [cost={1}]:', expr_str, node.cost)
+        self.indent()
         for child in node.children:
             labels.append(child.accept_visitor(self, child))
         label = self.get_label(node)
@@ -151,8 +154,9 @@ class Explainer(object):
                                 computation_name,
                                 labels,
                                 node.kind.name,
-                                node.cost,
+                                node.computation_cost,
                                 )
+        self.dedent()
         return label
 
     def visit_computable(self, node):
@@ -170,7 +174,7 @@ class Explainer(object):
         node.child.accept_visitor(self, node.child)
 
     def visit_decomposition(self, node):
-        print node, node.__dict__
+        #print node, node.__dict__
         return self.process_operation(node,
                                       node.decomposition.get_name(node.kind))
     

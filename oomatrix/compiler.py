@@ -177,6 +177,16 @@ class ExhaustiveCompilation(object):
         nrows = expr.nrows
         ncols = expr.ncols
         dtype = expr.dtype # todo
+        # The no-computation case
+        if isinstance(expr, symbolic.LeafNode):
+            if expr.name == 'D':
+                print 'hi', tried_kinds
+            if (expr.kind not in avoid_kinds and
+                expr.kind not in tried_kinds and
+                (only_kinds is None or expr.kind in only_kinds)):
+                if expr.name == 'D':
+                    print 'HI'
+                yield expr
         # Generates all computables possible for the match_pattern
         key = expr.get_key()
         trivial = isinstance(key, MatrixKind)
@@ -189,10 +199,13 @@ class ExhaustiveCompilation(object):
             if only_kinds is not None and target_kind not in only_kinds:
                 continue
             for computation in computations:
+                if expr.name == 'D':
+                    print 'hi', computation.__dict__
                 matched_key = computation.match
                 args = expr.as_computable_list(matched_key)
-                yield symbolic.ComputableNode(computation, args, nrows,
+                computable = symbolic.ComputableNode(computation, args, nrows,
                                               ncols, dtype, expr)
+                yield computable
 
     def generate_conversions(self, computable, tried_kinds, only_kinds=None):
         # Find all possible conversion computables that can be put on top
