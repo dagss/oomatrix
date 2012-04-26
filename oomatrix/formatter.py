@@ -1,6 +1,7 @@
 from .kind import MatrixImpl
-from .symbolic import LeafNode
-from . import cost_value
+from . import cost_value, symbolic
+
+atomic_nodes = (symbolic.LeafNode, symbolic.DecompositionNode)
 
 class BasicExpressionFormatter(object):
     def __init__(self, name_to_symbol):
@@ -8,43 +9,84 @@ class BasicExpressionFormatter(object):
         self.anonymous_count = 0
 
     def format(self, expr):
-        if len(expr.children) == 0:
-            name = expr.name
-            if name is None:
-                name = '$%d' % self.anonymous_count
-                self.anonymous_count += 1
-            self.name_to_symbol[name] = expr
-            return name
-        else:
-            child_strs = []
-            for childexpr in expr.children:
-                s = self.format(childexpr)
-                if expr.precedence > childexpr.precedence:
-                    s = '(%s)' % s
-                child_strs.append(s)
-            return expr.accept_visitor(self, expr, child_strs)
+        is_atom, r = expr.accept_visitor(self, expr, False)
+        return r
 
-    def visit_add(self, expr, terms):
-        return ' + '.join(terms)
+    def precedence(self, expr):
+        return expr.precedence
 
-    def visit_multiply(self, expr, terms):
-        return ' * '.join(terms)
+    def format_children(self, parent_precedence, children, compute_mode):
+        terms = []
+        for child in children:
+            is_atom, term = child.accept_visitor(self, child, False)
+            if compute_mode and is_atom:
+                #do_parens = True
+                # Figure out if node is atmoic or not; skip conjugate-transpose
+                # and compute
+                #print child
+                #while isinstance(child, (
+                #    symbolic.ConjugateTransposeNode,
+                #    symbolic.ComputableNode)):
+                #    print child, 'to', child.child
+                #    child = child.child
+                #if isinstance(child, atomic_nodes):
+                do_parens = False
+            else:
+                do_parens = child.precedence < parent_precedence
+            if do_parens:
+                term = '(%s)' % term
+            #print term, type(child)
+            terms.append(term)
+        return terms
 
-    def visit_conjugate_transpose(self, expr, terms):
+    def visit_leaf(self, expr, compute_mode):
+        name = expr.name
+        if name is None:
+            name = '$%d' % self.anonymous_count
+            self.anonymous_count += 1
+        self.name_to_symbol[name] = expr
+        return True, name
+
+    def visit_add(self, expr, compute_mode):
+        terms = self.format_children(expr.precedence, expr.children,
+                                     compute_mode)
+        return False, ' + '.join(terms)
+
+    def visit_multiply(self, expr, compute_mode):
+        terms = self.format_children(expr.precedence, expr.children,
+                                     compute_mode)
+        return False, ' * '.join(terms)
+
+    def visit_conjugate_transpose(self, expr, compute_mode):
+        is_atom, term = expr.child.accept_visitor(self,
+                                                  expr.child, compute_mode)
+        if not is_atom:
+            term = '(%s)' % term
+        return True, term + '.h'
+
+    def visit_inverse(self, expr, compute_mode):
+        terms = self.format_children(expr.precedence, expr.children,
+                                     compute_mode)
         assert len(terms) == 1
-        return terms[0] + '.h'
+        return True, terms[0] + '.i'
 
-    def visit_inverse(self, expr, terms):
-        assert len(terms) == 1
-        return terms[0] + '.i'
-
-    def visit_bracket(self, expr, terms):
+    def visit_bracket(self, expr, compute_mode):
+        terms = self.format_children(expr.precedence, expr.children,
+                                     compute_mode)
         assert terms
-        return '[%s]' % terms[0]
+        return True, '[%s]' % terms[0]
 
-    def visit_decomposition(self, expr, terms):
+    def visit_decomposition(self, expr, compute_mode):
+        terms = self.format_children(expr.precedence, expr.children,
+                                     compute_mode)
         assert len(terms) == 1
-        return '%s.%s()' % (terms[0], expr.decomposition.name)
+        return True, '%s.%s()' % (terms[0], expr.decomposition.name)
+
+    def visit_computable(self, expr, compute_mode):
+        # Recurse, but turn on compute_mode
+        is_atom, r = (
+            expr.symbolic_expr.accept_visitor(self, expr.symbolic_expr, True))
+        return is_atom, r
 
 class ExpressionFormatterFactory(object):
     def format(self, expr):
