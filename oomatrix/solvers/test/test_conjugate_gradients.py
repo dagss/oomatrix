@@ -12,23 +12,9 @@ def test_shewchuck():
     x, info = conjugate_gradients(A, b, maxit=200, eps=10**-8)
     bhat = compute_array(A * x)
     assert np.all(ndnorm(bhat - b, axis=0) / ndnorm(b, axis=0) < 1e-8)
-    print info['iterations']
-    plt.semilogy(info['max_residuals'])
-    plt.semilogy(info['min_residuals'])
-    plt.show()
-#    assert  == 2
+    assert info['iterations'] == 2
 
 
-    
-    ## >>> np.dot(A, x)
-    ## array([ 2., -8.])
-    ## >>> k
-    ## 2
-    ## >>> x, k = CG(mymul, b, x, maxit=3, relative_eps=False)
-    ## >>> np.dot(A, x)
-    ## array([ 2., -8.])
-    ## >>> k
-    ## 1
 
     ## Try a bigger matrix; -1 on the first off-diagonal and
     ## increasing sequence on diagonal.

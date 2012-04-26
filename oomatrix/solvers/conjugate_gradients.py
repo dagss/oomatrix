@@ -50,7 +50,7 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
         logger.info('Initial residuals between %e and %e',
                     min_residual, max_residual)
 
-    d = compute_array(A * r)
+    d = compute_array(preconditioner * r)
     
     delta_0 = delta_new = np.sum(r * d, axis=0)
 
@@ -86,7 +86,7 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
         min_residual = np.min(residual)
         if logger is not None:
             logger.info('Iteration %d: Residual between %e and %e (terminating '
-                        'at %e)', min_residual, max_residual, k+1, residual, eps)
+                        'at %e)', k+1, min_residual, max_residual, eps)
         max_residuals.append(max_residual)
         min_residuals.append(min_residual)
         
