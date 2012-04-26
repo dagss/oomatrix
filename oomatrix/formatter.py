@@ -19,23 +19,11 @@ class BasicExpressionFormatter(object):
         terms = []
         for child in children:
             is_atom, term = child.accept_visitor(self, child, False)
-            if compute_mode and is_atom:
-                #do_parens = True
-                # Figure out if node is atmoic or not; skip conjugate-transpose
-                # and compute
-                #print child
-                #while isinstance(child, (
-                #    symbolic.ConjugateTransposeNode,
-                #    symbolic.ComputableNode)):
-                #    print child, 'to', child.child
-                #    child = child.child
-                #if isinstance(child, atomic_nodes):
-                do_parens = False
-            else:
-                do_parens = child.precedence < parent_precedence
+            do_parens = child.precedence < parent_precedence
+            if compute_mode and not is_atom:
+                do_parens = True
             if do_parens:
                 term = '(%s)' % term
-            #print term, type(child)
             terms.append(term)
         return terms
 
