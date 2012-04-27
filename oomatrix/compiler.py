@@ -83,6 +83,19 @@ def memoizegenerator(method):
     new_method.__name__ = method.__name__
     return new_method
 
+def _outer(partial_result, list_of_lists):
+    current_list = list_of_lists[0]
+    if len(list_of_lists) == 1:
+        for x in current_list:
+            yield partial_result + (x,)
+    else:
+        for x in current_list:
+            for y in _outer(partial_result + (x,), list_of_lists[1:]):
+                yield y
+
+def outer(*lists):
+    for x in _outer((), lists):
+        yield x
 class ExhaustiveCompilation(object):
     """
     Compiles an expression by trying all possibilities.
