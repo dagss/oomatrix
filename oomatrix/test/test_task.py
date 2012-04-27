@@ -1,5 +1,7 @@
 from .common import *
-from ..task import Task, Executor
+from ..task import LeafTask, Task, Executor
+
+META = object()
 
 class MockTasks(object):
     def __init__(self, root_name, graph):
@@ -13,7 +15,7 @@ class MockTasks(object):
         self.times_called[task_name] = self.times_called.get(task_name, 0) + 1
 
     def assert_all_called_once(self):
-        assert set(self.times_called.keys()) == set(self.tasks.keys())
+        assert set(self.times_called.keys()) == set(self.name_graph.keys())
         assert all(x == 1 for x in self.times_called.values())
 
     def build(self, name):
@@ -24,16 +26,13 @@ class MockTasks(object):
         arg_names = self.name_graph.get(name, None)
         if arg_names is None:
             # leaf
-            def compute_leaf():
-                self.record_call(name)
-                return name
-            task = Task(compute_leaf, 1, [])
+            task = LeafTask(name, META)
         else:
             def compute(*args):
                 self.record_call(name)
                 return '%s(%s)' % (name, ','.join(args))
             arg_tasks = [self.build(arg_name) for arg_name in arg_names]
-            task = Task(compute, 1, arg_tasks)
+            task = Task(compute, 1, arg_tasks, META)
         self.tasks[name] = task
         return task
 

@@ -5,9 +5,11 @@ class Task(object):
     *Note*: It is not the case that the total_cost of the sum of two tasks
     equals the sum of the total_cost; there could be overlapping dependencies
     """
-    def __init__(self, compute_func, cost, argument_tasks):
+    def __init__(self, compute_func, cost, argument_tasks,
+                 metadata):
         self.compute_func = compute_func
         self.cost = cost
+        self.metadata = metadata
         self.argument_tasks = argument_tasks
         # Compute set of all dependencies
         self.dependencies = frozenset().union(*[arg.dependencies
@@ -21,7 +23,17 @@ class Task(object):
     def __hash__(self):
         return id(self)
 
+    def compute(self, *args):
+        return self.compute_func(*args)
 
+class LeafTask(Task):
+    def __init__(self, value, metadata):
+        Task.__init__(self, None, 0, [], metadata)
+        self.value = value
+
+    def compute(self, *args):
+        assert len(args) == 0
+        return self.value
 
 class Executor(object):
 
@@ -70,7 +82,7 @@ class Executor(object):
         arg_values = [self._execute(arg_task)
                       for arg_task in task.argument_tasks]        
         # Perform the task
-        result = task.compute_func(*arg_values)
+        result = task.compute(*arg_values)
         self.results[task] = result
         # Decref all intermediaries
         for arg_task in task.argument_tasks:
