@@ -12,8 +12,10 @@ class Task(object):
         self.metadata = metadata
         self.argument_tasks = argument_tasks
         # Compute set of all dependencies
-        self.dependencies = frozenset().union(*[arg.dependencies
-                                                for arg in argument_tasks])
+        self.dependencies = (frozenset()
+                             .union(*[arg.dependencies
+                                      for arg in argument_tasks])
+                             .union(argument_tasks))
         # Compute total_cost
         self.total_cost = sum(task.cost for task in self.dependencies) + cost
 

@@ -46,3 +46,11 @@ def test_basic():
     tasks.assert_all_called_once()
     assert len(e.refcounts) == 0
     assert len(e.results) == 0
+
+def test_dependencies_and_costs():
+    a = Task(None, 1, [], META)
+    b = Task(None, 2, [a], META)
+    c = Task(None, 3, [a, b], META)
+    d = Task(None, 1, [c], META)
+    assert d.dependencies == frozenset([a, b, c]) 
+    assert 6 == c.get_total_cost()
