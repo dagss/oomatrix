@@ -1,13 +1,15 @@
+import numpy as np
 
+from .cost_value import zero_cost
 
 class Task(object):
     """
     *Note*: It is not the case that the total_cost of the sum of two tasks
     equals the sum of the total_cost; there could be overlapping dependencies
     """
-    def __init__(self, compute_func, cost, argument_tasks,
+    def __init__(self, computation, cost, argument_tasks,
                  metadata):
-        self.compute_func = compute_func
+        self.computation = computation
         self.cost = cost
         self.metadata = metadata
         self.argument_tasks = argument_tasks
@@ -25,12 +27,18 @@ class Task(object):
     def __hash__(self):
         return id(self)
 
+    def __repr__(self):
+        return '<Task %x:%r; total cost:%r>' % (id(self),
+                                                self.computation.name if
+                                                self.computation is not None
+                                                else '', self.total_cost)
+
     def compute(self, *args):
-        return self.compute_func(*args)
+        return self.computation.compute(*args)
 
 class LeafTask(Task):
     def __init__(self, value, metadata):
-        Task.__init__(self, None, 0, [], metadata)
+        Task.__init__(self, None, zero_cost, [], metadata)
         self.value = value
 
     def compute(self, *args):

@@ -109,11 +109,14 @@ class Matrix(object):
         return computable
 
     def compute(self, compiler=None):
-        computable = self.compile(compiler=compiler)
-        result = Matrix(computable.compute())
-        #if self.result_type == np.ndarray:
-        #    return result.as_array()
-        #else:
+        task_node = self.compile(compiler=compiler)
+        from .task import Executor
+        matrix_impl = Executor(task_node.task).execute()
+        if task_node.conjugate_transpose:
+            expr = symbolic.ConjugateTranspose(matrix_impl)
+        else:
+            expr = matrix_impl
+        result = Matrix(expr)
         return result
 
     def explain(self, compiler=None):

@@ -159,7 +159,7 @@ class ArithmeticNode(ExpressionNode):
         self.ncols = self.children[-1].ncols
         self.dtype = self.children[0].dtype # TODO combine better
         self.universe = self.children[0].universe
-        self.cost = sum(child.cost for child in self.children)
+        #self.cost = sum(child.cost for child in self.children)
         self._child_sort()
 
     def _child_sort(self):
@@ -256,7 +256,6 @@ class ConjugateTransposeNode(SingleChildNode):
         self.ncols, self.nrows = child.nrows, child.ncols
         self.universe = child.universe
         self.dtype = child.dtype
-        self.cost = child.cost
         self.kind = child.kind
 
     def accept_visitor(self, visitor, *args, **kw):
@@ -319,7 +318,7 @@ class InverseNode(SingleChildNode):
         self.nrows, self.ncols = child.nrows, child.ncols
         self.universe = child.universe
         self.dtype = child.dtype
-        self.cost = child.cost
+        #self.cost = child.cost
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_inverse(*args, **kw)
@@ -339,7 +338,7 @@ class BracketNode(ExpressionNode):
         self.nrows, self.ncols = child.nrows, child.ncols
         self.universe = child.universe
         self.dtype = child.dtype
-        self.cost = child.cost
+        #self.cost = child.cost
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_bracket(*args, **kw)
@@ -373,6 +372,28 @@ class BaseComputable(ExpressionNode):
         if pattern != self.kind:
             raise PatternMismatchError()
         return [self]
+
+class Promise(BaseComputable):
+    def __init__(self, task):
+        metadata = task.metadata
+        self.metadata = task.metadata
+        self.nrows = metadata.nrows
+        self.ncols = metadata.ncols
+        self.kind = metadata.kind
+        self.universe = self.kind.universe
+        self.dtype = metadata.dtype
+        self.task = task
+
+    def get_key(self):
+        return self.kind
+
+    def __hash__(self):
+        return id(self)
+
+    def as_computable_list(self, pattern):
+        if pattern != self.metadata.kind:
+            raise PatternMismatchError()
+        return [self.task]
 
 class LeafNode(BaseComputable):
     cost = 0 * FLOP
@@ -492,7 +513,7 @@ class DecompositionNode(BaseComputable):
         self.nrows, self.ncols = child.nrows, child.ncols
         self.universe = child.universe
         self.dtype = child.dtype
-        self.cost = child.cost + self.computation_cost
+        #self.cost = child.cost + self.computation_cost
         self.kind = child.kind
         self.symbolic_expr = self
 

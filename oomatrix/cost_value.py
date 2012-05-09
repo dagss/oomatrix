@@ -94,6 +94,8 @@ MEMOP = CostValue(MEMOP=1)
 UGLY = CostValue(UGLY=1)
 INVOCATION = CostValue(INVOCATION=1)
 
+zero_cost = CostValue()
+
 default_cost_map = dict(
     FLOP=1,
     MEMOP=1,

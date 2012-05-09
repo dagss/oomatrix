@@ -49,11 +49,12 @@ def co_(expected, M, target_kind=None):
     else:
         r = repr(expr.matrix_impl)
     if isinstance(expected, list):
-        ok_(r in expected)
+        if not r in expected:
+            raise AssertionError("Could not find %r in %r" % (r, expected))
     else:
         eq_(expected, r)
 
-def test_exhaustive_compiler():
+def test_exhaustive_compiler_basic():
     ctx = MockMatricesUniverse()
 
     # D: only exists as a conversion target and source. No ops
@@ -75,10 +76,9 @@ def test_exhaustive_compiler():
     # Straight pair multiplication
     ctx.define(A * B, B, '%s * %s')
     co_('B:(a * b)', a * b)
-
     # Multiple operands
-    ctx.define(A * A, A, '%s * %s')
     co_('B:(a * (a * (a * (a * b))))', a * a * a * a * b)
+    ctx.define(A * A, A, '%s * %s')
 
     # Multiplication with conversion
     assert_impossible(a * c)
@@ -100,7 +100,6 @@ def test_exhaustive_compiler():
     ctx.define_conv(D, E)
     co_('D:D((B(a) * c))', (a * c).as_kind(D))
     co_('E:E(D((B(a) * c)))', (a * c).as_kind(E))
-
     # Transposed operands in multiplication
     assert_impossible(a * a.h)
     ctx.define(A * A.h, A, '%s * %s.h')

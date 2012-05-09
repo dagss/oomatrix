@@ -20,6 +20,10 @@ from . import formatter, symbolic, cost_value
 from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
+from .task import Task, LeafTask
+from .metadata import MatrixMetadata
+from .cost_value import FLOP, INVOCATION
+
 
 def powerset(iterable):
     "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
@@ -40,26 +44,32 @@ def set_of_pairwise_nonempty_splits(iterable):
 
 GRAY = object()
 
-def get_cheapest_node(nodes, cost_map):
+def get_cheapest_task(task_nodes, cost_map):
+    print
+    task_nodes = list(task_nodes)
+    for x in task_nodes:
+        pprint( (x.task, x.task.argument_tasks))
+    #print [x.task for x in task_nodes]
     min_cost = np.inf
     min_node = None
-    for node in nodes:
-        cost = node.cost.weigh(cost_map)
+    for task_node in task_nodes:
+        cost = task_node.task.total_cost.weigh(cost_map)
         if cost < min_cost:
             min_cost = cost
-            min_node = node
+            min_node = task_node
     if min_node is None:
-        raise ImpossibleOperationError('empty node list')
+        raise ImpossibleOperationError('no possible computation')
+    print 'selected min:', min_node.task
     return min_node
 
 def filter_results(generator, cost_map):
     # Sort by kind
     results_by_kind = {}
-    for node in generator:
-        lst = results_by_kind.setdefault(node.kind, [])
-        lst.append(node)
+    for task_node in generator:
+        lst = results_by_kind.setdefault(task_node.task.metadata.kind, [])
+        lst.append(task_node)
     # Only take cheapest for each kind
-    result = tuple(get_cheapest_node(lst, cost_map)
+    result = tuple(get_cheapest_task(lst, cost_map)
                    for key, lst in results_by_kind.iteritems())
     return result
 
@@ -96,6 +106,31 @@ def _outer(partial_result, list_of_lists):
 def outer(*lists):
     for x in _outer((), lists):
         yield x
+
+class TaskNode:
+    def __init__(self, task, conjugate_transpose):
+        self.task = task
+        self.conjugate_transpose = conjugate_transpose
+
+    def tree(self):
+        node = symbolic.Promise(self.task)
+        if self.conjugate_transpose:
+            node = symbolic.ConjugateTransposeNode(node)
+        return node
+
+def find_cost(computation, arg_tasks):
+    if computation.cost is None:
+        raise AssertionError('%s has no cost set' %
+                             computation.name)
+    metadata_list = [task.metadata for task in arg_tasks]            
+    cost = computation.cost(*metadata_list) + INVOCATION
+    if cost == 0:
+        cost = cost_value.zero_cost
+    if not isinstance(cost, cost_value.CostValue):
+            raise TypeError('cost function %s for %s did not return 0 or a '
+                            'CostValue' % (computation, computation.cost))
+    return cost
+
 class ExhaustiveCompilation(object):
     """
     Compiles an expression by trying all possibilities.
@@ -104,8 +139,11 @@ class ExhaustiveCompilation(object):
     even without memoization, then take the cheapest. Of course,
     memoization should be added. Also, it should be possible refactor
     this into something like Dijkstra or A*.
+
+    The input is a symbolic syntax tree, the output is a graph of Task
+    objects.
+    
     """
-    _level = 0
 
     def __init__(self):
         self.cache = {}
@@ -113,7 +151,7 @@ class ExhaustiveCompilation(object):
 
     def compile(self, node):
         gen = self.explore(node)
-        return get_cheapest_node(gen, self.cost_map)
+        return get_cheapest_task(gen, self.cost_map)
 
     # Visitor implementation
     def visit_multiply(self, node):
@@ -123,13 +161,17 @@ class ExhaustiveCompilation(object):
         return self.explore_addition(tuple(node.children))
 
     def visit_leaf(self, node):
-        yield node
+        metadata = MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
+                                  node.dtype)
+        task = LeafTask(node.matrix_impl, metadata)
+        yield TaskNode(task, False)
 
     def visit_conjugate_transpose(self, node):
         # Recurse and process children, and then transpose the result
         child = node.child
-        for new_node in child.accept_visitor(self, child):
-            yield symbolic.ConjugateTransposeNode(new_node)
+        for task_node in child.accept_visitor(self, child):
+            yield TaskNode(task_node.task,
+                           not task_node.conjugate_transpose)
         # Also look at A.h -> A-style computations
         #for new_node in self.all_computations(node):
         #    yield new_node
@@ -153,17 +195,19 @@ class ExhaustiveCompilation(object):
         # when using the distributive law, terms cancelling etc.
         child = node.child
         allowed_kinds = node.allowed_kinds
-        for new_node in child.accept_visitor(self, child):
+        for task_node in child.accept_visitor(self, child):
             if allowed_kinds is None:
-                yield new_node
+                yield task_node
             else:
-                if new_node.kind in allowed_kinds:
-                    yield new_node
+                if task_node.task.metadata.kind in allowed_kinds:
+                    yield task_node
                 else:
                     # post-operation conversion
-                    for converted_node in self.generate_conversions_recursive(
-                        new_node, [new_node.kind], only_kinds=allowed_kinds):
-                        yield converted_node
+                    for converted in self.generate_conversions_recursive(
+                        task_node.tree(),
+                        [task_node.task.metadata.kind],
+                        only_kinds=allowed_kinds):
+                        yield converted
             
 
     #
@@ -187,18 +231,16 @@ class ExhaustiveCompilation(object):
         # It is like avoid_kinds in that it avoids going *to* any of the kinds,
         # but it only does so if expr is trivial (so that "kind.h -> kind" is
         # allowed).
+        
         nrows = expr.nrows
         ncols = expr.ncols
         dtype = expr.dtype # todo
         # The no-computation case
         if isinstance(expr, symbolic.LeafNode):
-            if expr.name == 'D':
-                print 'hi', tried_kinds
+            assert False
             if (expr.kind not in avoid_kinds and
                 expr.kind not in tried_kinds and
                 (only_kinds is None or expr.kind in only_kinds)):
-                if expr.name == 'D':
-                    print 'HI'
                 yield expr
         # Generates all computables possible for the match_pattern
         key = expr.get_key()
@@ -212,37 +254,38 @@ class ExhaustiveCompilation(object):
             if only_kinds is not None and target_kind not in only_kinds:
                 continue
             for computation in computations:
-                if expr.name == 'D':
-                    print 'hi', computation.__dict__
                 matched_key = computation.match
-                args = expr.as_computable_list(matched_key)
-                computable = symbolic.ComputableNode(computation, args, nrows,
-                                              ncols, dtype, expr)
-                yield computable
+                arg_tasks = expr.as_computable_list(matched_key)
+                metadata = MatrixMetadata(target_kind, (nrows,), (ncols,),
+                                          dtype)
+                cost = find_cost(computation, arg_tasks)
+                task = Task(computation, cost, arg_tasks, metadata)
+                yield TaskNode(task, False)
 
-    def generate_conversions(self, computable, tried_kinds, only_kinds=None):
+    def generate_conversions(self, expr, tried_kinds, only_kinds=None):
         # Find all possible conversion computables that can be put on top
         # of the computable. Always pass a set of kinds already tried, to
         # avoid infinite loops
-        for x in self.all_computations(computable, tried_kinds=tried_kinds,
+        for x in self.all_computations(expr, tried_kinds=tried_kinds,
                                        only_kinds=only_kinds):
             yield x
 
-    def generate_conversions_recursive(self, computable, tried_kinds,
+    def generate_conversions_recursive(self, expr, tried_kinds,
                                        only_kinds=None):
         # Find all possible *chains* of conversion computables that
         # can be put on top of the computable. I.e., like generate_conversions,
         # but allow more than one conversion.
 
         # For each possible conversion target...
-        for x in self.generate_conversions(computable, tried_kinds):
+        for x in self.generate_conversions(expr, tried_kinds):
             # Yield this conversion
-            if only_kinds is None or x.kind in only_kinds:
+            if only_kinds is None or x.task.metadata.kind in only_kinds:
                 yield x
             # ...and recurse to add more conversions
-            for y in self.generate_conversions_recursive(x,
-                                                         tried_kinds + [x.kind],
-                                                         only_kinds):
+            for y in self.generate_conversions_recursive(
+                x.tree(),
+                tried_kinds + [x.task.metadata.kind],
+                only_kinds):
                 yield y
 
     @memoizegenerator
@@ -253,22 +296,23 @@ class ExhaustiveCompilation(object):
         if len(operands) == 1:
             for x in self.explore(operands[0]):
                 yield x
-        if len(operands) > 2:
-            # TODO this is to detect *exact* match of A * B * C, however
-            # a three-term computation needing conversions won't be detected...
-            expr = symbolic.MultiplyNode(operands)
-            for x in self.all_computations(expr):
+        #if len(operands) >= 2:
+        #    # TODO this is to detect *exact* match of A * B * C, however
+        #    # a three-term computation needing conversions won't be detected...
+        #    expr = symbolic.MultiplyNode(operands)
+        #    for x in self.all_computations(expr):
                 yield x
         # Direct computations
         for split_idx in range(1, len(operands)):
             for x in self.explore_multiplication_split(operands, split_idx):
+                assert isinstance(x, TaskNode)
                 yield x
         # Look for opportunities to apply the distributive law
-        for i, op in enumerate(operands):
-            if op.can_distribute():
-                for x in self.explore_distributive(operands[:i], op,
-                                                   operands[i + 1:]):
-                    yield x
+        #for i, op in enumerate(operands):
+        #    if op.can_distribute():
+        #        for x in self.explore_distributive(operands[:i], op,
+        #                                           operands[i + 1:]):
+        #            yield x
 
     def explore_distributive(self, left_ops, op, right_ops):
         if len(left_ops) > 0:
@@ -283,49 +327,51 @@ class ExhaustiveCompilation(object):
             
                 
     def explore_multiplication_split(self, operands, idx):
-        self._level += 1
-        left_computables = self.explore_multiplication(operands[:idx])
-        right_computables = self.explore_multiplication(operands[idx:])
-        self._level -= 1
-        for left in left_computables:
-            for right in right_computables:
-                for x in self.generate_pair_multiplications(
-                        left, frozenset([left.kind]),
-                        right, frozenset([right.kind]), False):
-                    yield x
+        left_task_nodes = self.explore_multiplication(operands[:idx])
+        right_task_nodes = self.explore_multiplication(operands[idx:])
+        for left, right in outer(left_task_nodes, right_task_nodes):
+            for x in self.generate_pair_multiplications(
+                        left, frozenset([left.task.metadata.kind]),
+                        right, frozenset([right.task.metadata.kind]), False):
+                yield x
 
     @memoizegenerator
     def generate_pair_multiplications(self,
                                       left, left_kinds_tried,
                                       right, right_kinds_tried,
                                       transpose_tried):
-        for x in (left, right):
-            assert isinstance(x, (symbolic.BaseComputable,
-                                  symbolic.ConjugateTransposeNode))
+        assert isinstance(left, TaskNode)
+        assert isinstance(right, TaskNode)
         # Look up any direct computations
-        expr = symbolic.MultiplyNode([left, right])
+        expr = symbolic.MultiplyNode([left.tree(), right.tree()])
         for x in self.all_computations(expr):
             yield x
         # Look at conjugating back and forth
-        if not transpose_tried:
-            for x in self.generate_pair_multiplications(
-                symbolic.conjugate_transpose(right), frozenset([right.kind]),
-                symbolic.conjugate_transpose(left), frozenset([left.kind]),
-                True):
-                yield symbolic.conjugate_transpose(x)
+        1/0
+        #if not transpose_tried:
+        #    for x in self.generate_pair_multiplications(
+        #        TaskNode(right.task, not right.conjugate_transpose)),
+        #        frozenset([right.task.metadata.kind]),
+        #        symbolic.conjugate_transpose(left.tree()),
+        #        frozenset([left.task.metadata.kind]),
+        #        True):
+        #        yield TaskNode(x.task, not x.conjugate_transpose)
         # Recurse with all conversions of left operand
-        for new_left in self.generate_conversions(left, left_kinds_tried):
+        for new_left in self.generate_conversions(left.tree(), left_kinds_tried):
             for x in self.generate_pair_multiplications(
-                    new_left, left_kinds_tried.union([new_left.kind]),
-                    right, right_kinds_tried,
-                    transpose_tried):
+                new_left,
+                left_kinds_tried.union([new_left.task.metadata.kind]),
+                right, right_kinds_tried,
+                transpose_tried):
                 yield x
         # Recurse with all conversions of right operand
-        for new_right in self.generate_conversions(right, right_kinds_tried):
+        for new_right in self.generate_conversions(right.tree(), right_kinds_tried):
             for x in self.generate_pair_multiplications(
-                    left, left_kinds_tried,
-                    new_right, right_kinds_tried.union([new_right.kind]),
-                    transpose_tried):
+                left,
+                left_kinds_tried,
+                new_right,
+                right_kinds_tried.union([new_right.task.metadata.kind]),
+                transpose_tried):
                 yield x
 
     @memoizegenerator
@@ -414,8 +460,9 @@ class BaseCompiler(object):
     """
 
     def compile(self, expression):
-        operation_root = self.compilation_factory().compile(expression)
-        return operation_root
+        task_node = self.compilation_factory().compile(expression)
+        return task_node
+
 
 class ExhaustiveCompiler(BaseCompiler):
     compilation_factory = ExhaustiveCompilation
