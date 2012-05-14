@@ -1,5 +1,5 @@
 from .common import *
-from ..task import LeafTask, Task, Executor
+from ..task import LeafTask, Task, Scheduler, DefaultExecutor
 from ..cost_value import FLOP
 from ..computation import computation
 
@@ -44,12 +44,14 @@ class MockTasks(object):
         self.tasks[name] = task
         return task
 
+def make_scheduler(task):
+    return Scheduler(task, DefaultExecutor())
 
 def test_basic():
     tasks = MockTasks('a', {'a': ['b', 'c'],
                             'b': ['d', 'e'],
                             'd': ['e']})
-    e = Executor(tasks.root)
+    e = make_scheduler(tasks.root)
     assert 'a(b(d(e),e),c)' == e.execute()
     tasks.assert_all_called_once()
 #    assert len(e.refcounts) == 0
@@ -63,7 +65,7 @@ def test_lifetime():
                             'b': ['x'],
                             'c': ['x'],
                             'x': ['w']})
-    e = Executor(tasks.root)
+    e = make_scheduler(tasks.root)
     assert 'a(b(x(w)),c(x(w)))' == e.execute()
     tasks.assert_all_called_once()
 
@@ -74,14 +76,14 @@ def test_lifetimes_partial_overlap():
                             'd': ['q'],
                             'x': ['x1'],
                             'q': ['q1']})
-    e = Executor(tasks.root)
+    e = make_scheduler(tasks.root)
     assert 'a(b(x(x1)),c(x(x1),q(q1)),d(q(q1)))' == e.execute()
     tasks.assert_all_called_once()
 
 def test_lifetimes_trailing():
     tasks = MockTasks('a', {'a': ['b', 'c'],
                             'c': ['d']})
-    e = Executor(tasks.root)
+    e = make_scheduler(tasks.root)
     assert 'a(b,c(d))' == e.execute()
     tasks.assert_all_called_once()
     

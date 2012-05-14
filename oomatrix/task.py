@@ -63,18 +63,41 @@ class LeafTask(Task):
         assert len(args) == 0
         return self.value
 
-class Executor(object):
+class DefaultExecutor(object):
+    def __init__(self):
+        self.results = {}
+    
+    def execute_task(self, task, arguments):
+        result = task.compute(*arguments)
+        self.results[task] = result
+        return result
 
-    def __init__(self, root_task):
+    def get_result(self, task):
+        return self.results[task]
+
+    def is_ready(self, task):
+        return task in self.results
+    
+    def release_result(self, task):
+        if task in self.results:
+            del self.results[task]
+
+    def done(self):
+        assert len(self.results) == 0
+
+class Scheduler(object):
+
+    def __init__(self, root_task, executor):
         self.root_task = root_task
-        self.for_reuse = {}
         self.gray_tasks = set()
+        self.executor = executor
 
     def execute(self):
         # First incref the entire tree; then we decref during computation
         # traversal
         result = self._execute(self.root_task, frozenset())
-        assert len(self.for_reuse) == 0
+        self.executor.release_result(self.root_task)
+        self.executor.done()
         return result
 
     def _execute(self, task, keep_for_parent):
@@ -93,19 +116,15 @@ class Executor(object):
             # Do evaluation of this argument
             result = self._execute(arg_task, keep_set)
             results[i] = result
-            if arg_task in keep_set:
-                self.for_reuse[arg_task] = result
+            if arg_task not in keep_set:
+                self.executor.release_result(arg_task)
             for x in kept_for_me:
-                if x in self.for_reuse:
-                    del self.for_reuse[x]
+                self.executor.release_result(x)
 
-
-        x = self.for_reuse.get(task, None)
-        if x is not None:
+        if self.executor.is_ready(task):
             if task in self.gray_tasks:
                 raise AssertionError("Cycle in graph")
-            # Already computed
-            return x
+            return self.executor.get_result(task)
         
         self.gray_tasks.add(task)
 
@@ -113,7 +132,7 @@ class Executor(object):
         arg_results = [None] * n
         if n > 0:
             eval_args(arg_results, n - 1, keep_for_parent)
-        result = task.compute(*arg_results)
+        result = self.executor.execute_task(task, arg_results)
         
         self.gray_tasks.remove(task)
         return result
