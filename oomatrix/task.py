@@ -36,6 +36,24 @@ class Task(object):
     def compute(self, *args):
         return self.computation.compute(*args)
 
+
+    def dump_lines(self, encountered, indent=''):
+        my_id = encountered.get(self, None)
+        if my_id is None:
+            # Dump full representation
+            my_id = len(encountered)
+            encountered[self] = str(my_id)
+            lines = ['%s%s: %r' % (indent, my_id, self)]
+            for dep in self.argument_tasks:
+                lines += dep.dump_lines(encountered, indent + '    ')
+        else:
+            # Reference earlier dumped
+            lines = ['%s%s: (see above)' % (indent, my_id)]
+        return lines
+
+    def dump(self):
+        return '\n'.join(self.dump_lines({}))
+
 class LeafTask(Task):
     def __init__(self, value, metadata):
         Task.__init__(self, None, zero_cost, [], metadata)
