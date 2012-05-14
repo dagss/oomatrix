@@ -211,16 +211,16 @@ def test_commander_failure():
     A, a, au, auh = ctx.new_matrix('A')
     B, b, bu, buh = ctx.new_matrix('B')
     C, c, cu, cuh = ctx.new_matrix('C')
-    ctx.define(A * A, A, "%s * %s")
+    ctx.define(A * A, A, "#|%s * %s")
     #ctx.define(A.h * A, A, "%s.h * %s")
-    ctx.define(B * C, C, '%s * %s')
-    ctx.define(A * C, C, '%s * %s')
-    ctx.define(A.h * C, C, '%s.h * %s')
-    ctx.define(B.h * C, C, '%s.h * %s')
+    ctx.define(B * C, C, '#|%s * %s')
+    ctx.define(A * C, C, '#|%s * %s')
+    ctx.define(A.h * C, C, '#|%s.h * %s')
+    ctx.define(B.h * C, C, '#|%s.h * %s')
     # Force distributive law (there's no A+B)
-    co_('C:((b * c) + ((a.h * ((a * c) + (b * c))) + (b.h * ((a * c) + (b * c)))))',
+    ctx.reset()
+    co_('C:((0|b * c) + ((2|a.h * ((1|a * c) + (0|b * c))) + (3|b.h * ((1|a * c) + (0|b * c)))))',
         (b + ((a + b).h * (a + b))) * c)
-
 
 def test_stupid_compiler_numpy():
     return

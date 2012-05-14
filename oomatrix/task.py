@@ -67,32 +67,17 @@ class Executor(object):
 
     def __init__(self, root_task):
         self.root_task = root_task
-        self.refcounts = {}
         self.results = {}
         self.gray_tasks = set()
 
     def execute(self):
-        self._incref(self.root_task)
-        result = self._execute(self.root_task)
-        self._decref(self.root_task)
+        # First incref the entire tree; then we decref during computation
+        # traversal
+        result = self._execute(self.root_task, frozenset())
         assert len(self.results) == 0
         return result
 
-    def _incref(self, task):
-        refs = self.refcounts.get(task, 0)
-        refs += 1
-        self.refcounts[task] = refs
-
-    def _decref(self, task):
-        refs = self.refcounts[task]
-        refs -= 1
-        if refs == 0:
-            del self.results[task]
-            del self.refcounts[task]
-        else:
-            self.refcounts[task] = refs
-
-    def _execute(self, task):
+    def _execute(self, task, keep_for_parent):
         x = self.results.get(task, None)
         if x is not None:
             if task in self.gray_tasks:
@@ -101,20 +86,43 @@ class Executor(object):
             return x
         
         self.gray_tasks.add(task)
-        # If we depend on a and b, and a also depend on b, we want to avoid
-        # multiple evaluation of b. So first, incref the result of all arguments
-        for arg_task in task.argument_tasks:
-            self._incref(arg_task)
-        # Then recurse; if the computation "runs ahead" to following arguments
+
+        def eval_args(results, i, keep_set):
+            arg_task = task.argument_tasks[i]
+            if i > 0:
+                # Add our own deps to keep_set, and evaluate preceding args
+                please_keep = keep_set.union(arg_task.dependencies)
+                kept_for_me = arg_task.dependencies.difference(keep_set)
+                eval_args(results, i - 1, please_keep)
+            else:
+                kept_for_me = ()
+            # Do evaluation of this argument
+            result = self._execute(arg_task, keep_set)
+            results[i] = result
+            if arg_task in keep_set:
+                self.results[arg_task] = result
+            for x in kept_for_me:
+                if x in self.results:
+                    del self.results[x]
+
+        n = len(task.argument_tasks)
+        arg_results = [None] * n
+        if n > 0:
+            eval_args(arg_results, n - 1, keep_for_parent)
+        
+        # Recurse; if the computation "runs ahead" to following arguments
         # then the refcount causes the result to be kept in cache
-        arg_values = [self._execute(arg_task)
-                      for arg_task in task.argument_tasks]        
+        #arg_values = [self._execute(arg_task)
+        #              for arg_task in task.argument_tasks]
         # Perform the task
-        result = task.compute(*arg_values)
-        self.results[task] = result
+        result = task.compute(*arg_results)
+        #self.results[task] = result
+
+        kept_for_me = keep_for_parent
+
+        
         # Decref all intermediaries
-        for arg_task in task.argument_tasks:
-            self._decref(arg_task)
-        # Finally, un-cache all results that are no longer needed
+        #for arg_task in task.argument_tasks:
+        #    self._decref_tree(arg_task)
         self.gray_tasks.remove(task)
         return result

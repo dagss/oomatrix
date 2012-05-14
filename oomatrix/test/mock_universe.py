@@ -16,15 +16,24 @@ class MockKind(MatrixImpl):
 
 class MockMatricesUniverse:
     def __init__(self):
-        pass
+        self.reset()
+
+    def reset(self):
+        self.computation_index = 0
 
     def define(self, match, result_kind, reprtemplate, cost=1 * FLOP):
         reprtemplate = '(%s)' % reprtemplate
+        # If '#' is in reprtemplate, substitute it with the number of
+        # times called
+        times_called = [0]
         @computation(match, result_kind, cost=cost,
                      name='%r:%r' % (result_kind, match.get_key()))
         def comp(*args):
-            return result_kind(reprtemplate % tuple(arg.value for arg in args),
-                               args[0].nrows, args[-1].ncols)
+            template = reprtemplate.replace('#', str(self.computation_index))
+            result = result_kind(template % tuple(arg.value for arg in args),
+                                 args[0].nrows, args[-1].ncols)
+            self.computation_index += 1
+            return result
 
     def define_conv(self, from_kind, to_kind, cost=1 * FLOP):
         @conversion(from_kind, to_kind, cost=cost, name='%s:%s(%s)' %
