@@ -67,26 +67,20 @@ class Executor(object):
 
     def __init__(self, root_task):
         self.root_task = root_task
-        self.results = {}
+        self.for_reuse = {}
         self.gray_tasks = set()
 
     def execute(self):
         # First incref the entire tree; then we decref during computation
         # traversal
         result = self._execute(self.root_task, frozenset())
-        assert len(self.results) == 0
+        assert len(self.for_reuse) == 0
         return result
 
     def _execute(self, task, keep_for_parent):
-        x = self.results.get(task, None)
-        if x is not None:
-            if task in self.gray_tasks:
-                raise AssertionError("Cycle in graph")
-            # Already computed
-            return x
+        # Use recursion working from the last argument towards the first
+        # in order to build a list of what we want to cache
         
-        self.gray_tasks.add(task)
-
         def eval_args(results, i, keep_set):
             arg_task = task.argument_tasks[i]
             if i > 0:
@@ -100,29 +94,26 @@ class Executor(object):
             result = self._execute(arg_task, keep_set)
             results[i] = result
             if arg_task in keep_set:
-                self.results[arg_task] = result
+                self.for_reuse[arg_task] = result
             for x in kept_for_me:
-                if x in self.results:
-                    del self.results[x]
+                if x in self.for_reuse:
+                    del self.for_reuse[x]
+
+
+        x = self.for_reuse.get(task, None)
+        if x is not None:
+            if task in self.gray_tasks:
+                raise AssertionError("Cycle in graph")
+            # Already computed
+            return x
+        
+        self.gray_tasks.add(task)
 
         n = len(task.argument_tasks)
         arg_results = [None] * n
         if n > 0:
             eval_args(arg_results, n - 1, keep_for_parent)
-        
-        # Recurse; if the computation "runs ahead" to following arguments
-        # then the refcount causes the result to be kept in cache
-        #arg_values = [self._execute(arg_task)
-        #              for arg_task in task.argument_tasks]
-        # Perform the task
         result = task.compute(*arg_results)
-        #self.results[task] = result
-
-        kept_for_me = keep_for_parent
-
         
-        # Decref all intermediaries
-        #for arg_task in task.argument_tasks:
-        #    self._decref_tree(arg_task)
         self.gray_tasks.remove(task)
         return result

@@ -45,11 +45,7 @@ def set_of_pairwise_nonempty_splits(iterable):
 GRAY = object()
 
 def get_cheapest_task(task_nodes, cost_map):
-    print
     task_nodes = list(task_nodes)
-    for x in task_nodes:
-        pprint( (x.task, x.task.argument_tasks))
-    #print [x.task for x in task_nodes]
     min_cost = np.inf
     min_node = None
     for task_node in task_nodes:
@@ -59,7 +55,6 @@ def get_cheapest_task(task_nodes, cost_map):
             min_node = task_node
     if min_node is None:
         raise ImpossibleOperationError('no possible computation')
-    print 'selected min:', min_node.task
     return min_node
 
 def filter_results(generator, cost_map):
