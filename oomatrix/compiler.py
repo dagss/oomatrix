@@ -176,10 +176,16 @@ class ExhaustiveCompilation(object):
         # TODO: write test for above two lines and uncomment
 
     def visit_decomposition(self, node):
-        # Compile child tree and leave the decomposition node intact
         child = node.child
-        for new_node in child.accept_visitor(self, child):
-            yield symbolic.DecompositionNode(new_node, node.decomposition)
+        metadata = MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
+                                  node.dtype)
+        decomposition = node.decomposition
+        for child_task_node in child.accept_visitor(self, child):
+            child_task = child_task_node.task
+            computation = decomposition.create_computation(metadata.kind)
+            decompose_task = Task(computation, computation.cost(metadata),
+                                  [child_task], metadata)
+            yield TaskNode(decompose_task, False)
 
     def visit_inverse(self, node):
         # TODO: recurse!!; apply inverse to multiplication

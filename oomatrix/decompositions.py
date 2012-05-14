@@ -1,5 +1,6 @@
 from . import symbolic
 from .computation import ImpossibleOperationError
+from .cost_value import zero_cost
 
 class Decomposition(object):
     pass
@@ -24,8 +25,17 @@ class Factor(Decomposition):
     factor_count = 1
 
     @staticmethod
-    def dispatch(matrix_impl):
-        return matrix_impl.factor()
+    def create_computation(kind):
+        # todo: dispatch on kind
+        class DecompositionComputation:
+            @staticmethod
+            def compute(matrix_impl):
+                return matrix_impl.factor()
+            @staticmethod
+            def cost(matrix_meta):
+                return zero_cost # TODO
+
+        return DecompositionComputation
 
     @staticmethod
     def get_name(kind):
