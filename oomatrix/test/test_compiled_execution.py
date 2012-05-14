@@ -155,7 +155,7 @@ def test_exhaustive_compiler_add():
     ctx.define(A + B, A, '%s + %s')
     co_('A:(a + b)', a + b)
     co_('A:(a + b)', b + a) # note how arguments are sorted
-    co_('A:((a + (a + b)) + b)', b + a + b + a)
+    co_('A:((a + b) + (a + b))', b + a + b + a)
 
     # Addition through conversion
     ctx.define_conv(C, A)
@@ -165,7 +165,7 @@ def test_exhaustive_compiler_add():
     assert_impossible(a.h + a)
     ctx.define(A.h + A, A, '%s.h + %s')
     co_('A:(a.h + a)', a.h + a)
-    co_('A:(a + (a.h + (a + (a.h + a))))', a + a.h + a + a.h + a)
+    co_('A:(a + ((a.h + a) + (a.h + a)))', a + a.h + a + a.h + a)
     co_('A:(a.h + (a.h + a))', a.h + a.h + a)
     ctx.define(B + B.h, B, '%s + %s.h')
     co_('B:(b + b.h)', b.h + b)

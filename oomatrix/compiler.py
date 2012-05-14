@@ -311,11 +311,11 @@ class ExhaustiveCompilation(object):
                 assert isinstance(x, TaskNode)
                 yield x
         # Look for opportunities to apply the distributive law
-        #for i, op in enumerate(operands):
-        #    if op.can_distribute():
-        #        for x in self.explore_distributive(operands[:i], op,
-        #                                           operands[i + 1:]):
-        #            yield x
+        for i, op in enumerate(operands):
+            if op.can_distribute():
+                for x in self.explore_distributive(operands[:i], op,
+                                                   operands[i + 1:]):
+                    yield x
 
     def explore_distributive(self, left_ops, op, right_ops):
         if len(left_ops) > 0:
