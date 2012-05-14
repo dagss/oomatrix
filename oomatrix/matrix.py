@@ -112,10 +112,9 @@ class Matrix(object):
         task_node = self.compile(compiler=compiler)
         from .task import Executor
         matrix_impl = Executor(task_node.task).execute()
+        expr = symbolic.LeafNode(None, matrix_impl)
         if task_node.conjugate_transpose:
-            expr = symbolic.ConjugateTranspose(matrix_impl)
-        else:
-            expr = matrix_impl
+            expr = symbolic.conjugate_transpose(expr)
         result = Matrix(expr)
         return result
 

@@ -105,7 +105,7 @@ def test_exhaustive_compiler_basic():
     ctx.define(A * A.h, A, '%s * %s.h')
     co_('A:(a * a.h)', a * a.h)
 
-    co_('[S:(s * (sym(s)))].h', s * s.h) # TODO: prefer 'S:(s * (sym(s)))'
+    co_('S:(s * (sym(s)))', s * s.h) # TODO: prefer 'S:(s * (sym(s)))'
     co_('[S:(s * s)].h', s.h * s.h)
     
 

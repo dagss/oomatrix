@@ -118,6 +118,9 @@ class TaskNode:
             node = symbolic.ConjugateTransposeNode(node)
         return node
 
+    def conjugate_transpose_task(self):
+        return TaskNode(self.task, not self.conjugate_transpose)        
+
 def find_cost(computation, arg_tasks):
     if computation.cost is None:
         raise AssertionError('%s has no cost set' %
@@ -332,37 +335,32 @@ class ExhaustiveCompilation(object):
         for left, right in outer(left_task_nodes, right_task_nodes):
             for x in self.generate_pair_multiplications(
                         left, frozenset([left.task.metadata.kind]),
-                        right, frozenset([right.task.metadata.kind]), False):
+                        right, frozenset([right.task.metadata.kind])):
                 yield x
+            # Try to transpose back and forth
+            for x in self.generate_pair_multiplications(
+                        right.conjugate_transpose_task(),
+                        frozenset([right.task.metadata.kind]),
+                        left.conjugate_transpose_task(),
+                        frozenset([left.task.metadata.kind])):
+                yield x.conjugate_transpose_task()
 
     @memoizegenerator
     def generate_pair_multiplications(self,
                                       left, left_kinds_tried,
-                                      right, right_kinds_tried,
-                                      transpose_tried):
+                                      right, right_kinds_tried):
         assert isinstance(left, TaskNode)
         assert isinstance(right, TaskNode)
         # Look up any direct computations
         expr = symbolic.MultiplyNode([left.tree(), right.tree()])
         for x in self.all_computations(expr):
             yield x
-        # Look at conjugating back and forth
-        1/0
-        #if not transpose_tried:
-        #    for x in self.generate_pair_multiplications(
-        #        TaskNode(right.task, not right.conjugate_transpose)),
-        #        frozenset([right.task.metadata.kind]),
-        #        symbolic.conjugate_transpose(left.tree()),
-        #        frozenset([left.task.metadata.kind]),
-        #        True):
-        #        yield TaskNode(x.task, not x.conjugate_transpose)
         # Recurse with all conversions of left operand
         for new_left in self.generate_conversions(left.tree(), left_kinds_tried):
             for x in self.generate_pair_multiplications(
                 new_left,
                 left_kinds_tried.union([new_left.task.metadata.kind]),
-                right, right_kinds_tried,
-                transpose_tried):
+                right, right_kinds_tried):
                 yield x
         # Recurse with all conversions of right operand
         for new_right in self.generate_conversions(right.tree(), right_kinds_tried):
@@ -370,8 +368,7 @@ class ExhaustiveCompilation(object):
                 left,
                 left_kinds_tried,
                 new_right,
-                right_kinds_tried.union([new_right.task.metadata.kind]),
-                transpose_tried):
+                right_kinds_tried.union([new_right.task.metadata.kind])):
                 yield x
 
     @memoizegenerator
@@ -386,32 +383,34 @@ class ExhaustiveCompilation(object):
         for left_operands, right_operands in gen:
             # TODO: This is where we want to recursively split the complement,
             # and check for nargs>2-computations as well
-            left_computations = self.explore_addition(left_operands)
-            right_computations = self.explore_addition(right_operands)
+            left_tasks = self.explore_addition(left_operands)
+            right_tasks = self.explore_addition(right_operands)
             # right_computations is used multiple times, but the
             # @memoizegenerator ensures it is a tuple
-            assert type(right_computations) is tuple
-            for left in left_computations:
-                for right in right_computations:
+            assert type(right_tasks) is tuple
+            for left in left_tasks:
+                for right in right_tasks:
                     for x in self.generate_pair_additions(
-                        left, frozenset([left.kind]),
-                        right, frozenset([right.kind])):
+                        left, frozenset([left.task.metadata.kind]),
+                        right, frozenset([right.task.metadata.kind])):
                         yield x
             
     def generate_pair_additions(self, left, left_kinds_tried,
                                 right, right_kinds_tried):
-        expr = symbolic.AddNode([left, right])
+        assert isinstance(left, TaskNode)
+        assert isinstance(right, TaskNode)
+        expr = symbolic.add([left.tree(), right.tree()])
         for x in self.all_computations(expr):
             yield x
-        for new_left in self.generate_conversions(left, left_kinds_tried):
+        for new_left in self.generate_conversions(left.tree(), left_kinds_tried):
             for x in self.generate_pair_additions(
-                new_left, left_kinds_tried.union([new_left.kind]),
+                new_left, left_kinds_tried.union([new_left.task.metadata.kind]),
                 right, right_kinds_tried):
                 yield x
-        for new_right in self.generate_conversions(right, right_kinds_tried):
+        for new_right in self.generate_conversions(right.tree(), right_kinds_tried):
             for x in self.generate_pair_additions(
                 left, left_kinds_tried,
-                new_right, right_kinds_tried.union([new_right.kind])):
+                new_right, right_kinds_tried.union([new_right.task.metadata.kind])):
                 yield x
                 
         
