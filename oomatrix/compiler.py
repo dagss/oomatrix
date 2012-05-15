@@ -105,16 +105,16 @@ def outer(*lists):
 class TaskNode:
     def __init__(self, task, conjugate_transpose):
         self.task = task
-        self.conjugate_transpose = conjugate_transpose
+        self.is_conjugate_transpose = conjugate_transpose
 
     def tree(self):
         node = symbolic.Promise(self.task)
-        if self.conjugate_transpose:
+        if self.is_conjugate_transpose:
             node = symbolic.ConjugateTransposeNode(node)
         return node
 
     def conjugate_transpose_task(self):
-        return TaskNode(self.task, not self.conjugate_transpose)        
+        return TaskNode(self.task, not self.is_conjugate_transpose)        
 
 def find_cost(computation, arg_tasks):
     if computation.cost is None:
@@ -161,7 +161,7 @@ class ExhaustiveCompilation(object):
     def visit_leaf(self, node):
         metadata = MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
                                   node.dtype)
-        task = LeafTask(node.matrix_impl, metadata)
+        task = LeafTask(node.matrix_impl, metadata, node)
         yield TaskNode(task, False)
 
     def visit_conjugate_transpose(self, node):
@@ -169,7 +169,7 @@ class ExhaustiveCompilation(object):
         child = node.child
         for task_node in child.accept_visitor(self, child):
             yield TaskNode(task_node.task,
-                           not task_node.conjugate_transpose)
+                           not task_node.is_conjugate_transpose)
         # Also look at A.h -> A-style computations
         #for new_node in self.all_computations(node):
         #    yield new_node
@@ -184,7 +184,7 @@ class ExhaustiveCompilation(object):
             child_task = child_task_node.task
             computation = decomposition.create_computation(metadata.kind)
             decompose_task = Task(computation, computation.cost(metadata),
-                                  [child_task], metadata)
+                                  [child_task], metadata, node)
             yield TaskNode(decompose_task, False)
 
     def visit_inverse(self, node):
@@ -263,7 +263,7 @@ class ExhaustiveCompilation(object):
                 metadata = MatrixMetadata(target_kind, (nrows,), (ncols,),
                                           dtype)
                 cost = find_cost(computation, arg_tasks)
-                task = Task(computation, cost, arg_tasks, metadata)
+                task = Task(computation, cost, arg_tasks, metadata, expr)
                 yield TaskNode(task, False)
 
     def generate_conversions(self, expr, tried_kinds, only_kinds=None):
@@ -461,7 +461,7 @@ class BaseCompiler(object):
 
     def compile(self, expression):
         task_node = self.compilation_factory().compile(expression)
-        return task_node
+        return task_node.task, task_node.is_conjugate_transpose
 
 
 class ExhaustiveCompiler(BaseCompiler):

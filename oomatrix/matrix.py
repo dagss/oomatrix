@@ -105,15 +105,16 @@ class Matrix(object):
         if compiler is None:
             from .compiler import ExhaustiveCompiler
             compiler = ExhaustiveCompiler()
-        computable = compiler.compile(self._expr)
-        return computable
+        task, is_transpose = compiler.compile(self._expr)
+        return task, is_transpose
 
     def compute(self, compiler=None):
-        task_node = self.compile(compiler=compiler)
-        from .task import Executor
-        matrix_impl = Executor(task_node.task).execute()
+        from .task import Scheduler, DefaultExecutor
+
+        task, is_transpose = self.compile(compiler=compiler)
+        matrix_impl = Scheduler(task, ).execute()
         expr = symbolic.LeafNode(None, matrix_impl)
-        if task_node.conjugate_transpose:
+        if is_transpose:
             expr = symbolic.conjugate_transpose(expr)
         result = Matrix(expr)
         return result
