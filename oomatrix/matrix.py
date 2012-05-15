@@ -112,7 +112,7 @@ class Matrix(object):
         from .task import Scheduler, DefaultExecutor
 
         task, is_transpose = self.compile(compiler=compiler)
-        matrix_impl = Scheduler(task, ).execute()
+        matrix_impl = Scheduler(task, DefaultExecutor()).execute()
         expr = symbolic.LeafNode(None, matrix_impl)
         if is_transpose:
             expr = symbolic.conjugate_transpose(expr)
