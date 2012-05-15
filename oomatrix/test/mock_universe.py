@@ -21,7 +21,7 @@ class MockMatricesUniverse:
     def reset(self):
         self.computation_index = 0
 
-    def define(self, match, result_kind, reprtemplate, cost=1 * FLOP):
+    def define(self, match, result_kind, reprtemplate='', cost=1 * FLOP):
         reprtemplate = '(%s)' % reprtemplate
         # If '#' is in reprtemplate, substitute it with the number of
         # times called
