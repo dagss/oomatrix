@@ -33,14 +33,14 @@ class MockTasks(object):
         arg_names = self.name_graph.get(name, None)
         if arg_names is None:
             # leaf
-            task = LeafTask(name, META)
+            task = LeafTask(name, META, None)
         else:
             @computation(A * A, A, cost=1 * FLOP)
             def compute(*args):
                 self.record_call(name)
                 return '%s(%s)' % (name, ','.join(args))
             arg_tasks = [self.build(arg_name) for arg_name in arg_names]
-            task = Task(compute, 1 * FLOP, arg_tasks, META)
+            task = Task(compute, 1 * FLOP, arg_tasks, META, None)
         self.tasks[name] = task
         return task
 
@@ -89,9 +89,9 @@ def test_lifetimes_trailing():
     
 
 def test_dependencies_and_costs():
-    a = Task(None, 1, [], META)
-    b = Task(None, 2, [a], META)
-    c = Task(None, 3, [a, b], META)
-    d = Task(None, 1, [c], META)
+    a = Task(None, 1, [], META, None)
+    b = Task(None, 2, [a], META, None)
+    c = Task(None, 3, [a, b], META, None)
+    d = Task(None, 1, [c], META, None)
     assert d.dependencies == frozenset([a, b, c]) 
     assert 6 == c.get_total_cost()

@@ -8,11 +8,12 @@ class Task(object):
     equals the sum of the total_cost; there could be overlapping dependencies
     """
     def __init__(self, computation, cost, argument_tasks,
-                 metadata):
+                 metadata, descriptive_expression):
         self.computation = computation
         self.cost = cost
         self.metadata = metadata
         self.argument_tasks = argument_tasks
+        self.descriptive_expression = descriptive_expression
         # Compute set of all dependencies
         self.dependencies = (frozenset()
                              .union(*[arg.dependencies
@@ -55,8 +56,9 @@ class Task(object):
         return '\n'.join(self.dump_lines({}))
 
 class LeafTask(Task):
-    def __init__(self, value, metadata):
-        Task.__init__(self, None, zero_cost, [], metadata)
+    def __init__(self, value, metadata, descriptive_expression):
+        Task.__init__(self, None, zero_cost, [], metadata,
+                      descriptive_expression)
         self.value = value
 
     def compute(self, *args):
