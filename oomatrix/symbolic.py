@@ -434,67 +434,6 @@ class LeafNode(BaseComputable):
     def _attr_repr(self):
         return self.name
 
-class ComputableNode(BaseComputable):
-    def __init__(self, computation, children,
-                 nrows, ncols, dtype, symbolic_expr):
-        self.computation = computation
-        self.children = children
-        self.kind = computation.target_kind
-        self.universe = self.kind.universe
-        self.nrows = nrows
-        self.ncols = ncols
-        self.dtype = dtype
-        self.symbolic_expr = symbolic_expr
-        self.precedence = symbolic_expr.precedence
-
-        if computation.cost is None:
-            raise AssertionError('%s has no cost set' % computation.name)
-        self.computation_cost = computation.cost(*children) + INVOCATION
-        if (not isinstance(self.computation_cost, cost_value.CostValue) and
-            self.computation_cost != 0):
-            raise TypeError('cost function %s for %s did not return 0 or a '
-                            'CostValue' % (computation, computation.cost))
-        self.cost = (sum(child.cost for child in children) +
-                     self.computation_cost)
-        assert isinstance(self.cost, cost_value.CostValue)
-        
-    def compute(self):
-        args = [child.compute() for child in self.children]
-        result = self.computation.compute(*args)
-        if (not isinstance(result, kind.MatrixImpl) or
-            result.ncols != self.ncols or
-            result.nrows != self.nrows):
-            raise AssertionError("Bug in computation (wrong result type or "
-                                 "shape): %r" % self.computation)
-        return result
-
-    def accept_visitor(self, visitor, *args, **kw):
-        return visitor.visit_computable(*args, **kw)
-
-    def __hash__(self):
-        return hash((id(self.computation),
-                     tuple(hash(child) for child in self.children)))
-
-    def __eq__(self, other):
-        if type(self) is not type(other):
-            return False
-        if self.computation is not other.computation:
-            return False
-        if len(self.children) != len(other.children):
-            return False
-        for a, b in zip(self.children, other.children):
-            if not a == b:
-                return False
-        # Given the same arithmetic going on, and the same leaf nodes (by id),
-        # then propagated properties like ncols, nrows, dtype, cost
-        # and so on should also be the same.
-        # We need to override in all BaseComputable nodes though.
-        return True
-
-    def _attr_repr(self):
-        return '%s; %s' % (self.computation.name, self.cost)
-
-
 class DecompositionNode(BaseComputable):
     """
     Represents a promise to perform a matrix decomposition. The node

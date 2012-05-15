@@ -9,25 +9,23 @@ class BasicExpressionFormatter(object):
         self.anonymous_count = 0
 
     def format(self, expr):
-        is_atom, r = expr.accept_visitor(self, expr, False)
+        is_atom, r = expr.accept_visitor(self, expr)
         return r
 
     def precedence(self, expr):
         return expr.precedence
 
-    def format_children(self, parent_precedence, children, compute_mode):
+    def format_children(self, parent_precedence, children):
         terms = []
         for child in children:
-            is_atom, term = child.accept_visitor(self, child, False)
+            is_atom, term = child.accept_visitor(self, child)
             do_parens = child.precedence < parent_precedence
-            if compute_mode and not is_atom:
-                do_parens = True
             if do_parens:
                 term = '(%s)' % term
             terms.append(term)
         return terms
 
-    def visit_leaf(self, expr, compute_mode):
+    def visit_leaf(self, expr):
         name = expr.name
         if name is None:
             name = '$%d' % self.anonymous_count
@@ -35,46 +33,35 @@ class BasicExpressionFormatter(object):
         self.name_to_symbol[name] = expr
         return True, name
 
-    def visit_add(self, expr, compute_mode):
-        terms = self.format_children(expr.precedence, expr.children,
-                                     compute_mode)
+    def visit_add(self, expr):
+        terms = self.format_children(expr.precedence, expr.children)
         return False, ' + '.join(terms)
 
-    def visit_multiply(self, expr, compute_mode):
-        terms = self.format_children(expr.precedence, expr.children,
-                                     compute_mode)
+    def visit_multiply(self, expr):
+        terms = self.format_children(expr.precedence, expr.children)
         return False, ' * '.join(terms)
 
-    def visit_conjugate_transpose(self, expr, compute_mode):
+    def visit_conjugate_transpose(self, expr):
         is_atom, term = expr.child.accept_visitor(self,
-                                                  expr.child, compute_mode)
+                                                  expr.child)
         if not is_atom:
             term = '(%s)' % term
         return True, term + '.h'
 
-    def visit_inverse(self, expr, compute_mode):
-        terms = self.format_children(expr.precedence, expr.children,
-                                     compute_mode)
+    def visit_inverse(self, expr):
+        terms = self.format_children(expr.precedence, expr.children)
         assert len(terms) == 1
         return True, terms[0] + '.i'
 
-    def visit_bracket(self, expr, compute_mode):
-        terms = self.format_children(expr.precedence, expr.children,
-                                     compute_mode)
+    def visit_bracket(self, expr):
+        terms = self.format_children(expr.precedence, expr.children)
         assert terms
         return True, '[%s]' % terms[0]
 
-    def visit_decomposition(self, expr, compute_mode):
-        terms = self.format_children(expr.precedence, expr.children,
-                                     compute_mode)
+    def visit_decomposition(self, expr):
+        terms = self.format_children(expr.precedence, expr.children)
         assert len(terms) == 1
         return True, '%s.%s()' % (terms[0], expr.decomposition.name)
-
-    def visit_computable(self, expr, compute_mode):
-        # Recurse, but turn on compute_mode
-        is_atom, r = (
-            expr.symbolic_expr.accept_visitor(self, expr.symbolic_expr, True))
-        return is_atom, r
 
 class ExpressionFormatterFactory(object):
     def format(self, expr):

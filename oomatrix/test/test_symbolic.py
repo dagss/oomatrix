@@ -136,8 +136,7 @@ def test_call_func():
     yield assert_argslist, [co, ao, bo], add(a, b, c), C + A + B
     
 def test_hash_and_eq():
-    from ..symbolic import (conjugate_transpose, inverse,
-                            ComputableNode)
+    from ..symbolic import conjugate_transpose, inverse
 
     def eq_and_hash(a, b):
         eq_(a, b)
