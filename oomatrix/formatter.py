@@ -90,8 +90,81 @@ default_formatter_factory = ExpressionFormatterFactory()
 # explain()
 #
 
+class ExplainingExecutor(object):
+    def __init__(self, stream, expression_formatter, margin=''):
+        self.stream = stream
+        self.margin = margin
+        self.num_indents = 0
+        self.num_tasks = 0
+        self.results = {}
+        self.expression_formatter = expression_formatter
+
+    # Implement Executor interface
+    
+    def execute_task(self, task, arguments):
+        if task.computation is None:
+            # leaf task
+            return task.value
+        else:
+            task_id = self.num_tasks
+            self.num_tasks += 1
+            arg_strs = []
+            for arg_task, arg_result in zip(task.argument_tasks,
+                                            arguments):
+                expr = arg_task.descriptive_expression
+                #print expr
+                #arg_str = self.expression_formatter.format(expr)
+                #if arg_result in self.results:
+                #    arg_str += ' (computed in task %s)' % arg_result
+                if isinstance(expr, symbolic.LeafNode):
+                    arg_str = self.expression_formatter.format(expr)
+                else:
+                    arg_str = repr(arg_result)
+                arg_strs.append(arg_str)
+            
+            self.describe_operation(task_id, task.computation.name,
+                                    arg_strs,
+                                    task.metadata.kind,
+                                    task.cost)
+            self.results[task] = task_id
+            return task_id
+
+    def get_result(self, task):
+        return self.results[task]
+
+    def is_ready(self, task):
+        return task in self.results
+    
+    def release_result(self, task):
+        if task.computation is None:
+            # leaf task
+            return
+        elif task in self.results:
+            self.putln('Release memory of task %d' % self.results[task])
+            del self.results[task]
+
+    def done(self):
+        pass
+
+
+    # Utilities
+    def putln(self, line, *args, **kw):
+        self.stream.write(self.margin + '    ' * self.num_indents +
+                          line.format(*args, **kw) + '\n')
+    
+    def describe_operation(self, result, computation_name, args,
+                           result_kind_name, cost):
+        self.putln('{0} = {1}({2}) [{3} result, cost={4}]',
+                   result, computation_name, ', '.join(args),
+                   result_kind_name, cost)
+
+
+
 class Explainer(object):
-    def __init__(self, stream, symbolic_root, computable_root, margin=''):
+    def __init__(self, stream, symbolic_root, task, margin=''):
+        print symbolic_root
+        print task.dump()
+        return
         self.stream = stream
         self.symbolic_root = symbolic_root
         self.computable_root = computable_root

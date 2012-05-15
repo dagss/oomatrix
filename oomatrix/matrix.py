@@ -120,9 +120,18 @@ class Matrix(object):
         return result
 
     def explain(self, compiler=None):
-        computable = self.compile(compiler=compiler)
+        from .task import Scheduler
+        from .formatter import ExplainingExecutor, BasicExpressionFormatter
+
+        task, is_transpose = self.compile(compiler=compiler)
+
         stream = StringIO()
-        Explainer(stream, self._expr, computable, margin='    ').explain()
+        name_to_matrices = {}
+        expression_formatter = BasicExpressionFormatter(name_to_matrices)
+        stream.write(expression_formatter.format(self._expr))
+        executor = ExplainingExecutor(stream, expression_formatter)
+        Scheduler(task, executor).execute()
+
         return stream.getvalue()
 
     def __getitem__(self, index):

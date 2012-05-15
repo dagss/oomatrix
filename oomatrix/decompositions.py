@@ -28,6 +28,7 @@ class Factor(Decomposition):
     def create_computation(kind):
         # todo: dispatch on kind
         class DecompositionComputation:
+            name='some-factoring-decomposition'
             @staticmethod
             def compute(matrix_impl):
                 return matrix_impl.factor()
