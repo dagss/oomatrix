@@ -11,8 +11,9 @@ class MatrixMetadata(object):
         self.ncols = np.prod(cols_shape)
 
     def __repr__(self):
-        return '<meta: %r-by-%r %s>' % (self.rows_shape, self.cols_shape,
-                                        self.dtype)
+        return '<meta: %s %r-by-%r %s>' % (self.kind,
+                                           self.rows_shape, self.cols_shape,
+                                           self.dtype)
 
     def __eq__(self, other):
         if not isinstance(other, MatrixMetadata):

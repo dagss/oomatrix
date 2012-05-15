@@ -384,6 +384,9 @@ class Promise(BaseComputable):
         self.dtype = metadata.dtype
         self.task = task
 
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_leaf(*args, **kw)
+
     def get_key(self):
         return self.kind
 
@@ -434,35 +437,27 @@ class LeafNode(BaseComputable):
     def _attr_repr(self):
         return self.name
 
-class DecompositionNode(BaseComputable):
+class DecompositionNode(ExpressionNode):
     """
-    Represents a promise to perform a matrix decomposition. The node
-    fills two roles: In a symbolic tree simply represents the decomposition,
-    while the node also dispatches the actual computation if the child
-    is. Compilers would typically "walk through" it and process the child
-    node, but leave the DecompositionNode in its place in the tree.
-    
+    Represents a promise to perform a matrix decomposition.
     """
     def __init__(self, child, decomposition):
         self.symbol = 'decomposition:%s' % decomposition.name
         self.child = child
         self.children = [child]
         self.decomposition = decomposition
-        self.computation_cost = 0 # TODO!decomposition.cost
         self.nrows, self.ncols = child.nrows, child.ncols
         self.universe = child.universe
         self.dtype = child.dtype
-        #self.cost = child.cost + self.computation_cost
         self.kind = child.kind
-        self.symbolic_expr = self
-
-    def compute(self):
-        assert isinstance(self.child, BaseComputable)
-        arg = self.child.compute()
-        return self.decomposition.dispatch(arg)
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_decomposition(*args, **kw)
+
+    def as_computable_list(self, pattern):
+        if not isinstance(pattern, kind.FactorPatternNode):
+            raise PatternMismatchError()
+        return self.child.as_computable_list(pattern.child)
 
 
 for x, val in [

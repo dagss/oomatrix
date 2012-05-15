@@ -45,13 +45,17 @@ class Diagonal(MatrixImpl):
         else:
             out[...] = result
 
-    def square_root(self):
-        return Diagonal(np.sqrt(self.array))
+    #def square_root(self):
+    #    return Diagonal(np.sqrt(self.array))
 
     def diagonal(self):
         return self.array
 
-    factor = cholesky = square_root
+    #factor = cholesky = square_root
+
+@computation(Diagonal.f, Diagonal, cost=lambda self: self.nrows * FLOP)
+def square_root(self):
+    return Diagonal(np.sqrt(self.array))
 
 @computation(Diagonal.i, Diagonal, cost=lambda self: self.nrows * FLOP)
 def inverse(self):

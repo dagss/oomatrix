@@ -1,5 +1,5 @@
 from .kind import MatrixImpl
-from . import cost_value, symbolic
+from . import cost_value, symbolic, decompositions
 
 atomic_nodes = (symbolic.LeafNode, symbolic.DecompositionNode)
 
@@ -61,7 +61,10 @@ class BasicExpressionFormatter(object):
     def visit_decomposition(self, expr):
         terms = self.format_children(expr.precedence, expr.children)
         assert len(terms) == 1
-        return True, '%s.%s()' % (terms[0], expr.decomposition.name)
+        if expr.decomposition is decompositions.Factor:
+            return True, '%s.f' % terms[0]
+        else:
+            return True, '%s.%s()' % (terms[0], expr.decomposition.name)
 
 class ExpressionFormatterFactory(object):
     def format(self, expr):

@@ -257,6 +257,10 @@ class Matrix(object):
             raise ValueError("Cannot take inverse of non-square matrix")
         return Matrix(symbolic.InverseNode(self._expr))
 
+    @property
+    def f(self):
+        return self.factor()
+
     def __pow__(self, arg):
         # Inverse
         if arg != -1:

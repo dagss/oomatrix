@@ -117,6 +117,7 @@ class TaskNode:
         return TaskNode(self.task, not self.is_conjugate_transpose)        
 
 def find_cost(computation, arg_tasks):
+    assert all(isinstance(x, Task) for x in arg_tasks)
     if computation.cost is None:
         raise AssertionError('%s has no cost set' %
                              computation.name)
@@ -170,26 +171,36 @@ class ExhaustiveCompilation(object):
         for task_node in child.accept_visitor(self, child):
             yield TaskNode(task_node.task,
                            not task_node.is_conjugate_transpose)
-        # Also look at A.h -> A-style computations
-        #for new_node in self.all_computations(node):
-        #    yield new_node
-        # TODO: write test for above two lines and uncomment
+        # Also look at A.h -> B-style computations
+        #rint node
+        #or task_node in self.all_computations(node):
+        #   print task_node
+        #   yield task_node
 
     def visit_decomposition(self, node):
-        child = node.child
-        metadata = MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
-                                  node.dtype)
+        from .decompositions import Factor
+        child_metadata = MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
+                                        node.dtype)
         decomposition = node.decomposition
-        for child_task_node in child.accept_visitor(self, child):
-            child_task = child_task_node.task
-            computation = decomposition.create_computation(metadata.kind)
-            decompose_task = Task(computation, computation.cost(metadata),
-                                  [child_task], metadata, node)
-            yield TaskNode(decompose_task, False)
+        for child_task_node in node.child.accept_visitor(self, node.child):
+            child_promise_tree = child_task_node.tree()
+            tree = symbolic.DecompositionNode(child_promise_tree, decomposition)
+            for decompose_task in self.all_computations(tree):
+                yield decompose_task
+        #child = node.child
+        #for child_task_node in child.accept_visitor(self, child):
+        #    child_task = child_task_node.task
+        #    computation = decomposition.create_computation(metadata.kind)
+        #    decompose_task = Task(computation, computation.cost(metadata),
+        #                          [child_task], metadata, node)
+        #    yield TaskNode(decompose_task, False)
 
     def visit_inverse(self, node):
-        # TODO: recurse!!; apply inverse to multiplication
-        return self.all_computations(node)
+        for child_task_node in node.child.accept_visitor(self, node.child):
+            child_promise_tree = child_task_node.tree()
+            tree = symbolic.InverseNode(child_promise_tree)
+            for inverse_task in self.all_computations(tree):
+                yield inverse_task
 
     def visit_bracket(self, node):
         # Compile child tree, and filter the resulting options with respect
@@ -241,7 +252,7 @@ class ExhaustiveCompilation(object):
         dtype = expr.dtype # todo
         # The no-computation case
         if isinstance(expr, symbolic.LeafNode):
-            assert False
+            assert False # (!!!)
             if (expr.kind not in avoid_kinds and
                 expr.kind not in tried_kinds and
                 (only_kinds is None or expr.kind in only_kinds)):

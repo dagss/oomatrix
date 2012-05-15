@@ -54,9 +54,9 @@ def make_matrix_method(decomposition_cls, name=None):
     def method(matrix):
         from .matrix import Matrix
         kind = matrix.get_type()
-        if not decomposition_cls.is_supported_by_kind(kind):
-            raise ImpossibleOperationError('%s matrices does not support %s'
-                                           % (kind.name, name))
+        #if not decomposition_cls.is_supported_by_kind(kind):
+        #    raise ImpossibleOperationError('%s matrices does not support %s'
+        #                                   % (kind.name, name))
         return Matrix(symbolic.DecompositionNode(matrix._expr,
                                                  decomposition_cls))
 

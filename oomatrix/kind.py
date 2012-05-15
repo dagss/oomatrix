@@ -216,6 +216,10 @@ class PatternNode(object):
     def i(self):
         return InversePatternNode(self)
 
+    @property
+    def f(self):
+        return FactorPatternNode(self)
+
 _threadvars = threading.local()
 
 def add_post_class_definition_hook(hook_func, hook_method):
@@ -380,6 +384,10 @@ class InversePatternNode(SingleChildPatternNode):
                 'be written (B.i * A.i), and so on)')
         SingleChildPatternNode.__init__(self, child)
 
+class FactorPatternNode(SingleChildPatternNode):
+    symbol = 'decomposition:factor'
+    def __init__(self, child):
+        SingleChildPatternNode.__init__(self, child)
 
 class ScalarPatternNode(SingleChildPatternNode):
     symbol = 's'
