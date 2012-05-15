@@ -130,7 +130,7 @@ class ExplainingExecutor(object):
             # leaf task
             return
         elif task in self.results:
-            self.putln('Release memory of task %d' % self.results[task])
+            #self.putln('Release memory of task %d' % self.results[task])
             del self.results[task]
 
     def done(self):
