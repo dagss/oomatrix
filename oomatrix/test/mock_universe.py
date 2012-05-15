@@ -1,8 +1,11 @@
+import re
+import numpy as np
+
 from ..cost_value import FLOP
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import computation, conversion
-from .. import Matrix
-import numpy as np
+from .. import formatter, Matrix, symbolic
+from ..task import LeafTask, Task
 
 class MockKind(MatrixImpl):
     def __init__(self, value, nrows, ncols):
@@ -66,3 +69,59 @@ class MockMatricesUniverse:
                 Matrix(NewKind(name_.lower() + 'u', 3, 1), name_.lower() + 'u'),
                 Matrix(NewKind(name_.lower() + 'uh', 1, 3),
                        name_.lower() + 'uh'))
+
+
+
+def remove_blanks(x):
+    return re.sub('\s', '', x)
+
+class FormatTaskExpression(formatter.BasicExpressionFormatter):
+    def __init__(self):
+        formatter.BasicExpressionFormatter.__init__(self, {})
+        self.task_names = {}
+        self.name_counter = 0
+
+    def register_task(self, task):
+        name = 'T%d' % self.name_counter
+        self.name_counter += 1
+        self.register_task_with_name(task, name)
+        return name
+
+    def register_task_with_name(self, task, name):
+        self.task_names[task] = name
+
+    def get_task_name(self, task):
+        return self.task_names[task]
+
+    def is_task_registered(self, task):
+        return task in self.task_names
+    
+    def visit_leaf(self, expr):
+        assert isinstance(expr, symbolic.Promise)
+        return True, self.task_names[expr.task]
+    
+def serialize_task(lines, task, formatter):
+    if isinstance(task, LeafTask):
+        assert isinstance(task.descriptive_expression, symbolic.LeafNode)
+        name = task.descriptive_expression.name
+        formatter.register_task_with_name(task, name)
+        return name
+    elif not formatter.is_task_registered(task):
+        # must 'compute' task
+        task_name = formatter.register_task(task)
+        for arg in task.argument_tasks:
+            serialize_task(lines, arg, formatter)
+        expr_str = formatter.format(task.descriptive_expression)
+        lines.append('%s = %s' % (task_name, expr_str))
+        return task_name
+    else:
+        return formatter.get_task_name(task)
+
+def check_compilation(compiler, expected_task_graph, expected_transposed, matrix):
+    task, is_transposed = compiler.compile(matrix._expr)
+    assert expected_transposed == is_transposed
+    task_lines = []
+    formatter = FormatTaskExpression()
+    serialize_task(task_lines, task, formatter)
+    task_str = '; '.join(task_lines)
+    assert remove_blanks(expected_task_graph) == remove_blanks(task_str)
