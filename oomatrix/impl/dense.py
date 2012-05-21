@@ -28,6 +28,9 @@ class NumPyWrapper(object):
         else:
             out[...] = np.dot(self.array, vec)
 
+    def diagonal(self):
+        return self.array.diagonal().copy()
+
 class ColumnMajor(MatrixImpl, NumPyWrapper):
     name = 'column-major'
 
