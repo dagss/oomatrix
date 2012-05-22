@@ -35,7 +35,12 @@ class Task(object):
                                                 else '', self.total_cost)
 
     def compute(self, *args):
-        return self.computation.compute(*args)
+        result = self.computation.compute(*args)
+        from kind import MatrixImpl
+        if isinstance(result, MatrixImpl):
+            assert result.nrows == self.metadata.rows_shape[0]
+            assert result.ncols == self.metadata.cols_shape[0]
+        return result
 
 
     def dump_lines(self, encountered, indent=''):
