@@ -129,6 +129,7 @@ class Matrix(object):
         name_to_matrices = {}
         expression_formatter = BasicExpressionFormatter(name_to_matrices)
         stream.write(expression_formatter.format(self._expr))
+        stream.write('\n')
         executor = ExplainingExecutor(stream, expression_formatter)
         Scheduler(task, executor).execute()
 
@@ -145,7 +146,7 @@ class Matrix(object):
         lines = []
         if not self.is_expression():
             lines.append(self.single_line_description())
-            lines.append(self.format_contents_brief())
+            #lines.append(self.format_contents_brief())
         else:
             lines.append('%s given by:' % self.single_line_description())
             lines.append('')
@@ -220,31 +221,29 @@ class Matrix(object):
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
             other = Matrix(other)
-            result_type = np.ndarray
-        elif isinstance(other, Matrix):
-            result_type = resolve_result_type(self.result_type,
-                                              other.result_type)
         elif other == 1:
             return self
-        else: # Matrix
+        elif not isinstance(other, Matrix):
             # TODO implement some conversion framework for registering vector types
             raise TypeError('Type not recognized: %s' % type(other))
         if self.ncols != other.nrows:
             raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
                 self.ncols, other.nrows))
-        return Matrix(symbolic.MultiplyNode([self._expr, other._expr]),
-                      result_type=result_type)
+        return Matrix(symbolic.MultiplyNode([self._expr, other._expr]))
 
     def __rmul__(self, other):
-        if other == 1:
+        if isinstance(other, np.ndarray):
+            other = Matrix(other)
+        elif other == 1:
             return self
-        raise NotImplementedError()
-        # TODO: Made tricky by not wanting to conjugate a complex result
-        
-        #if isinstance(other, np.ndarray):
-        #    return Vector(self.H._expr, other, transpose=True)
-        #else:
-        #   raise TypeError('Type not recognized')
+        else:
+            raise TypeError('Type not recognized: %s' % type(other))
+           
+        if other.ncols != self.nrows:
+            raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
+                other.ncols, self.nrows))
+
+        return Matrix(symbolic.MultiplyNode([other._expr, self._expr]))
         
 
     @property
