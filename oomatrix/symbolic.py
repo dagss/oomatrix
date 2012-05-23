@@ -89,20 +89,11 @@ class ExpressionNode(object):
         from .formatter import BasicExpressionFormatter
         return BasicExpressionFormatter({}).format(self)
 
-    def metadata_tree(self):
-        """Returns a tree with metadata leaf objects; useful for caching.
-        """
-        print type(self)
-        raise NotImplementedError()
-
     def as_tuple(self):
         """Returns the tuple-serialization of the tree
         """
         return ((self.symbol,) + 
-                tuple(child.as_tuple() for child in self.get_sorted_children()))
-
-    def get_sorted_children(self):
-        return self.children
+                tuple(child.as_tuple() for child in self.children))
 
     def as_computable_list(self, pattern):
         """Converts tree to an argument list matching `pattern` (a
@@ -114,7 +105,7 @@ class ExpressionNode(object):
         if self._hash is None:
             self._hash = hash((self.symbol,
                                tuple(hash(child)
-                                     for child in self.get_sorted_children())))
+                                     for child in self.children)))
         return self._hash
 
     def __eq__(self, other):
@@ -122,19 +113,6 @@ class ExpressionNode(object):
             return False
         return self.as_tuple() == other.as_tuple()
         
-        #if len(self.children) != len(other.children):
-        #    return False
-        #my_children = self.get_sorted_children()
-        #other_children = other.get_sorted_children()
-        #for a, b in zip(my_children, other_children):
-        #    if not a == b:
-        #        return False
-        # Given the same arithmetic going on, and the same leaf nodes (by id),
-        # then propagated properties like ncols, nrows, dtype, cost
-        # and so on should also be the same.
-        # We need to override in all BaseComputable nodes though.
-        #return True
-
     def __lt__(self, other):
         return self.as_tuple() < other.as_tuple()
 
@@ -172,28 +150,10 @@ class ArithmeticNode(ExpressionNode):
         self.ncols = self.children[-1].ncols
         self.dtype = self.children[0].dtype # TODO combine better
         self.universe = self.children[0].universe
-        #self.cost = sum(child.cost for child in self.children)
-        self._child_sort()
-
-    def metadata_tree(self):
-        """Returns a tree with metadata leaf objects; useful for caching.
-        """
-        return type(self)([child.metadata_tree() for child in self.children])
-
-    def _child_sort(self):
-        pass
 
 class AddNode(ArithmeticNode):
     symbol = '+'
-    def _child_sort(self):
-        child_keys = [child.as_tuple() for child in self.children]
-        self.child_permutation = argsort(child_keys)
-        self.sorted_children = [self.children[i]
-                                for i in self.child_permutation]
 
-    def get_sorted_children(self):
-        return self.sorted_children
-    
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_add(*args, **kw)
 
@@ -209,6 +169,7 @@ class AddNode(ArithmeticNode):
                         for term in self.children])
 
     def as_computable_list(self, pattern):
+        1/0
         if not isinstance(pattern, kind.AddPatternNode):
             raise PatternMismatchError()
         if len(self.sorted_children) != len(pattern.sorted_children):
@@ -243,10 +204,7 @@ class MultiplyNode(ArithmeticNode):
         return result
 
 class SingleChildNode(ExpressionNode):
-
-    def metadata_tree(self):
-        return type(self)(self.child.metadata_tree())
-
+    pass
 
 class ConjugateTransposeNode(SingleChildNode):
     """
@@ -361,9 +319,6 @@ class BracketNode(ExpressionNode):
         self.dtype = child.dtype
         #self.cost = child.cost
 
-    def metadata_tree(self):
-        return BracketNode(self.child.metadata_tree(), self.allowed_kinds)
-
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_bracket(*args, **kw)
 
@@ -432,10 +387,6 @@ class LeafNode(BaseComputable):
         self.ncols = matrix_impl.ncols
         self.dtype = matrix_impl.dtype
 
-    def metadata_tree(self):
-        return metadata.MatrixMetadata(self.kind, (self.nrows,), (self.ncols,),
-                                       self.dtype)
-
     def compute(self):
         return self.matrix_impl
 
@@ -476,9 +427,6 @@ class DecompositionNode(ExpressionNode):
         self.universe = child.universe
         self.dtype = child.dtype
         self.kind = child.kind
-
-    def metadata_tree(self):
-        return DecompositionNode(self.child.metadata_tree(), self.decomposition)
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_decomposition(*args, **kw)

@@ -1,83 +1,100 @@
+from . import metadata, symbolic, utils
 
-from . import metadata, symbolic
-
-
-class MatrixMetadataLeaf(object):
+class MatrixMetadataLeaf(symbolic.ExpressionNode):
     # Expression node for matrix metadata in a tree
     kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
     
-    def __init__(self, argument_index, metadata):
-        self.argument_index = argument_index
+    def __init__(self, leaf_index, metadata):
+        self.leaf_index = leaf_index
         self.metadata = metadata
-
-    def get_key(self):
-        return self.metadata.kind
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_metadata_leaf(*args, **kw)
 
     def as_tuple(self):
         # Important: should sort by kind first
-        return self.metadata.as_tuple() + (self.argument_index,)
+        return self.metadata.as_tuple() + (self.leaf_index,)
 
     def _repr(self, indent):
-        return [indent + '<arg:%d, %r>' % (self.argument_index, self.metadata)]
+        return [indent + '<arg:%s, %r>' % (self.leaf_index, self.metadata)]
 
 
-
-def recurse(transform, ctor, node):
-    sorted_children = node.get_sorted_children()
-    child_trees = [child.accept_visitor(transform, child)
-                   for child in sorted_children]
-    return ctor(child_trees)
-
-class BaseTransform(object):
-    def visit_multiply(self, node):
-        return recurse(self, symbolic.add, node)
-
-    def visit_add(self, node):
-        return recurse(self, symbolic.multiply, node)
     
-
-class MetadataTransform(BaseTransform):
+class ImplToMetadataTransform(object):
     """
-    Metadata transform -- split a tree with MatrixImpl leafs
+    Split a tree with MatrixImpl leafs
     to a) a list of MatrixImpl instances ("arguments"), b) a
-    tree of metadata and indices into the list of a).
+    tree of metadata with leaves corresponding sequentially to
+    the list of a).
     """
 
     def execute(self, node):
-        # We build up the tree through the return values, while the argument
-        # list is simply appended to as we proceed
-        assert not hasattr(self, 'child_args') # self is throw-away
-        self.child_args = []
-        child_tree = node.accept_visitor(self, node)
-        return child_tree, self.child_args
+        child_tree, child_args = node.accept_visitor(self, node)
+        return child_tree, child_args
+
+    def process_children(self, node):
+        child_trees = []
+        child_arg_lists = []
+        for child in node.children:
+            tree, args = child.accept_visitor(self, child)
+            child_trees.append(tree)
+            child_arg_lists.append(args)
+        return child_trees, child_arg_lists        
 
     def visit_add(self, node):
-        return recurse(self, symbolic.add, node)
+        child_trees, child_arg_lists = self.process_children(node)
+        # Sort result by the metadata before returning
+        permutation = utils.argsort(child_trees)
+        child_trees = [child_trees[i] for i in permutation]
+        child_arg_lists = [child_arg_lists[i] for i in permutation]
+        return symbolic.add(child_trees), sum(child_arg_lists, [])
 
     def visit_multiply(self, node):
-        return recurse(self, symbolic.multiply, node)
+        child_trees, child_arg_lists = self.process_children(node)
+        return symbolic.multiply(child_trees), sum(child_arg_lists, [])
 
     def visit_conjugate_transpose(self, node):
-        result = node.child.accept_visitor(self, node.child)
-        return symbolic.conjugate_transpose(result)
+        tree, args = node.child.accept_visitor(self, node.child)
+        return symbolic.conjugate_transpose(tree), args
 
     def visit_inverse(self, node):
-        result = node.child.accept_visitor(self, node.child)
-        return symbolic.inverse(result)
+        tree, args = node.child.accept_visitor(self, node.child)
+        return symbolic.inverse(tree), args
 
     def visit_leaf(self, node):
-        i = len(self.child_args)
-        self.child_args.append(node.matrix_impl)
         meta = metadata.MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
                                        node.dtype)
-        return MatrixMetadataLeaf(i, meta)
+        return MatrixMetadataLeaf(None, meta), [node.matrix_impl]
+
+class IndexMetadataTransform(object):
+    """
+    Take a MatrixMetadataLeaf tree and annotates each leaf
+    with a global leaf index
+    """
+    def execute(self, node):
+        self.leaf_index = 0
+        return node.accept_visitor(self, node)
+
+    def recurse_multi_child(self, node):
+        return type(node)([child.accept_visitor(self, child)
+                           for child in node.children])
+
+    def recurse_single_child(self, node):
+        child = node.child
+        return type(node)(child.accept_visitor(self, child))
+
+    visit_add = visit_multiply = recurse_multi_child
+    visit_conjugate_transpose = visit_inverse = recurse_single_child
+
+    def visit_metadata_leaf(self, node):
+        node.leaf_index = self.leaf_index
+        self.leaf_index += 1
+        return node
 
 def metadata_transform(tree):
-    return MetadataTransform().execute(tree)
-
+    pre_tree, args_list = ImplToMetadataTransform().execute(tree)
+    result_tree = IndexMetadataTransform().execute(pre_tree)
+    return result_tree, args_list
 
 class KindKeyTransform(object):
     """
@@ -92,9 +109,8 @@ class KindKeyTransform(object):
         return node.accept_visitor(self, node)
 
     def recurse(self, node):
-        sorted_children = node.get_sorted_children()
         return (node.symbol,) + tuple([child.accept_visitor(self, child)
-                                       for child in sorted_children])
+                                       for child in node.children])
 
     visit_add = visit_multiply = visit_conjugate_transpose = recurse
     visit_inverse = recurse

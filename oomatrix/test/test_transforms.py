@@ -41,13 +41,13 @@ c2.ncols = 10
 def test_metadata_transform_sorted_by_kind():
     tree, args = transforms.metadata_transform(add(c1, b, a))
     assert [ao, bo, co1] == args
-    assert [0, 1, 2] == [x.argument_index for x in tree.children]
+    assert [0, 1, 2] == [x.leaf_index for x in tree.children]
 
 def test_metadata_transform_sorted_by_shape():
     # sorted by kind
     tree, args = transforms.metadata_transform(add(c2, c1))
     assert [co1, co2] == args
-    assert [0, 1] == [x.argument_index for x in tree.children]
+    assert [0, 1] == [x.leaf_index for x in tree.children]
 
 def test_kind_key_transform():
     def process(tree):
