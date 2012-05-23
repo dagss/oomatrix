@@ -1,6 +1,7 @@
+from functools import total_ordering
 import numpy as np
 
-
+@total_ordering
 class MatrixMetadata(object):
     universe = None # TODO
     
@@ -24,6 +25,9 @@ class MatrixMetadata(object):
         if not isinstance(other, MatrixMetadata):
             return False
         return self.as_tuple() == other.as_tuple()
+
+    def __lt__(self, other):
+        return self.as_tuple() < other.as_tuple()
 
     def __ne__(self, other):
         return not self == other
