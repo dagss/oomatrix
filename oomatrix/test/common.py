@@ -5,6 +5,10 @@ from textwrap import dedent
 import contextlib
 import os, sys, re
 
+def assert_eq_and_hash(a, b):
+    eq_(a, b)
+    eq_(hash(a), hash(b))
+
 def assert_not_raises(func, *args):
     "Turn any exception into AssertionError"
     try:

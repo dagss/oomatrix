@@ -20,6 +20,8 @@ simplification from constructors to factories)
 
 """
 
+from functools import total_ordering
+
 from .cost_value import FLOP, INVOCATION
 from .utils import argsort, invert_permutation
 from . import kind, cost_value, metadata
@@ -61,6 +63,7 @@ class TODO:
 class PatternMismatchError(ValueError):
     pass
 
+@total_ordering
 class ExpressionNode(object):
     name = None
     kind = None
@@ -101,6 +104,12 @@ class ExpressionNode(object):
         return ((self.symbol,) + 
                 tuple(child.get_key() for child in self.get_sorted_children()))
 
+    def as_tuple(self):
+        """Returns the tuple-serialization of the tree
+        """
+        return ((self.symbol,) + 
+                tuple(child.as_tuple() for child in self.get_sorted_children()))
+
     def get_sorted_children(self):
         return self.children
 
@@ -120,18 +129,23 @@ class ExpressionNode(object):
     def __eq__(self, other):
         if type(self) is not type(other):
             return False
-        if len(self.children) != len(other.children):
-            return False
-        my_children = self.get_sorted_children()
-        other_children = other.get_sorted_children()
-        for a, b in zip(my_children, other_children):
-            if not a == b:
-                return False
+        return self.as_tuple() == other.as_tuple()
+        
+        #if len(self.children) != len(other.children):
+        #    return False
+        #my_children = self.get_sorted_children()
+        #other_children = other.get_sorted_children()
+        #for a, b in zip(my_children, other_children):
+        #    if not a == b:
+        #        return False
         # Given the same arithmetic going on, and the same leaf nodes (by id),
         # then propagated properties like ncols, nrows, dtype, cost
         # and so on should also be the same.
         # We need to override in all BaseComputable nodes though.
-        return True
+        #return True
+
+    def __lt__(self, other):
+        return self.as_tuple() < other.as_tuple()
 
     def __ne__(self, other):
         return not self == other
@@ -382,6 +396,7 @@ class BlockedNode(ExpressionNode):
         
 
 class BaseComputable(ExpressionNode):
+    # TODO: REMOVE
     children = ()
 
     def get_key(self):
@@ -447,6 +462,9 @@ class LeafNode(BaseComputable):
 
     def get_key(self):
         return type(self.matrix_impl)
+
+    def as_tuple(self):
+        return self
 
     def __hash__(self):
         return id(self)
