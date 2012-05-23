@@ -421,22 +421,3 @@ class ScalarType(object):
             return ScalarPatternNode(other)
 
 Scalar = object.__new__(ScalarType)
-
-def order_arguments(self, pattern):
-        if not isinstance(pattern, kind.AddPatternNode):
-            raise PatternMismatchError()
-        if len(self.sorted_children) != len(pattern.sorted_children):
-            raise PatternMismatchError()
-        
-        # Now, we need to apply the inverse permutation in `pattern`
-        # to figure out how the function wants to be called and how our
-        # own arguments match
-        sorted_to_pattern = invert_permutation(pattern.child_permutation)
-        arguments_in_sorted_order = [child.as_computable_list(pattern_child)
-                                     for child, pattern_child in zip(
-                                         self.sorted_children,
-                                         pattern.sorted_children)]
-        result = []
-        for i in range(len(sorted_to_pattern)):
-            result.extend(arguments_in_sorted_order[sorted_to_pattern[i]])
-        return result
