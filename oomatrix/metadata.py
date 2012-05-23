@@ -2,6 +2,8 @@ import numpy as np
 
 
 class MatrixMetadata(object):
+    universe = None # TODO
+    
     def __init__(self, kind, rows_shape, cols_shape, dtype):
         self.kind = kind
         self.rows_shape = rows_shape
@@ -15,13 +17,28 @@ class MatrixMetadata(object):
                                            self.rows_shape, self.cols_shape,
                                            self.dtype)
 
+    def as_tuple(self):
+        return (self.kind, self.rows_shape, self.cols_shape, self.dtype)
+        
     def __eq__(self, other):
         if not isinstance(other, MatrixMetadata):
             return False
-        return self.__dict__ == other.__dict__
+        return self.as_tuple() == other.as_tuple()
 
     def __ne__(self, other):
         return not self == other
+
+    def __hash__(self):
+        return hash(self.as_tuple())
+
+    def get_key(self):
+        return self.kind
+
+    def accept_visitor(self, visitor, *args, **kw):
+        visitor.visit_metadata_leaf(*args, **kw)
+
+    def _repr(self, indent):
+        return [indent + repr(self)]
 
 def meta_add(a, b):
     assert a.rows_shape == b.rows_shape

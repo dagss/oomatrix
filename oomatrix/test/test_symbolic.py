@@ -135,31 +135,56 @@ def test_call_func():
     C._sort_id = 0
     yield assert_argslist, [co, ao, bo], add(a, b, c), C + A + B
     
+def assert_eq_and_hash(a, b):
+    eq_(a, b)
+    eq_(hash(a), hash(b))
+
 def test_hash_and_eq():
     from ..symbolic import conjugate_transpose, inverse
 
-    def eq_and_hash(a, b):
-        eq_(a, b)
-        eq_(hash(a), hash(b))
 
     class A(MockImpl):
         _sort_id = 1
+    class B(MockImpl):
+        _sort_id = 2
     ao = A()
+    bo = B()
     a = LeafNode('a', ao)
-    b = LeafNode('a', ao)
+    b = LeafNode('b', bo)
 
     # Leafnode eq
     ne_(a, b)
     ok_(not a == b)
     # Plus eq
-    eq_and_hash(add(a, a), add(a, a))
+    assert_eq_and_hash(add(a, a), add(a, a))
+    assert_eq_and_hash(add(a, b), add(b, a)) # commutativity of add
     ne_(add(a, a), add(a, b))
     # More complicated eq
-    eq_and_hash(add(a, a, conjugate_transpose(mul(a, b))),
-                add(a, a, conjugate_transpose(mul(a, b))))
+    assert_eq_and_hash(add(a, a, conjugate_transpose(mul(a, b))),
+                       add(a, a, conjugate_transpose(mul(a, b))))
     ne_(add(a, a, conjugate_transpose(mul(a, b))),
         add(a, a, conjugate_transpose(mul(b, b))))
     ne_(add(a, a, conjugate_transpose(mul(a, b))),
         add(a, a, conjugate_transpose(mul(a, inverse(b)))))
     
+def test_metadata_tree():
+    class A(MockImpl):
+        _sort_id = 1
+    ao = A()
+    class B(MockImpl):
+        _sort_id = 2
+    bo = B()
+    a = LeafNode('a', ao)
+    b = LeafNode('b', bo)
 
+    m1 = add(a, b).metadata_tree()
+    m2 = add(a, b).metadata_tree()
+    m3 = add(b, a).metadata_tree() # reverse order in add()
+
+    d1 = mul(a, b).metadata_tree()
+    d2 = mul(b, a).metadata_tree()
+
+    yield assert_eq_and_hash, m1, m2
+    yield assert_eq_and_hash, m2, m3
+    yield ok_, d1 != d2
+    

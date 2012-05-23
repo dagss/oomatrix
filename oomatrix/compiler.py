@@ -469,12 +469,18 @@ class BaseCompiler(object):
 
     No in-place operations or buffer reuse is ever performed.
     """
+    def __init__(self):
+        self.cache = {}
 
     def compile(self, expression):
-        task_node = self.compilation_factory().compile(expression)
-        return task_node.task, task_node.is_conjugate_transpose
-
-
+        key = expression.metadata_tree()
+        result = self.cache.get(key, None)
+        if result is None: 
+            task_node = self.compilation_factory().compile(expression)
+            result = (task_node.task, task_node.is_conjugate_transpose)
+            self.cache[key] = result
+        return result
 class ExhaustiveCompiler(BaseCompiler):
     compilation_factory = ExhaustiveCompilation
 
+exhaustive_compiler_instance = ExhaustiveCompiler()

@@ -22,7 +22,7 @@ simplification from constructors to factories)
 
 from .cost_value import FLOP, INVOCATION
 from .utils import argsort, invert_permutation
-from . import kind, cost_value
+from . import kind, cost_value, metadata
 
 import numpy as np
 
@@ -86,6 +86,12 @@ class ExpressionNode(object):
         from .formatter import BasicExpressionFormatter
         return BasicExpressionFormatter({}).format(self)
 
+    def metadata_tree(self):
+        """Returns a tree with metadata leaf objects; useful for caching.
+        """
+        print type(self)
+        raise NotImplementedError()
+
     def get_key(self):
         """Returns the tuple-serialization of the tree, useful as a key
 
@@ -116,7 +122,9 @@ class ExpressionNode(object):
             return False
         if len(self.children) != len(other.children):
             return False
-        for a, b in zip(self.children, other.children):
+        my_children = self.get_sorted_children()
+        other_children = other.get_sorted_children()
+        for a, b in zip(my_children, other_children):
             if not a == b:
                 return False
         # Given the same arithmetic going on, and the same leaf nodes (by id),
@@ -161,6 +169,11 @@ class ArithmeticNode(ExpressionNode):
         self.universe = self.children[0].universe
         #self.cost = sum(child.cost for child in self.children)
         self._child_sort()
+
+    def metadata_tree(self):
+        """Returns a tree with metadata leaf objects; useful for caching.
+        """
+        return type(self)([child.metadata_tree() for child in self.children])
 
     def _child_sort(self):
         pass
@@ -225,7 +238,10 @@ class MultiplyNode(ArithmeticNode):
         return result
 
 class SingleChildNode(ExpressionNode):
-    pass
+
+    def metadata_tree(self):
+        return type(self)(self.child.metadata_tree())
+
 
 class ConjugateTransposeNode(SingleChildNode):
     """
@@ -340,6 +356,9 @@ class BracketNode(ExpressionNode):
         self.dtype = child.dtype
         #self.cost = child.cost
 
+    def metadata_tree(self):
+        return BracketNode(self.child.metadata_tree(), self.allowed_kinds)
+
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_bracket(*args, **kw)
 
@@ -403,7 +422,7 @@ class LeafNode(BaseComputable):
     
     def __init__(self, name, matrix_impl):
         from .kind import MatrixImpl
-        if not isinstance(matrix_impl, MatrixImpl):
+        if not isinstance(matrix_impl,MatrixImpl):
             raise TypeError('not isinstance(matrix_impl, MatrixImpl)')
         self.name = name
         self.matrix_impl = matrix_impl
@@ -412,6 +431,10 @@ class LeafNode(BaseComputable):
         self.nrows = matrix_impl.nrows
         self.ncols = matrix_impl.ncols
         self.dtype = matrix_impl.dtype
+
+    def metadata_tree(self):
+        return metadata.MatrixMetadata(self.kind, (self.nrows,), (self.ncols,),
+                                       self.dtype)
 
     def compute(self):
         return self.matrix_impl
@@ -450,6 +473,9 @@ class DecompositionNode(ExpressionNode):
         self.universe = child.universe
         self.dtype = child.dtype
         self.kind = child.kind
+
+    def metadata_tree(self):
+        return DecompositionNode(self.child.metadata_tree(), self.decomposition)
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_decomposition(*args, **kw)
