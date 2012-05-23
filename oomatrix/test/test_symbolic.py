@@ -75,28 +75,6 @@ def test_distributive():
         ((e * a + e * b + e * c) * e * c +
          (e * a + e * b + e * c) * e * c) * d * e''', out)
 
-def test_get_key():
-    class A(MockImpl):
-        _sort_id = 1
-
-    class B(MockImpl):
-        _sort_id = 2
-
-    a = LeafNode('a', A())
-    b = LeafNode('b', B())
-    key = mul(add(I(H(b)), b, a), a).get_key()
-    # note that the + is sorted
-    eq_(('*',
-         ('+', A, B, ('h', ('i', B))),
-         A), key)
-
-    # reverse sort order and construct new tree, now the order should be B, A
-    A._sort_id = 3
-    key = mul(add(I(H(b)), b, a), a).get_key()
-    eq_(('*',
-         ('+', B, A, ('h', ('i', B))),
-         A), key)
-
 def test_as_tuple():
     class A(MockImpl):
         _sort_id = 1

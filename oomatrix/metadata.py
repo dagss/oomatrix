@@ -35,15 +35,6 @@ class MatrixMetadata(object):
     def __hash__(self):
         return hash(self.as_tuple())
 
-    def get_key(self):
-        return self.kind
-
-    def accept_visitor(self, visitor, *args, **kw):
-        visitor.visit_metadata_leaf(*args, **kw)
-
-    def _repr(self, indent):
-        return [indent + repr(self)]
-
 def meta_add(a, b):
     assert a.rows_shape == b.rows_shape
     assert a.cols_shape == b.cols_shape

@@ -95,15 +95,6 @@ class ExpressionNode(object):
         print type(self)
         raise NotImplementedError()
 
-    def get_key(self):
-        """Returns the tuple-serialization of the tree, useful as a key
-
-        This is in the format given in MatrixKind.get_key; i.e., only MatrixKind
-        information is present, not instance information.
-        """
-        return ((self.symbol,) + 
-                tuple(child.get_key() for child in self.get_sorted_children()))
-
     def as_tuple(self):
         """Returns the tuple-serialization of the tree
         """
@@ -195,7 +186,7 @@ class ArithmeticNode(ExpressionNode):
 class AddNode(ArithmeticNode):
     symbol = '+'
     def _child_sort(self):
-        child_keys = [child.get_key() for child in self.children]
+        child_keys = [child.as_tuple() for child in self.children]
         self.child_permutation = argsort(child_keys)
         self.sorted_children = [self.children[i]
                                 for i in self.child_permutation]
@@ -399,9 +390,6 @@ class BaseComputable(ExpressionNode):
     # TODO: REMOVE
     children = ()
 
-    def get_key(self):
-        return self.kind
-
     def as_computable_list(self, pattern):
         if pattern != self.kind:
             raise PatternMismatchError()
@@ -420,9 +408,6 @@ class Promise(BaseComputable):
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_leaf(*args, **kw)
-
-    def get_key(self):
-        return self.kind
 
     def __hash__(self):
         return id(self)
@@ -460,14 +445,14 @@ class LeafNode(BaseComputable):
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_leaf(*args, **kw)
 
-    def get_key(self):
-        return type(self.matrix_impl)
-
     def as_tuple(self):
         return self
 
     def __hash__(self):
         return id(self)
+
+    def __lt__(self, other):
+        return id(self) < id(other)
 
     def __eq__(self, other):
         return self is other
