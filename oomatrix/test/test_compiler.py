@@ -32,6 +32,20 @@ def test_basic():
     assert_compile('T0 = a + b', False, a + b)
     assert_compile('T1 = b + b; T0 = a + T1', False, a + b + b)
 
+def test_caching():
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A') 
+    B, b, bu, buh = ctx.new_matrix('B')
+    ctx.define(A + B, A)
+    compiler = ExhaustiveCompiler()
+    task0, _ = compiler.compile((a + b)._expr)
+    task1, _ = compiler.compile((b + a)._expr) # note the changed order
+
+    m1 = (a + b)._expr.metadata_tree()
+    m2 = (b + a)._expr.metadata_tree()
+    assert task0 is task1
+    assert len(compiler.cache) == 1
+
 def test_distributive():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 
