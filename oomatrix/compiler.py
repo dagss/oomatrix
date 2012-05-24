@@ -16,14 +16,13 @@ from itertools import izip, chain, combinations, permutations
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
 
-from . import formatter, symbolic, cost_value
+from . import formatter, symbolic, cost_value, transforms
 from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
 from .task import Task, LeafTask
 from .metadata import MatrixMetadata
 from .cost_value import FLOP, INVOCATION
-
 
 def powerset(iterable):
     "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
@@ -102,7 +101,11 @@ def outer(*lists):
     for x in _outer((), lists):
         yield x
 
-class TaskNode:
+
+
+
+
+class TaskNode(object):
     def __init__(self, task, conjugate_transpose):
         self.task = task
         self.is_conjugate_transpose = conjugate_transpose
@@ -159,10 +162,8 @@ class ExhaustiveCompilation(object):
     def visit_add(self, node):
         return self.explore_addition(tuple(node.children))
 
-    def visit_leaf(self, node):
-        metadata = MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
-                                  node.dtype)
-        task = LeafTask(node.matrix_impl, metadata, node)
+    def visit_metadata_leaf(self, node):
+        task = LeafTask(node.argument_index, node.metadata, node)
         yield TaskNode(task, False)
 
     def visit_conjugate_transpose(self, node):
@@ -258,7 +259,7 @@ class ExhaustiveCompilation(object):
                 (only_kinds is None or expr.kind in only_kinds)):
                 yield expr
         # Generates all computables possible for the match_pattern
-        key = expr.get_key()
+        key = transforms.kind_key_transform(expr)
         trivial = isinstance(key, MatrixKind)
         computations_by_kind = expr.universe.get_computations(key)
         for target_kind, computations in computations_by_kind.iteritems():
@@ -432,13 +433,14 @@ class BaseCompiler(object):
         self.cache = {}
 
     def compile(self, expression):
-        key = expression.metadata_tree()
-        result = self.cache.get(key, None)
-        if result is None: 
-            task_node = self.compilation_factory().compile(expression)
+        meta_tree, args = transforms.metadata_transform(expression)
+        result = self.cache.get(meta_tree, None)
+        if result is None or True: # TODO: Tasks must have switchable args
+            task_node = self.compilation_factory().compile(meta_tree)
             result = (task_node.task, task_node.is_conjugate_transpose)
             self.cache[key] = result
         return result
+
 class ExhaustiveCompiler(BaseCompiler):
     compilation_factory = ExhaustiveCompilation
 

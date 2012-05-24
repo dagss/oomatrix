@@ -103,8 +103,7 @@ class Matrix(object):
 
     def compile(self, compiler=None): 
         if compiler is None:
-            from .compiler import ExhaustiveCompiler
-            compiler = ExhaustiveCompiler()
+            from .compiler import exhaustive_compiler_instance as compiler
         task, is_transpose = compiler.compile(self._expr)
         return task, is_transpose
 
