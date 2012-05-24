@@ -428,47 +428,6 @@ class ExhaustiveCompilation(object):
         
 
 class BaseCompiler(object):
-    """
-    Compiles an expression using some simple syntax-level rules.
-    First, we treat all matrices with one 1-length dimension as
-    a "vector". Then, ignoring any cost estimates (A and B
-    are matrices, u is a vector):
-
-      - Matrix-vector products are performed such that there's always
-        a vector; ``A * B * x`` is performed right-to-left and
-        ``x * A * B`` is performed left-to-right. Similarly,
-        ``(A + B) * x`` is computed as ``A * x + B * x``.
-        
-      - Matrix-matrix products such as ``A * B * C`` are performed
-        left-to-right (no matter what). Also, expressions are computed
-        as formed: ``(A + B) * X`` first computes ``A + B`` before
-        multiplying with ``X``.
-
-      - ``A.h * u`` is computed as per the above rules
-        (conjugate_transpose() being cheap), however, if that
-        operation is not possible, ``(u.h * A).h`` is attempted
-        instead before giving up.
-
-      - Matrix additions ``A + B`` are performed in some arbitrary
-        order.
-
-      - ``A.i * B`` always first attempts ``A.solve_right(B)``,
-        then ``A.inverse() * B``.
-
-      - ``A.h.i * B`` first tries ``A.solve_left(B)``, then
-        ``A.conjugate_transpose().i * B``.
-
-    Note that vectors and matrices are treated quite differently,
-    and that the only thing qualifying a matrix as a "vector" is
-    its shape.
-
-    We always assume that the right conversions etc. are present so
-    that the expression can be computed in the fashion shown above.
-    The output type is not selectable, it just becomes whatever it
-    is.
-
-    No in-place operations or buffer reuse is ever performed.
-    """
     def __init__(self):
         self.cache = {}
 
