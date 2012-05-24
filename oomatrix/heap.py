@@ -20,3 +20,6 @@ class Heap(object):
         return cost, value
 
     
+    def __len__(self):
+        return len(self.heap)
+    

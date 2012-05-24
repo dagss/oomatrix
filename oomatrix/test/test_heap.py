@@ -18,9 +18,14 @@ def test_basic():
     heap.push(5, Value('b'))
     heap.push(5, Value('c'))
 
+    assert len(heap) == 3
+    
     cost, item = heap.pop()
     assert (cost, item.value) == (5, 'b')
     cost, item = heap.pop()
     assert (cost, item.value) == (5, 'c')
     cost, item = heap.pop()
     assert (cost, item.value) == (10, 'a')
+
+    assert len(heap) == 0
+    
