@@ -19,6 +19,26 @@ def test_outer():
                    (3, 4, 7), (3, 4, 8), (3, 5, 7), (3, 5, 8),
                    (3, 6, 7), (3, 6, 8)]
 
+def test_splits():
+    # odd number of elements
+    lst = list(compiler.set_of_pairwise_nonempty_splits([1, 2, 3]))
+    assert lst == [((1,), (2, 3)),
+                   ((2,), (1, 3)),
+                   ((3,), (1, 2))]
+    # even number of elements
+    lst = list(compiler.set_of_pairwise_nonempty_splits([1, 2, 3, 4]))
+    assert lst == [((1,), (2, 3, 4)),
+                   ((2,), (1, 3, 4)),
+                   ((3,), (1, 2, 4)),
+                   ((4,), (1, 2, 3)),
+                   ((1, 2), (3, 4)),
+                   ((1, 3), (2, 4)),
+                   ((1, 4), (2, 3)),
+                   ((2, 3), (1, 4)),
+                   ((2, 4), (1, 3)),
+                   ((3, 4), (1, 2))]
+    # no elements
+    assert [] == list(compiler.set_of_pairwise_nonempty_splits([]))
 
 def assert_compile(expected_task_graph, expected_transposed, matrix):
     compiler = ExhaustiveCompiler()

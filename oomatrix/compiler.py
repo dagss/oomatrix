@@ -30,10 +30,9 @@ def powerset(iterable):
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
 
 def set_of_pairwise_nonempty_splits(iterable):
-    # TODO: Should eliminate subset vs. complement duplicates
     pool = tuple(iterable)
     n = len(pool)
-    for r in range(1, n):
+    for r in range(1, n // 2 + 1):
         for indices in permutations(range(n), r):
             if sorted(indices) == list(indices):
                 subset = tuple(pool[i] for i in indices)
