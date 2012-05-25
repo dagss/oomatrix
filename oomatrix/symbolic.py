@@ -28,11 +28,30 @@ from . import kind, cost_value, metadata
 
 import numpy as np
 
+def _flatten_children(cls, children):
+    """ Used by add and multiply to avoid nesting arithmetic nodes
+    of the same type.
+    """
+    flattened_children = []
+    for child in children:
+        if type(child) is type(self):
+            flattened_children.extend(child.children)
+        else:
+            flattened_children.append(child)
+    return flattened_children
+
 # Factory functions
 def add(children):
+    children = _flatten_children(AddNode, children)
+    return AddNode(children)
+
+def sorted_add(children):
+    children = _flatten_children(AddNode, children)
+    children.sort()
     return AddNode(children)
 
 def multiply(children):
+    children = _flatten_children(MultiplyNode, children)
     return MultiplyNode(children)
 
 def conjugate_transpose(expr):
@@ -135,16 +154,7 @@ class ExpressionNode(object):
 
 class ArithmeticNode(ExpressionNode):
     def __init__(self, children):
-        # Avoid nesting arithmetic nodes of the same type;
-        # "a * b * c", not "(a * b) * c".
-        unpacked_children = []
-        for child in children:
-            if type(child) is type(self):
-                unpacked_children.extend(child.children)
-            else:
-                unpacked_children.append(child)
-        del children
-        self.children = unpacked_children
+        self.children = children
         # Following is correct both for multiplication and addition...
         self.nrows= self.children[0].nrows
         self.ncols = self.children[-1].ncols
@@ -161,12 +171,12 @@ class AddNode(ArithmeticNode):
         return True
     
     def distribute_right(self, other):
-        return AddNode([MultiplyNode([term, other])
-                        for term in self.children])
+        return add([multiply([term, other])
+                    for term in self.children])
 
     def distribute_left(self, other):
-        return AddNode([MultiplyNode([other, term])
-                        for term in self.children])
+        return add([multiply([other, term])
+                    for term in self.children])
 
     def as_computable_list(self, pattern):
         1/0
@@ -248,16 +258,16 @@ class ConjugateTransposeNode(SingleChildNode):
         if not isinstance(self.child, AddNode):
             raise AssertionError()
         terms = self.child.children
-        return AddNode(
-            [MultiplyNode([term.conjugate_transpose(), other])
+        return add(
+            [multiply([term.conjugate_transpose(), other])
              for term in terms])
 
     def distribute_left(self, other):
         if not isinstance(self.child, AddNode):
             raise AssertionError()
         terms = self.child.children
-        return AddNode(
-            [MultiplyNode([other, term.conjugate_transpose()])
+        return add(
+            [multiply([other, term.conjugate_transpose()])
              for term in terms])
 
     def conjugate_transpose(self):

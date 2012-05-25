@@ -215,7 +215,7 @@ class Matrix(object):
         if other.ncols != self.ncols or self.nrows != other.nrows:
             raise ValueError('Matrices do not have same shape in addition')
 
-        return Matrix(symbolic.AddNode([self._expr, other._expr]))
+        return Matrix(symbolic.add([self._expr, other._expr]))
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
@@ -228,7 +228,7 @@ class Matrix(object):
         if self.ncols != other.nrows:
             raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
                 self.ncols, other.nrows))
-        return Matrix(symbolic.MultiplyNode([self._expr, other._expr]))
+        return Matrix(symbolic.multiply([self._expr, other._expr]))
 
     def __rmul__(self, other):
         if isinstance(other, np.ndarray):
@@ -242,7 +242,7 @@ class Matrix(object):
             raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
                 other.ncols, self.nrows))
 
-        return Matrix(symbolic.MultiplyNode([other._expr, self._expr]))
+        return Matrix(symbolic.multiply([other._expr, self._expr]))
         
 
     @property
