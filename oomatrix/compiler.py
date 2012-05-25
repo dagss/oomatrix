@@ -29,13 +29,13 @@ expression only using Task instances.
 
 NOTE: The trees are at all times kept sorted! (By the metadata)
 
-(TODO make exception: It should be OK to have a single
-ConjugateTransposeNode wrapping the root task.)
-
-A neighbour in the tree is most of the time defined as the insertion of one
-more Task (either eliminating symbolic nodes in the process, or doing a
-conversion), though for convenience there are also some zero-cost edges
-(like applying the distributive rule).
+A neighbour in the graph is either a zero-cost edge corresponding to
+a re-expression of the expression tree (use associative or distributive
+rules), or the conversion of symbolic nodes to Tasks (or a conversion, i.e.
+only the insertion of a Task). Each neighour should only represent a single
+"atomic" change to the tree; i.e. you don't immedietaly keep
+processing but emit a neighbour which can then be further processed
+when it is visited.
 
 The shortest path is found by Dijkstra. Finding the neighbour-tree is done
 by a visitor class which recurses through the tree and, eventually, generates
@@ -181,6 +181,11 @@ class NeighbourExpressionGraphGenerator(object):
     dependencies, this is not simply the sum of all Task instances in
     the tree).
 
+    self.process caches, so that when a neighbour is visited and its neighbours
+    searched for, a lot of the existing nodes is used to represent that and
+    only the actual changed path through the tree requires more objects and
+    computation time
+
     
 
     
@@ -212,6 +217,7 @@ class NeighbourExpressionGraphGenerator(object):
                 yield TaskLeaf(task)
 
     def process(self, node):
+        # The cache here is important, see class docstring
         results = self.cache.get(node, None)
         if results is None:
             results = []
@@ -269,6 +275,17 @@ class NeighbourExpressionGraphGenerator(object):
             right_node = (symbolic.MultiplyNode(right_children)
                           if len(right_children) > 1 else right_children[0])
             yield symbolic.MultiplyNode([left_node, right_node])
+
+        if len(node.children) == 2:
+            # Use distributive rule; it is enough to consider this case because
+            # larger cases are eventually reduced to this one in all possible
+            # ways
+            left, right = node.children
+            if left.can_distribute():
+                yield left.distribute_right(right)
+            if right.can_distribute():
+                yield right.distribute_left(left)
+             
 
     def visit_conjugate_transpose(self, node):
         for new_child in self.process(node.child):
@@ -651,11 +668,10 @@ class ShortestPathCompiler(BaseCompiler):
 
     def compile(self, expression):
         meta_tree, args = transforms.metadata_transform(expression)
-        #result = self.cache.get(meta_tree, None)
-        #if result is None or True: # TODO: Tasks must have switchable args
-        result = self.compilation_factory().compile(meta_tree)
-        #    result = (task_node.task, task_node.is_conjugate_transpose)
-        #    self.cache[key] = result
+        result = self.cache.get(meta_tree, None)
+        if result is None:
+            result = self.compilation_factory().compile(meta_tree)
+            self.cache[meta_tree] = result
         return result, args
 
 

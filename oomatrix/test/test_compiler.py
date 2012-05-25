@@ -79,27 +79,27 @@ def test_caching():
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
-    compiler = ExhaustiveCompiler()
-    task0, _ = compiler.compile((a + b)._expr)
-    task1, _ = compiler.compile((b + a)._expr) # note the changed order
 
-    m1 = (a + b)._expr.metadata_tree()
-    m2 = (b + a)._expr.metadata_tree()
+    compiler_obj = compiler.ShortestPathCompiler()
+    task0, _ = compiler_obj.compile((a + b)._expr)
+    task1, _ = compiler_obj.compile((b + a)._expr) # note the changed order
+
     assert task0 is task1
-    assert len(compiler.cache) == 1
+    assert len(compiler_obj.cache) == 1
 
 def test_distributive():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
     ctx.define(A * B, A)
-    ctx.define(B * B, A)
+    ctx.define(A * C, A)
     assert_compile('''
-    T2 = b + b;
-    T1 = a * T2;
-    T3 = b * T2;
+    T2 = a + a;
+    T1 = T2 * b;
+    T3 = T2 * c;
     T0 = T1 + T3
-    ''', False, (a + b) * (b + b))
+    ''', (a + a) * (b + c)) # b + c is impossible
     
 
 def test_transpose():

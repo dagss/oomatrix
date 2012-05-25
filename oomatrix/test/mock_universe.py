@@ -20,6 +20,7 @@ class MockKind(MatrixImpl):
 class MockMatricesUniverse:
     def __init__(self):
         self.reset()
+        self.kind_count = 0
 
     def reset(self):
         self.computation_index = 0
@@ -50,6 +51,9 @@ class MockMatricesUniverse:
                    result='self'):
         class NewKind(MockKind):
             name = name_
+            _sort_id = name_
+
+        self.kind_count += 1
 
         if result == 'self':
             result_kind = NewKind
@@ -124,7 +128,6 @@ def check_compilation(compiler_obj, expected_task_graph, matrix):
     tree, args = compiler_obj.compile(matrix._expr)
     # todo: transpose
     assert isinstance(tree, compiler.TaskLeaf)
-    print tree.task.args
     task = tree.task
     #assert expected_transposed == is_transposed
     task_lines = []
