@@ -3,6 +3,7 @@ from . import metadata, symbolic, utils
 class MatrixMetadataLeaf(symbolic.ExpressionNode):
     # Expression node for matrix metadata in a tree
     kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
+    precedence = 1000 # TODO
     
     def __init__(self, leaf_index, metadata):
         self.leaf_index = leaf_index
@@ -64,7 +65,7 @@ class ImplToMetadataTransform(object):
     def visit_leaf(self, node):
         meta = metadata.MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
                                        node.dtype)
-        return MatrixMetadataLeaf(None, meta), [node.matrix_impl]
+        return MatrixMetadataLeaf(None, meta), [node]
 
 class IndexMetadataTransform(object):
     """
@@ -99,14 +100,16 @@ def metadata_transform(tree):
 class KindKeyTransform(object):
     """
     Turns a tree with metadata leafs into a key-tuple (the as_tuple
-    representation of a tree with Kind as leafs).
+    representation of a tree with Kind as leafs). Also returns a
+    MatrixKindUniverse containing at least one of the kinds.
 
     Since a Metadata tree is already sorted by kind first, we can simply
     serialize the Metadata tree.
     """
 
     def execute(self, node):
-        return node.accept_visitor(self, node)
+        self.universe = None
+        return node.accept_visitor(self, node), self.universe
 
     def recurse(self, node):
         return (node.symbol,) + tuple([child.accept_visitor(self, child)
@@ -116,9 +119,37 @@ class KindKeyTransform(object):
     visit_inverse = recurse
 
     def visit_metadata_leaf(self, node):
+        self.universe = node.metadata.kind.universe
         return node.metadata.kind
 
+    def visit_task_leaf(self, node):
+        self.universe = node.metadata.kind.universe
+        return node.metadata.kind
 
 def kind_key_transform(tree):
     return KindKeyTransform().execute(tree)
      
+
+class FlattenTransform(object):
+    """
+    Turns a tree into (root_metadata, args); used for computing costs
+    and constructing Tasks.
+    """
+    def execute(self, node):
+        self.flattened = []
+        return node.accept_visitor(self, node), self.flattened
+
+    def recurse(self, children):
+        return [child.accept_visitor(self, child) for child in children]
+
+    def visit_add(self, node):
+        return metadata.meta_add(self.recurse(node.children))
+
+    def visit_metadata_leaf(self, node):
+        self.flattened.append(node)
+        return node.metadata
+
+    visit_task_leaf = visit_metadata_leaf
+
+def flatten(node):
+    return FlattenTransform().execute(node)

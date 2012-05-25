@@ -6,8 +6,8 @@ from .. import Matrix, compute, explain, symbolic
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import (computation, conversion, ImpossibleOperationError,
                            FLOP, UGLY)
-from ..compiler import ExhaustiveCompiler
-from .. import compiler, formatter
+from ..compiler import ShortestPathCompiler
+from .. import compiler, formatter, metadata, transforms, task
 
 from .mock_universe import MockKind, MockMatricesUniverse, check_compilation
 
@@ -22,35 +22,45 @@ def test_outer():
 def test_splits():
     # odd number of elements
     lst = list(compiler.set_of_pairwise_nonempty_splits([1, 2, 3]))
-    assert lst == [((1,), (2, 3)),
-                   ((2,), (1, 3)),
-                   ((3,), (1, 2))]
+    assert lst == [([1,], [2, 3]),
+                   ([2,], [1, 3]),
+                   ([3,], [1, 2])]
     # even number of elements
     lst = list(compiler.set_of_pairwise_nonempty_splits([1, 2, 3, 4]))
-    assert lst == [((1,), (2, 3, 4)),
-                   ((2,), (1, 3, 4)),
-                   ((3,), (1, 2, 4)),
-                   ((4,), (1, 2, 3)),
-                   ((1, 2), (3, 4)),
-                   ((1, 3), (2, 4)),
-                   ((1, 4), (2, 3)),
-                   ((2, 3), (1, 4)),
-                   ((2, 4), (1, 3)),
-                   ((3, 4), (1, 2))]
+    assert lst == [([1,], [2, 3, 4]),
+                   ([2,], [1, 3, 4]),
+                   ([3,], [1, 2, 4]),
+                   ([4,], [1, 2, 3]),
+                   ([1, 2], [3, 4]),
+                   ([1, 3], [2, 4]),
+                   ([1, 4], [2, 3]),
+                   ([2, 3], [1, 4]),
+                   ([2, 4], [1, 3]),
+                   ([3, 4], [1, 2])]
     # no elements
     assert [] == list(compiler.set_of_pairwise_nonempty_splits([]))
 
-def assert_compile(expected_task_graph, expected_transposed, matrix):
-    compiler = ExhaustiveCompiler()
-    check_compilation(compiler, expected_task_graph, expected_transposed, matrix)
+
+def test_sorted_mixed_list():
+    meta_a = metadata.MatrixMetadata(1, None, None, None)
+    meta_b = metadata.MatrixMetadata(2, None, None, None)
+    task_a = compiler.TaskLeaf(task.Task(None, 0, [], meta_a, None))
+    matrix_b = transforms.MatrixMetadataLeaf(0, meta_b)
+    assert matrix_b > task_a
+    meta_b.kind = -2
+    assert matrix_b < task_a
+
+def assert_compile(expected_task_graph, matrix):
+    compiler = ShortestPathCompiler()
+    check_compilation(compiler, expected_task_graph, matrix)
 
 def test_basic():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
-    assert_compile('T0 = a + b', False, a + b)
-    assert_compile('T1 = b + b; T0 = a + T1', False, a + b + b)
+    assert_compile('T0 = a + b', a + b)
+    assert_compile('T1 = b + b; T0 = a + T1', a + b + b)
 
 def test_caching():
     ctx = MockMatricesUniverse()

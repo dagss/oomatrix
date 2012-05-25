@@ -34,7 +34,7 @@ def _flatten_children(cls, children):
     """
     flattened_children = []
     for child in children:
-        if type(child) is type(self):
+        if type(child) is cls:
             flattened_children.extend(child.children)
         else:
             flattened_children.append(child)
@@ -87,7 +87,7 @@ class ExpressionNode(object):
     name = None
     kind = None
     _hash = None
-    
+
     def get_type(self):
         return TODO
 
@@ -122,9 +122,7 @@ class ExpressionNode(object):
 
     def __hash__(self):
         if self._hash is None:
-            self._hash = hash((self.symbol,
-                               tuple(hash(child)
-                                     for child in self.children)))
+            self._hash = hash(self.as_tuple())
         return self._hash
 
     def __eq__(self, other):

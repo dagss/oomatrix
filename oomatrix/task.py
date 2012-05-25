@@ -7,18 +7,18 @@ class Task(object):
     *Note*: It is not the case that the total_cost of the sum of two tasks
     equals the sum of the total_cost; there could be overlapping dependencies
     """
-    def __init__(self, computation, cost, argument_tasks,
+    def __init__(self, computation, cost, args,
                  metadata, descriptive_expression):
         self.computation = computation
         self.cost = cost
         self.metadata = metadata
-        self.argument_tasks = argument_tasks
+        self.args = args
         self.descriptive_expression = descriptive_expression
-        # Compute set of all dependencies
+        # Compute set of all dependencies (that are Task instances)
+        task_args = [arg for arg in args if isinstance(arg, Task)]
         self.dependencies = (frozenset()
-                             .union(*[arg.dependencies
-                                      for arg in argument_tasks])
-                             .union(argument_tasks))
+                             .union(*[arg.dependencies for arg in task_args])
+                             .union(task_args))
         # Compute total_cost
         self.total_cost = sum(task.cost for task in self.dependencies) + cost
 
@@ -50,7 +50,7 @@ class Task(object):
             my_id = len(encountered)
             encountered[self] = str(my_id)
             lines = ['%s%s: %r' % (indent, my_id, self)]
-            for dep in self.argument_tasks:
+            for dep in self.args:
                 lines += dep.dump_lines(encountered, indent + '    ')
         else:
             # Reference earlier dumped
@@ -61,10 +61,10 @@ class Task(object):
         return '\n'.join(self.dump_lines({}))
 
 class LeafTask(Task):
-    def __init__(self, value, metadata, descriptive_expression):
+    def __init__(self, argument_index, metadata, descriptive_expression):
         Task.__init__(self, None, zero_cost, [], metadata,
                       descriptive_expression)
-        self.value = value
+        self.argument_index = argument_index
 
     def compute(self, *args):
         assert len(args) == 0
@@ -112,7 +112,7 @@ class Scheduler(object):
         # in order to build a list of what we want to cache
         
         def eval_args(results, i, keep_set):
-            arg_task = task.argument_tasks[i]
+            arg_task = task.args[i]
             if i > 0:
                 # Add our own deps to keep_set, and evaluate preceding args
                 please_keep = keep_set.union(arg_task.dependencies)
@@ -135,7 +135,7 @@ class Scheduler(object):
         
         self.gray_tasks.add(task)
 
-        n = len(task.argument_tasks)
+        n = len(task.args)
         arg_results = [None] * n
         if n > 0:
             eval_args(arg_results, n - 1, keep_for_parent)

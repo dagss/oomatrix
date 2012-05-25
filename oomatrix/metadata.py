@@ -20,6 +20,10 @@ class MatrixMetadata(object):
 
     def as_tuple(self):
         return (self.kind, self.rows_shape, self.cols_shape, self.dtype)
+
+    def copy_with_kind(self, kind):
+        return MatrixMetadata(kind, self.rows_shape, self.cols_shape,
+                              self.dtype)
         
     def __eq__(self, other):
         if not isinstance(other, MatrixMetadata):
@@ -35,12 +39,14 @@ class MatrixMetadata(object):
     def __hash__(self):
         return hash(self.as_tuple())
 
-def meta_add(a, b):
-    assert a.rows_shape == b.rows_shape
-    assert a.cols_shape == b.cols_shape
+def meta_add(children):
+    first = children[0]
+    for child in children[1:]:
+        assert child.rows_shape == first.rows_shape
+        assert child.cols_shape == first.cols_shape
     # todo: dtype
     # todo: 
-    return MatrixMetadata(a.rows_shape, a.cols_shape, a.dtype)
+    return MatrixMetadata(None, first.rows_shape, first.cols_shape, first.dtype)
 
 def meta_mul(a, b):
     assert a.cols_shape == b.rows_shape
