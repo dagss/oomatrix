@@ -11,14 +11,6 @@ from .. import compiler, formatter, metadata, transforms, task
 
 from .mock_universe import MockKind, MockMatricesUniverse, check_compilation
 
-def test_outer():
-    lst = list(compiler.outer([1,2,3], [4,5,6], [7,8]))
-    assert lst == [(1, 4, 7), (1, 4, 8), (1, 5, 7), (1, 5, 8),
-                   (1, 6, 7), (1, 6, 8), (2, 4, 7), (2, 4, 8),
-                   (2, 5, 7), (2, 5, 8), (2, 6, 7), (2, 6, 8),
-                   (3, 4, 7), (3, 4, 8), (3, 5, 7), (3, 5, 8),
-                   (3, 6, 7), (3, 6, 8)]
-
 def test_splits():
     # odd number of elements
     lst = list(compiler.set_of_pairwise_nonempty_splits([1, 2, 3]))
@@ -44,8 +36,8 @@ def test_splits():
 def test_sorted_mixed_list():
     meta_a = metadata.MatrixMetadata(1, None, None, None)
     meta_b = metadata.MatrixMetadata(2, None, None, None)
-    task_a = compiler.TaskLeaf(task.Task(None, 0, [], meta_a, None))
-    matrix_b = transforms.MatrixMetadataLeaf(0, meta_b)
+    task_a = symbolic.TaskLeaf(task.Task(None, 0, [], meta_a, None))
+    matrix_b = symbolic.MatrixMetadataLeaf(0, meta_b)
     assert matrix_b > task_a
     meta_b.kind = -2
     assert matrix_b < task_a

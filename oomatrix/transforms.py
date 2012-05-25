@@ -1,25 +1,4 @@
-from . import metadata, symbolic, utils
-
-class MatrixMetadataLeaf(symbolic.ExpressionNode):
-    # Expression node for matrix metadata in a tree
-    kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
-    precedence = 1000 # TODO
-    
-    def __init__(self, leaf_index, metadata):
-        self.leaf_index = leaf_index
-        self.metadata = metadata
-
-    def accept_visitor(self, visitor, *args, **kw):
-        return visitor.visit_metadata_leaf(*args, **kw)
-
-    def as_tuple(self):
-        # Important: should sort by kind first
-        return self.metadata.as_tuple() + (self.leaf_index,)
-
-    def _repr(self, indent):
-        return [indent + '<arg:%s, %r>' % (self.leaf_index, self.metadata)]
-
-
+from . import metadata, symbolic, utils, task
     
 class ImplToMetadataTransform(object):
     """
@@ -70,7 +49,7 @@ class ImplToMetadataTransform(object):
     def visit_leaf(self, node):
         meta = metadata.MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
                                        node.dtype)
-        return MatrixMetadataLeaf(None, meta), [node]
+        return symbolic.MatrixMetadataLeaf(None, meta), [node]
 
 class IndexMetadataTransform(object):
     """

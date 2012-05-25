@@ -380,6 +380,44 @@ class Promise(BaseComputable):
             raise PatternMismatchError()
         return [self.task]
 
+class DecompositionNode(ExpressionNode):
+    """
+    Represents a promise to perform a matrix decomposition.
+    """
+    def __init__(self, child, decomposition):
+        self.symbol = 'decomposition:%s' % decomposition.name
+        self.child = child
+        self.children = [child]
+        self.decomposition = decomposition
+        self.nrows, self.ncols = child.nrows, child.ncols
+        self.universe = child.universe
+        self.dtype = child.dtype
+        self.kind = child.kind
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_decomposition(*args, **kw)
+
+    def as_computable_list(self, pattern):
+        if not isinstance(pattern, kind.FactorPatternNode):
+            raise PatternMismatchError()
+        return self.child.as_computable_list(pattern.child)
+
+
+for x, val in [
+    (BaseComputable, 1000),
+    (DecompositionNode, 1000),
+    (BracketNode, 1000),
+    (InverseNode, 40),
+    (ConjugateTransposeNode, 40),
+    (MultiplyNode, 30),
+    (AddNode, 20)]:
+    x.precedence = val
+
+
+#
+# An uncompiled tree contains LeafNode
+#
+
 class LeafNode(BaseComputable):
     cost = 0 * FLOP
     
@@ -422,36 +460,50 @@ class LeafNode(BaseComputable):
     def _attr_repr(self):
         return self.name
 
-class DecompositionNode(ExpressionNode):
-    """
-    Represents a promise to perform a matrix decomposition.
-    """
-    def __init__(self, child, decomposition):
-        self.symbol = 'decomposition:%s' % decomposition.name
-        self.child = child
-        self.children = [child]
-        self.decomposition = decomposition
-        self.nrows, self.ncols = child.nrows, child.ncols
-        self.universe = child.universe
-        self.dtype = child.dtype
-        self.kind = child.kind
+
+
+#
+# A compiled tree contains MatrixMetadataLeaf and TaskLeaf
+#
+
+class MatrixMetadataLeaf(ExpressionNode):
+    # Expression node for matrix metadata in a tree
+    kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
+    precedence = 1000 # TODO
+    
+    def __init__(self, leaf_index, metadata):
+        self.leaf_index = leaf_index
+        self.metadata = metadata
 
     def accept_visitor(self, visitor, *args, **kw):
-        return visitor.visit_decomposition(*args, **kw)
+        return visitor.visit_metadata_leaf(*args, **kw)
 
-    def as_computable_list(self, pattern):
-        if not isinstance(pattern, kind.FactorPatternNode):
-            raise PatternMismatchError()
-        return self.child.as_computable_list(pattern.child)
+    def as_tuple(self):
+        # Important: should sort by kind first
+        return self.metadata.as_tuple() + (self.leaf_index,)
 
+    def _repr(self, indent):
+        return [indent + '<arg:%s, %r>' % (self.leaf_index, self.metadata)]
 
-for x, val in [
-    (BaseComputable, 1000),
-    (DecompositionNode, 1000),
-    (BracketNode, 1000),
-    (InverseNode, 40),
-    (ConjugateTransposeNode, 40),
-    (MultiplyNode, 30),
-    (AddNode, 20)]:
-    x.precedence = val
+class TaskLeaf(ExpressionNode):
+    kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
+    children = ()
+    precedence = 1000
+    
+    def __init__(self, task):
+        self.task = task
+        self.metadata = task.metadata
+        self.dependencies = task.dependencies
+
+    def as_tuple(self):
+        # TaskNode compares by its metadata first and then the task (which must
+        # be different from the integer IDs used in MatrixMetadataNode).
+        # This ensures that sorting happens by class first.
+        return self.metadata.as_tuple() + ('task', id(self.task))
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_task_leaf(*args, **kw)
+
+    def _repr(self, indent):
+        return [indent + '<TaskLeaf %r>' % self.metadata]
 

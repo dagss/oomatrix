@@ -1,6 +1,21 @@
 import numpy as np
 
+from . import symbolic
 from .cost_value import zero_cost
+
+class Argument(object):
+    """
+    Placeholder for an argument; essentially represents "leaves" in the
+    Task DAG.
+    """
+    def __init__(self, argument_index, metadata):
+        self.argument_index = argument_index
+        self.metadata = metadata
+        self.args = ()
+        self.dependencies = frozenset()
+
+    def get_total_cost(self):
+        return zero_cost
 
 class Task(object):
     """
@@ -60,22 +75,16 @@ class Task(object):
     def dump(self):
         return '\n'.join(self.dump_lines({}))
 
-class LeafTask(Task):
-    def __init__(self, argument_index, metadata, descriptive_expression):
-        Task.__init__(self, None, zero_cost, [], metadata,
-                      descriptive_expression)
-        self.argument_index = argument_index
-
-    def compute(self, *args):
-        assert len(args) == 0
-        return self.value
-
 class DefaultExecutor(object):
-    def __init__(self):
+    def __init__(self, expression_args):
         self.results = {}
+        self.expression_args = expression_args
     
     def execute_task(self, task, arguments):
-        result = task.compute(*arguments)
+        if isinstance(task, Task):
+            result = task.compute(*arguments)
+        else:
+            result = self.expression_args[task.argument_index]
         self.results[task] = result
         return result
 
@@ -140,6 +149,5 @@ class Scheduler(object):
         if n > 0:
             eval_args(arg_results, n - 1, keep_for_parent)
         result = self.executor.execute_task(task, arg_results)
-        
         self.gray_tasks.remove(task)
         return result

@@ -5,7 +5,8 @@ from ..cost_value import FLOP
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import computation, conversion
 from .. import formatter, Matrix, symbolic, compiler
-from ..task import LeafTask, Task
+from ..task import Task
+from ..symbolic import MatrixMetadataLeaf
 
 class MockKind(MatrixImpl):
     def __init__(self, value, nrows, ncols):
@@ -107,7 +108,6 @@ class FormatTaskExpression(formatter.BasicExpressionFormatter):
         return True, self.task_names[expr.task]
     
 def serialize_task(lines, task, args, formatter):
-    from ..transforms import MatrixMetadataLeaf
     if isinstance(task, MatrixMetadataLeaf):
         leaf_matrix = args[task.leaf_index]
         name = leaf_matrix.name
@@ -127,7 +127,7 @@ def serialize_task(lines, task, args, formatter):
 def check_compilation(compiler_obj, expected_task_graph, matrix):
     tree, args = compiler_obj.compile(matrix._expr)
     # todo: transpose
-    assert isinstance(tree, compiler.TaskLeaf)
+    assert isinstance(tree, symbolic.TaskLeaf)
     task = tree.task
     #assert expected_transposed == is_transposed
     task_lines = []
