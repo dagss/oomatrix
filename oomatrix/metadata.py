@@ -48,7 +48,10 @@ def meta_add(children):
     # todo: 
     return MatrixMetadata(None, first.rows_shape, first.cols_shape, first.dtype)
 
-def meta_mul(a, b):
-    assert a.cols_shape == b.rows_shape
+def meta_multiply(children):
+    for i in range(1, len(children)):
+        assert children[i - 1].cols_shape == children[i].rows_shape
     #TODO dtype
-    return MatrixMetadata(a.rows_shape, b.cols_shape, a.dype)
+    return MatrixMetadata(None,
+                          children[0].rows_shape, children[-1].cols_shape,
+                          children[0].dtype)

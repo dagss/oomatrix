@@ -54,13 +54,25 @@ def assert_compile(expected_task_graph, matrix):
     compiler = ShortestPathCompiler()
     check_compilation(compiler, expected_task_graph, matrix)
 
-def test_basic():
+def test_add():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
     assert_compile('T0 = a + b', a + b)
     assert_compile('T1 = b + b; T0 = a + T1', a + b + b)
+
+def test_multiply():
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A') 
+    B, b, bu, buh = ctx.new_matrix('B')
+    ctx.define(A * B, A)
+    assert_compile('T0 = a * b', a * b)
+    with assert_raises(compiler.ImpossibleOperationError):
+        assert_compile('T1 = b * b; T0 = a + T1', a * b * b)
+    ctx.define(B * B, B)
+    assert_compile('T1 = b * b; T0 = a * T1', a * b * b)
+    
 
 def test_caching():
     ctx = MockMatricesUniverse()
@@ -96,7 +108,7 @@ def test_transpose():
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(B.h, A)
     ctx.define(A * A, A)
-    assert_compile('T1 = b.h; T0 = T1 * a', False, b.h * a)
+    assert_compile('T1 = b.h; T0 = T1 * a', b.h * a)
 
 def test_factor():
     ctx = MockMatricesUniverse()
@@ -106,11 +118,11 @@ def test_factor():
     ctx.define(B.h * A, A)
     ctx.define(B.f, B)
     ctx.define(B.i, B)
-    assert_compile('T0 = b.f', False, b.f)
-    assert_compile('T1 = b + b; T0 = T1.f', False, (b + b).f)
-    assert_compile('T1 = b.f; T0 = T1 * a', False, b.f * a)
-    assert_compile('T2 = b.f; T1 = T2.i; T0 = T1 * a', False, b.f.i * a)
-    assert_compile('T2 = b.i; T1 = T2.f; T0 = T1 * a', False, b.i.f * a)
+    assert_compile('T0 = b.f', b.f)
+    assert_compile('T1 = b + b; T0 = T1.f', (b + b).f)
+    assert_compile('T1 = b.f; T0 = T1 * a', b.f * a)
+    assert_compile('T2 = b.f; T1 = T2.i; T0 = T1 * a', b.f.i * a)
+    assert_compile('T2 = b.i; T1 = T2.f; T0 = T1 * a', b.i.f * a)
 
 def test_inverse():
     ctx = MockMatricesUniverse()
@@ -119,10 +131,10 @@ def test_inverse():
     ctx.define(B * A, A)
     ctx.define(B.i, B)
     ctx.define(B.h, B)
-    assert_compile('T0 = b.i', False, b.i)
-    assert_compile('T1 = b.i; T0 = T1 * a', False, b.i * a)
-    assert_compile('T2 = b.i; T1 = T2.h; T0 = T1 * a', False, b.i.h * a)
-    assert_compile('T2 = b.i; T1 = T2.h; T0 = T1 * a', False, b.h.i * a)
+    assert_compile('T0 = b.i', b.i)
+    assert_compile('T1 = b.i; T0 = T1 * a', b.i * a)
+    assert_compile('T2 = b.i; T1 = T2.h; T0 = T1 * a', b.i.h * a)
+    assert_compile('T2 = b.i; T1 = T2.h; T0 = T1 * a', b.h.i * a)
 
     
     

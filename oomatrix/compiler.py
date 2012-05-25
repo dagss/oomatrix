@@ -197,11 +197,7 @@ class NeighbourExpressionGraphGenerator(object):
     def generate_direct_computations(self, node):
         if isinstance(node, Task):
             return
-        #print '?????',node
         key, universe = transforms.kind_key_transform(node)
-        if isinstance(key, tuple) and len(key) == 4:
-            print 'NODE', node
-            print 'KEY', key
         computations_by_kind = universe.get_computations(key)
 
         for target_kind, computations in computations_by_kind.iteritems():
@@ -224,13 +220,6 @@ class NeighbourExpressionGraphGenerator(object):
                 results.append(x)
             # Look for ways to process the subtree
             for x in node.accept_visitor(self, node):
-                print 'RECV', x
-                if (isinstance(x, symbolic.AddNode) and len(x.children) == 3
-                    and sorted(x.children) != x.children):
-                    print 'FAILING INPUT', node
-                    print 'FAILING OUTPUT', x
-                    1/0
-                    
                 results.append(x)
             self.cache[node] = results
         return results
@@ -245,16 +234,10 @@ class NeighbourExpressionGraphGenerator(object):
                 new_children.append(new_child)
                 # Important: keep the children sorted (by kind)
                 new_children.sort()
-                if not any(isinstance(x, symbolic.AddNode) for x in new_children):
-#                    if len(new_children) == 3:
-                        print 'SORTED', new_children
-                #if len(new_children) == 2:
-                #    1/0
                 new_dependencies = frozenset_union(*[getattr(x, 'dependencies', ())
                                                      for x in new_children])
                 new_node = symbolic.AddNode(new_children)
                 new_node.dependencies = new_dependencies
-                print 'YIELDING', new_children
                 yield new_node
 
         # Use associative rules to split up expression
@@ -263,13 +246,48 @@ class NeighbourExpressionGraphGenerator(object):
             right = (symbolic.AddNode(complement)
                      if len(complement) > 1 else complement[0])
             new_parent = symbolic.AddNode(sorted([left, right]))
-            print 'YIELDING_B', new_parent
             yield new_parent
+
+    def visit_multiply(self, node):
+        # Forward possibilities in sub-trees. These include conversions,
+        # so that all direction additions are already covered by process
+        children = node.children
+        for i, child in enumerate(children):
+            for new_child in self.process(child):            
+                new_children = children[:i] + [new_child] + children[i + 1:]
+                new_dependencies = frozenset_union(*[getattr(x, 'dependencies', ())
+                                                     for x in new_children])
+                new_node = symbolic.MultiplyNode(new_children)
+                new_node.dependencies = new_dependencies
+                yield new_node
+
+        # Use associative rules to split up expression
+        for i in range(1, len(children) - 1):
+            left_children, right_children = children[:i], children[i:]
+            left_node = (symbolic.MultiplyNode(left_children)
+                         if len(left_children) > 1 else left_children[0])
+            right_node = (symbolic.MultiplyNode(right_children)
+                          if len(right_children) > 1 else right_children[0])
+            yield symbolic.MultiplyNode([left_node, right_node])
+
+    def visit_conjugate_transpose(self, node):
+        for new_child in self.process(node.child):
+            yield symbolic.ConjugateTransposeNode(new_child)
+
+    def visit_inverse(self, node):
+        for new_child in self.process(node.child):
+            yield symbolic.InverseNode(new_child)
+    
+    def visit_decomposition(self, node):
+        for new_child in self.process(node.child):
+            yield symbolic.DecompositionNode(new_child, node.decomposition)
         
     def visit_metadata_leaf(self, node):
         # self.process has already covered all conversions of the leaf-node,
         # so we can't do anything here to produce a neighbour tree
         return ()
+
+
 
     visit_task_leaf = visit_metadata_leaf
 
@@ -292,15 +310,12 @@ class ShortestPathCompilation(object):
             if head in visited:
                 continue # visited earlier with a lower cost
             visited.add(head)
-            print 'popped',head
             if self.is_goal(head):
                 return head # Done!
             
             gen = self.neighbour_generator.generate_neighbours(head)
             for cost, node in gen:
                 cost_scalar = cost.weigh(self.cost_map)
-                print 'pushed'
-                print node
                 tentative_queue.push(cost_scalar, node)
         raise ImpossibleOperationError()
 

@@ -62,6 +62,11 @@ class ImplToMetadataTransform(object):
         tree, args = node.child.accept_visitor(self, node.child)
         return symbolic.inverse(tree), args
 
+    def visit_decomposition(self, node):
+        tree, args = node.child.accept_visitor(self, node.child)
+        return symbolic.DecompositionNode(tree, node.decomposition), args    
+
+
     def visit_leaf(self, node):
         meta = metadata.MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
                                        node.dtype)
@@ -70,7 +75,7 @@ class ImplToMetadataTransform(object):
 class IndexMetadataTransform(object):
     """
     Take a MatrixMetadataLeaf tree and annotates each leaf
-    with a global leaf index
+    with a global leaf index in-place
     """
     def execute(self, node):
         self.leaf_index = 0
@@ -86,6 +91,11 @@ class IndexMetadataTransform(object):
 
     visit_add = visit_multiply = recurse_multi_child
     visit_conjugate_transpose = visit_inverse = recurse_single_child
+
+    def visit_decomposition(self, node):
+        child = node.child
+        return symbolic.DecompositionNode(child.accept_visitor(self, child),
+                                          node.decomposition)    
 
     def visit_metadata_leaf(self, node):
         node.leaf_index = self.leaf_index
@@ -116,7 +126,7 @@ class KindKeyTransform(object):
                                        for child in node.children])
 
     visit_add = visit_multiply = visit_conjugate_transpose = recurse
-    visit_inverse = recurse
+    visit_inverse = visit_decomposition = recurse
 
     def visit_metadata_leaf(self, node):
         self.universe = node.metadata.kind.universe
@@ -143,13 +153,23 @@ class FlattenTransform(object):
         return [child.accept_visitor(self, child) for child in children]
 
     def visit_add(self, node):
-        return metadata.meta_add(self.recurse(node.children))
+        return metadata.meta_add(self.recurse(node.children))    
 
-    def visit_metadata_leaf(self, node):
+    def visit_multiply(self, node):
+        return metadata.meta_multiply(self.recurse(node.children))
+
+    def visit_leaf(self, node):
         self.flattened.append(node)
         return node.metadata
 
-    visit_task_leaf = visit_metadata_leaf
+    visit_task_leaf = visit_metadata_leaf = visit_leaf
+
+    def visit_single(self, node):
+        return node.child.accept_visitor(self, node.child) 
+
+    visit_conjugate_transpose = visit_inverse = visit_single
+    visit_decomposition = visit_single
+
 
 def flatten(node):
     return FlattenTransform().execute(node)
