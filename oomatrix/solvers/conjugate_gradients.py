@@ -68,8 +68,10 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
     for k in xrange(maxit):
         q = compute_array(A * d)
         dAd = np.sum(d * q, axis=0)
-        if not np.all(np.isfinite(dAd)) or np.any(dAd == 0):
-            raise AssertionError()
+        if not np.all(np.isfinite(dAd)):
+            raise AssertionError("conjugate_gradients: A * d yielded inf values")
+        if np.any(dAd == 0):
+            raise AssertionError("conjugate_gradients: A is singular")
         alpha = delta_new / dAd
         x += alpha[None, :] * d
         r -= alpha[None, :] * q
