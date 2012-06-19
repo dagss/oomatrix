@@ -81,7 +81,7 @@ class DefaultExecutor(object):
     
     def execute_task(self, task, arguments):
         if isinstance(task, Task):
-            result = task.compute(*arguments)
+            result = task.compute(arguments)
         else:
             result = self.expression_args[task.argument_index]
         self.results[task] = result

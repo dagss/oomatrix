@@ -127,5 +127,27 @@ def test_inverse():
     assert_compile('T2 = Bi(b); T1 = Bh(T2); T0 = multiply_B_A(T1, a)', b.i.h * a)
     assert_compile('T2 = Bi(b); T1 = Bh(T2); T0 = multiply_B_A(T1, a)', b.h.i * a)
 
+def test_impossible():        
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A') 
+    B, b, bu, buh = ctx.new_matrix('B')
+    with assert_raises(ImpossibleOperationError):
+        assert_compile('', a + b)
+    with assert_raises(ImpossibleOperationError):
+        assert_compile('', a * b)
+
+def test_loop():
+    # You can do an infinite number of conversions between A and B so
+    # the graph-of-trees is infinitely large; check that A + C is
+    # still ruled out as impossible
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A') 
+    B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
+    ctx.define(A, B)
+    ctx.define(B, A)
+    with assert_raises(ImpossibleOperationError):
+        assert_compile('', a + c)
+
     
     

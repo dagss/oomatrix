@@ -494,10 +494,11 @@ class TaskLeaf(ExpressionNode):
     children = ()
     precedence = 1000
     
-    def __init__(self, task):
+    def __init__(self, task, conversion_kinds_tried):
         self.task = task
         self.metadata = task.metadata
         self.dependencies = task.dependencies
+        self.conversion_kinds_tried = conversion_kinds_tried
 
     def as_tuple(self):
         # ##TaskLeaf essentially compares by the its output and its dependencies,
@@ -508,7 +509,8 @@ class TaskLeaf(ExpressionNode):
         return visitor.visit_task_leaf(*args, **kw)
 
     def _repr(self, indent):
-        return [indent + '<TaskLeaf %r>' % self.metadata]
+        return [indent + '<TaskLeaf %r %r>' % (self.metadata,
+                                               self.conversion_kinds_tried)]
 
     def as_task(self):
         return self.task

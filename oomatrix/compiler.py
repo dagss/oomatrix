@@ -118,23 +118,38 @@ class NeighbourExpressionGraphGenerator(object):
         
     def generate_direct_computations(self, node):
         # Important: This spawns new Task objects, so important to
-        # only call from process so that each task is cached
+        # only call from process() so that each task is cached
         if isinstance(node, Task):
-            return
+            assert False
         key, universe = transforms.kind_key_transform(node)
         computations_by_kind = universe.get_computations(key)
+        root_meta, args = transforms.flatten(node)
+        meta_args = [arg.metadata for arg in args]
+        args = [arg.as_task() for arg in args]
+        
+        # Avoid infinite conversion loops (which essentially creates
+        # infinite graphs, which is a problem when there is no
+        # possible action) by storing the kinds that have already been
+        # tried in the TaskLeaf. If the input node is a TaskLeaf then
+        # we are in the process of querying for conversions.
+        if isinstance(node, TaskLeaf):
+            assert len(args) == 1
+            conversion_kinds_tried_before = node.conversion_kinds_tried
+        else:
+            conversion_kinds_tried_before = ()
 
         for target_kind, computations in computations_by_kind.iteritems():
+            if target_kind in conversion_kinds_tried_before:
+                continue
+            root_meta = root_meta.copy_with_kind(target_kind)
+            conversion_kinds_tried = (conversion_kinds_tried_before +
+                                      (target_kind,))
             for computation in computations:
-                root_meta, args = transforms.flatten(node)
-                root_meta = root_meta.copy_with_kind(target_kind)
-                meta_args = [arg.metadata for arg in args]
-                args = [arg.as_task() for arg in args]
                 cost = find_cost(computation, meta_args)
                 task = Task(computation, cost, args, root_meta, node)
-                node = TaskLeaf(task)
-                node.task_dependencies = frozenset([task])
-                yield node
+                new_node = TaskLeaf(task, conversion_kinds_tried)
+                new_node.task_dependencies = node.task_dependencies.union([task])
+                yield new_node
 
     def process(self, node):
         # The cache here is important, see class docstring
@@ -270,6 +285,15 @@ class ShortestPathCompilation(object):
         #
         # Since Heap() doesn't have decrease-key, we instead use a visited
         # set to flag the nodes that have been taken out of the queue.
+        #
+        # Note: Each DAG (vertex in the graph) both represents a meta-data-tree,
+        # *and* represents a specific way of computation. For comparisons here,
+        # Task's are compared by their metadata and treated as a leaf. This
+        # means that there can be multiple DAG for a vertex that compares
+        # and hashes the same, but represents different ways and has different
+        # costs. Since at the time of popping we pop the cheapest way to
+        # the target, this is OK.
+        #
         visited = set()
         tentative_queue = Heap()
         tentative_queue.push(0, root)
@@ -279,7 +303,7 @@ class ShortestPathCompilation(object):
                 continue # visited earlier with a lower cost
             visited.add(head)
 
-            #print 'POPPED', head
+            #rint 'POPPED', head_cost, head, hash(head)
             if self.is_goal(head):
                 return head # Done!
             
