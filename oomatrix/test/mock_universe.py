@@ -46,9 +46,9 @@ class MockMatricesUniverse:
     def reset(self):
         self.computation_index = 0
 
-    def define(self, match, result_kind, name=None, reprtemplate='', cost=1 * FLOP):
+    def define(self, match, result_kind, reprtemplate='', name=None, cost=1 * FLOP):
         if name is None:
-            name = match_tree_to_name(match)                
+            name = match_tree_to_name(match)
         reprtemplate = '(%s)' % reprtemplate
         # If '#' is in reprtemplate, substitute it with the number of
         # times called
@@ -119,11 +119,15 @@ def serialize_task(lines, task, args, task_names):
 
 def check_compilation(compiler_obj, expected_task_graph, matrix):
     tree, args = compiler_obj.compile(matrix._expr)
-    # todo: transpose
+    is_transposed = isinstance(tree, symbolic.ConjugateTransposeNode)
+    if is_transposed:
+        tree, = tree.children
     assert isinstance(tree, symbolic.TaskLeaf)
     task = tree.task
     #assert expected_transposed == is_transposed
     task_lines = []
     serialize_task(task_lines, task, args, {})
     task_str = '; '.join(task_lines)
+    if is_transposed:
+        task_str = 'transposed: %s' % task_str
     assert remove_blanks(expected_task_graph) == remove_blanks(task_str)

@@ -453,10 +453,13 @@ class MatrixMetadataLeaf(ExpressionNode):
     kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
     precedence = 1000 # TODO
     
-    def __init__(self, leaf_index, metadata):
-        self.leaf_index = leaf_index
+    def __init__(self, metadata):
         self.metadata = metadata
 
+    def set_leaf_index(self, leaf_index):
+        self.leaf_index = leaf_index
+        self.argument_index_set = frozenset([leaf_index])
+        
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_metadata_leaf(*args, **kw)
 
@@ -475,23 +478,23 @@ class TaskLeaf(ExpressionNode):
     children = ()
     precedence = 1000
     
-    def __init__(self, task, conversion_kinds_tried):
+    def __init__(self, task, argument_index_set):
         self.task = task
         self.metadata = task.metadata
         self.dependencies = task.dependencies
-        self.conversion_kinds_tried = conversion_kinds_tried
+        self.argument_index_set = argument_index_set
 
     def as_tuple(self):
         # ##TaskLeaf essentially compares by the its output and its dependencies,
         # ##not how the computation is performed.
-        return self.metadata.as_tuple() + ('task', id(self.task))
+        return self.metadata.as_tuple() + ('task', self.argument_index_set)
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_task_leaf(*args, **kw)
 
     def _repr(self, indent):
-        return [indent + '<TaskLeaf %r %r>' % (self.metadata,
-                                               self.conversion_kinds_tried)]
+        return [indent + '<TaskLeaf %r %r %r>' % (self.metadata,
+                                                  sorted(list(self.argument_index_set)))]
 
     def as_task(self):
         return self.task

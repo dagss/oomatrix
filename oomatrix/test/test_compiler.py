@@ -36,8 +36,9 @@ def test_splits():
 def test_sorted_mixed_list():
     meta_a = metadata.MatrixMetadata(1, None, None, None)
     meta_b = metadata.MatrixMetadata(2, None, None, None)
-    task_a = symbolic.TaskLeaf(task.Task(None, 0, [], meta_a, None))
-    matrix_b = symbolic.MatrixMetadataLeaf(0, meta_b)
+    task_a = symbolic.TaskLeaf(task.Task(None, 0, [], meta_a, None), ())
+    matrix_b = symbolic.MatrixMetadataLeaf(meta_b)
+    matrix_b.set_leaf_index(0)
     assert matrix_b > task_a
     meta_b.kind = -2
     assert matrix_b < task_a
@@ -68,6 +69,16 @@ def test_multiply():
     ctx.define(A * C, A)
     assert_compile('T1 = multiply_A_B(a, b); T0 = multiply_A_B(T1, b)',
                    a * b * c)
+
+def test_multiply_conjugation():
+    # check that the conjugate is attempted
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A') 
+    B, b, bu, buh = ctx.new_matrix('B')
+    ctx.define(A.h * B, A)
+    ctx.define(B.h, B)
+    assert_compile('transposed: T1 = Bh(b); T0 = multiply_Ah_B(a, T1)', b * a)
+    
 
 def test_caching():
     ctx = MockMatricesUniverse()

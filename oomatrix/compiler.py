@@ -125,29 +125,16 @@ class NeighbourExpressionGraphGenerator(object):
         computations_by_kind = universe.get_computations(key)
         root_meta, args = transforms.flatten(node)
         meta_args = [arg.metadata for arg in args]
+        argument_index_set = frozenset_union(*[arg.argument_index_set
+                                               for arg in args])
         args = [arg.as_task() for arg in args]
-        
-        # Avoid infinite conversion loops (which essentially creates
-        # infinite graphs, which is a problem when there is no
-        # possible action) by storing the kinds that have already been
-        # tried in the TaskLeaf. If the input node is a TaskLeaf then
-        # we are in the process of querying for conversions.
-        if isinstance(node, TaskLeaf):
-            assert len(args) == 1
-            conversion_kinds_tried_before = node.conversion_kinds_tried
-        else:
-            conversion_kinds_tried_before = ()
 
         for target_kind, computations in computations_by_kind.iteritems():
-            if target_kind in conversion_kinds_tried_before:
-                continue
             root_meta = root_meta.copy_with_kind(target_kind)
-            conversion_kinds_tried = (conversion_kinds_tried_before +
-                                      (target_kind,))
             for computation in computations:
                 cost = find_cost(computation, meta_args)
                 task = Task(computation, cost, args, root_meta, node)
-                new_node = TaskLeaf(task, conversion_kinds_tried)
+                new_node = TaskLeaf(task, argument_index_set)
                 new_node.task_dependencies = node.task_dependencies.union([task])
                 yield new_node
 
@@ -190,8 +177,7 @@ class NeighbourExpressionGraphGenerator(object):
                 node.task_dependencies  = frozenset_union(*[x.task_dependencies
                                                             for x in children])
                 return node
-                
-                
+
         for subset, complement in set_of_pairwise_nonempty_splits(children):
             left = add(subset)
             right = add(complement)
@@ -203,8 +189,7 @@ class NeighbourExpressionGraphGenerator(object):
             yield new_parent
 
     def visit_multiply(self, node):
-        # Forward possibilities in sub-trees. These include conversions,
-        # so that all direction additions are already covered by process
+        # Forward possibilities in sub-trees. These include conversions.
         children = node.children
         for i, child in enumerate(children):
             for new_child in self.process(child):            
@@ -231,10 +216,10 @@ class NeighbourExpressionGraphGenerator(object):
             right_node = multiply(right_children)
             yield multiply([left_node, right_node])
 
+        # Use distributive rule; it is enough to consider the n=2 case
+        # because larger cases are eventually reduced to this one in
+        # all possible ways
         if len(node.children) == 2:
-            # Use distributive rule; it is enough to consider this case because
-            # larger cases are eventually reduced to this one in all possible
-            # ways
             left, right = node.children
             new_dependencies = left.task_dependencies.union(right.task_dependencies)
             if left.can_distribute():
@@ -245,17 +230,24 @@ class NeighbourExpressionGraphGenerator(object):
                 new_node = right.distribute_left(left)
                 new_node.task_dependencies = new_dependencies
                 yield new_node
-             
+
+        # Try the conjugate transpose expression
+        new_children = [symbolic.conjugate_transpose(x) for x in children[::-1]]
+        new_node = symbolic.MultiplyNode(new_children)
+        new_node.task_dependencies = node.task_dependencies
+        new_node_t = symbolic.ConjugateTransposeNode(new_node)
+        new_node_t.task_dependencies = node.task_dependencies
+        yield new_node_t
 
     def visit_conjugate_transpose(self, node):
         for new_child in self.process(node.child):
-            new_node = symbolic.ConjugateTransposeNode(new_child)
+            new_node = symbolic.conjugate_transpose(new_child)
             new_node.task_dependencies = new_child.task_dependencies
             yield new_node
 
     def visit_inverse(self, node):
         for new_child in self.process(node.child):
-            new_node = symbolic.InverseNode(new_child)
+            new_node = symbolic.inverse(new_child)
             new_node.task_dependencies = new_child.task_dependencies
             yield new_node
     

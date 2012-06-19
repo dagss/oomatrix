@@ -111,12 +111,15 @@ class Matrix(object):
         from .task import Scheduler, DefaultExecutor
 
         task_tree, args = self.compile(compiler=compiler)
+        is_transpose = isinstance(task_tree, symbolic.ConjugateTransposeNode)
+        if is_transpose:
+            task_tree, = task_tree.children
         task = task_tree.as_task()
         matrix_impl_args = [arg.matrix_impl for arg in args]
         matrix_impl = Scheduler(task, DefaultExecutor(matrix_impl_args)).execute()
         expr = symbolic.LeafNode(None, matrix_impl)
-        #if is_transpose:
-        #    expr = symbolic.conjugate_transpose(expr)
+        if is_transpose:
+            expr = symbolic.conjugate_transpose(expr)
         result = Matrix(expr)
         return result
 
@@ -255,7 +258,7 @@ class Matrix(object):
     def i(self):
         if self.ncols != self.nrows:
             raise ValueError("Cannot take inverse of non-square matrix")
-        return Matrix(symbolic.InverseNode(self._expr))
+        return Matrix(symbolic.inverse(self._expr))
 
     @property
     def f(self):

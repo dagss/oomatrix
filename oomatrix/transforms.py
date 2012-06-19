@@ -54,7 +54,8 @@ class ImplToMetadataTransform(object):
     def visit_leaf(self, node):
         meta = metadata.MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
                                        node.dtype)
-        new_node = symbolic.MatrixMetadataLeaf(None, meta)
+        new_node = symbolic.MatrixMetadataLeaf(meta)
+        new_node.set_leaf_index(None)
         return new_node, [node]
 
 class IndexMetadataTransform(object):
@@ -80,7 +81,7 @@ class IndexMetadataTransform(object):
     visit_decomposition = recurse_single_child
 
     def visit_metadata_leaf(self, node):
-        node.leaf_index = self.leaf_index
+        node.set_leaf_index(self.leaf_index)
         self.leaf_index += 1
 
 def metadata_transform(tree):
