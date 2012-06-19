@@ -4,6 +4,7 @@ from ..kind import MatrixImpl
 from ..formatter import BasicExpressionFormatter
 from ..symbolic import *
 from ..computation import computation
+from .. import symbolic
 
 class MockImpl(MatrixImpl):
     nrows = ncols = 3
@@ -26,54 +27,34 @@ d = LeafNode('d', impl)
 e = LeafNode('e', impl)
 
 def add(*args):
-    return AddNode(args)
+    return symbolic.add(args)
 
 def mul(*args):
-    return MultiplyNode(args)
+    return symbolic.multiply(args)
 
 def H(arg):
     return conjugate_transpose(arg)
 
 def I(arg):
-    return InverseNode(arg)
+    return inverse(arg)
 
 def test_basic():
     yield assert_expr, 'a * (b + c + d)', mul(a, add(b, c, d))
 
 def test_factories_obeys_constraints():
-    yield ok_, H(H(a)) is a
-    yield ok_, I(I(a)) is a
-    yield assert_expr, 'a.i.h', H(I(a))
-    yield assert_expr, 'a.i.h', I(H(a))
-    yield ok_, I(H(H(I(a)))) is a
-    yield ok_, H(I(H(I(a)))) is a
-    yield ok_, H(I(I(H(a)))) is a
-    yield ok_, I(H(I(H(a)))) is a
-    yield ok_, mul(H(mul(b, a)), a) == mul(H(a), H(b), a)
-    yield eq_, 3, len(mul(H(mul(b, a)), a).children)
-    yield ok_, add(H(add(b, a)), a) == add(H(b), H(a), a)
-    yield eq_, 3, len(add(H(add(b, a)), a).children)
-    yield eq_, 2, len(add(H(mul(b, a)), a).children)
-
-def test_distributive():
-    inp = mul(add(a, b, c), d)
-    out = apply_right_distributive_rule(inp)
-    yield assert_expr, 'a * d + b * d + c * d', out
-    out = apply_left_distributive_rule(inp)
-    yield assert_expr, '(a + b + c) * d', out
-
-    # e * (a + b + c) * e * (c + c) * d * e
-    inp = mul(e, add(a, b, c), e, add(c, c), d, e)
-    out = apply_right_distributive_rule(inp)
-    yield (assert_expr, '''
-        e * (a * e * (c * d * e + c * d * e) +
-             b * e * (c * d * e + c * d * e) +
-             c * e * (c * d * e + c * d * e))''', out)
-
-    out = apply_left_distributive_rule(inp)
-    yield (assert_expr, '''
-        ((e * a + e * b + e * c) * e * c +
-         (e * a + e * b + e * c) * e * c) * d * e''', out)
+    assert H(H(a)) is a
+    assert I(I(a)) is a
+    assert_expr('a.i.h', H(I(a)))
+    assert_expr('a.i.h', I(H(a)))
+    assert I(H(H(I(a)))) is a
+    assert H(I(H(I(a)))) is a
+    assert H(I(I(H(a)))) is a
+    assert I(H(I(H(a)))) is a
+    assert mul(H(mul(b, a)), a) == mul(H(a), H(b), a)
+    assert 3 == len(mul(H(mul(b, a)), a).children)
+    assert add(H(add(b, a)), a) == add(H(b), H(a), a)
+    assert 3 == len(add(H(add(b, a)), a).children)
+    assert 2 == len(add(H(mul(b, a)), a).children)
 
 def test_as_tuple():
     class A(MockImpl):

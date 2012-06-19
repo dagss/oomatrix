@@ -73,8 +73,19 @@ def conjugate_transpose(expr):
     else:
         return ConjugateTransposeNode(expr)
 
-def inverse(x):
-    return InverseNode(x)
+def inverse(expr):
+    if isinstance(expr, InverseNode):
+        # a.i.i -> a.i
+        return expr.child
+    elif isinstance(expr, ConjugateTransposeNode):
+        if isinstance(expr.child, InverseNode):
+            # a.i.h.i -> a.h
+            return ConjugateTransposeNode(expr.child.child)
+        else:
+            # a.h.i -> a.i.h
+            return ConjugateTransposeNode(InverseNode(expr.child))
+    else:
+        return InverseNode(expr)
 
 class TODO:
     name = 'TODO'
@@ -225,20 +236,7 @@ class ConjugateTransposeNode(SingleChildNode):
 
     symbol = 'h'
     
-    def __new__(cls, expr):
-        if isinstance(expr, ConjugateTransposeNode):
-            # a.h.h -> a
-            return expr.child
-        elif (isinstance(expr, InverseNode) and 
-              isinstance(expr.child, ConjugateTransposeNode)):
-                # a.h.i.h -> a.i
-                return InverseNode(expr.child.child)
-        else:
-            # a.i.h is OK
-            return ExpressionNode.__new__(cls, expr)
-    
     def __init__(self, child):
-        assert not isinstance(child, ConjugateTransposeNode)
         self.child = child
         self.children = [child]
         self.ncols, self.nrows = child.nrows, child.ncols
@@ -282,23 +280,6 @@ class ConjugateTransposeNode(SingleChildNode):
 
 class InverseNode(SingleChildNode):
     symbol = 'i'
-    
-    def __new__(cls, expr):
-#        print type(child), child.__dict__
-        if isinstance(expr, InverseNode):
-            # a.i.i -> a.i
-            return expr.child
-        elif isinstance(expr, ConjugateTransposeNode):
-            if isinstance(expr.child, InverseNode):
-                # a.i.h.i -> a.h
-                return ConjugateTransposeNode(expr.child.child)
-            else:
-                # a.h.i -> a.i.h
-                self = ExpressionNode.__new__(cls, expr.child)
-                self.__init__(expr.child)
-                return ConjugateTransposeNode(self)
-        else:
-            return ExpressionNode.__new__(cls, expr)
     
     def __init__(self, child):
         self.child = child
