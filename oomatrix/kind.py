@@ -275,6 +275,9 @@ class MatrixKind(type, PatternNode):
 
     def get_key(cls):
         return cls
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_kind(*args, **kw)
  
 class MatrixImpl(object):
     __metaclass__ = MatrixKind
@@ -356,8 +359,14 @@ class AddPatternNode(ArithmeticPatternNode):
         # is allowed to sort
         return self.sorted_children
 
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_add(*args, **kw)
+
 class MultiplyPatternNode(ArithmeticPatternNode):
     symbol = '*'
+
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_multiply(*args, **kw)
 
 class SingleChildPatternNode(PatternNode):
     def __init__(self, child):
@@ -374,6 +383,10 @@ class ConjugateTransposePatternNode(SingleChildPatternNode):
                 'matrix kind A; (A + B).h etc. is not allowed')
         SingleChildPatternNode.__init__(self, child)
 
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_conjugate_transpose(*args, **kw)
+
+
 class InversePatternNode(SingleChildPatternNode):
     symbol = 'i'    
     def __init__(self, child):
@@ -384,10 +397,15 @@ class InversePatternNode(SingleChildPatternNode):
                 'be written (B.i * A.i), and so on)')
         SingleChildPatternNode.__init__(self, child)
 
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_inverse(*args, **kw)
+
 class FactorPatternNode(SingleChildPatternNode):
     symbol = 'decomposition:factor'
     def __init__(self, child):
         SingleChildPatternNode.__init__(self, child)
+    def accept_visitor(self, visitor, *args, **kw):
+        return visitor.visit_factor(*args, **kw)
 
 class ScalarPatternNode(SingleChildPatternNode):
     symbol = 's'

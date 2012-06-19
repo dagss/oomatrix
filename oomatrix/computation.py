@@ -1,9 +1,86 @@
 import types
 
-from .cost_value import CostValue, FLOP, MEM, MEMOP, UGLY
+from .cost_value import CostValue, FLOP, MEM, MEMOP, UGLY, zero_cost
+from . import utils
 
 class ImpossibleOperationError(NotImplementedError):
     pass
+
+def return_zero_cost(*args):
+    return zero_cost
+
+class FindFlattenedPermutationTransform(object):
+    
+    def transform(self, root):
+        self.leaves_encountered = 0
+        indices = root.accept_visitor(self, root)
+        return indices
+
+    def process_children(self, node):
+        child_indices = [child.accept_visitor(self, child)
+                         for child in node.children]
+        return child_indices
+    
+    def visit_add(self, node):
+        permutation = utils.argsort(node.children)
+        child_indices = self.process_children(node)
+        sorted_child_indices = [child_indices[i] for i in permutation]
+        return sum(sorted_child_indices, [])
+
+    def visit_multiply(self, node):
+        child_indices = self.process_children(node)
+        return sum(child_indices, [])
+
+    def visit_single_child(self, node):
+        return node.child.accept_visitor(self, node.child)
+
+    visit_conjugate_transpose = visit_inverse = visit_single_child
+    visit_factor = visit_decomposition = visit_single_child
+
+    def visit_kind(self, node):
+        idx = self.leaves_encountered
+        self.leaves_encountered += 1
+        return [idx]
+        
+
+class Computation(object):
+    """
+    Wraps a computation function to provide metadata, and enable calling it
+    in a standardized fashion.
+    """
+    
+    def __init__(self, callable, match_expression, target_kind,
+                 name=None, cost_callable=None):
+        permutation = FindFlattenedPermutationTransform().transform(match_expression)
+        self.call_permutation = utils.invert_permutation(permutation)        
+        self.callable = callable
+        self.match_expression = match_expression
+        self.target_kind = target_kind
+        self.name = (name if name is not None
+                     else '%s.%s' % (callable.__module__, callable.__name__))
+        self.name = name
+        self.cost_callable = cost_callable
+
+    def compute(self, matrices):
+        reordered_matrices = [matrices[i] for i in self.call_permutation]
+        return self.callable(*reordered_matrices)
+
+    def get_cost(self, meta_args):
+        if self.cost_callable is None:
+            raise AssertionError('The cost of %s is not assigned' % self.name)
+        cost = self.cost_callable(*meta_args)
+        if not isinstance(cost, CostValue):
+            raise TypeError('cost function %s for %s did not return 0 or a '
+                            'CostValue' % (computation, computation.cost))
+        return cost
+
+    def __call__(self, *args, **kw):
+        """A direct call of the computation function
+
+        Since this is meant for 'manual' use, there's no reordering/sorting
+        of arguments
+        """
+        return self.callable(*args, **kw)
    
 
 def register_computation(match, target_kind, obj):
@@ -21,26 +98,9 @@ def computation(match, target_kind, name=None, cost=None):
     else:
         _cost = cost
     def dec(obj):
-        # obj is expected to have a compute method; if not, assume it is
-        # callable, and wrap it to provide it
-        if not hasattr(obj, 'compute'):
-            func = obj
-            class Result(object):
-                @staticmethod
-                def compute(*args):
-                    return func(*args)
-            Result.__name__ = obj.__name__
-            Result.__module__ = obj.__module__
-            Result.name = (name if name is not None
-                           else '%s.%s' % (obj.__module__, obj.__name__))
-            Result.cost = staticmethod(_cost)
-            obj = Result
-
-        obj.match = match
-        obj.target_kind = target_kind
-
-        register_computation(match, target_kind, obj)
-        return obj
+        computation = Computation(obj, match, target_kind, name, _cost)
+        register_computation(match, target_kind, computation)
+        return computation
     return dec
 
 

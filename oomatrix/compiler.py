@@ -296,16 +296,7 @@ class ShortestPathCompilation(object):
 
 def find_cost(computation, meta_args):
     assert all(isinstance(x, MatrixMetadata) for x in meta_args)
-    if computation.cost is None:
-        raise AssertionError('%s has no cost set' %
-                             computation.name)
-    cost = computation.cost(*meta_args) + INVOCATION
-    if cost == 0:
-        cost = cost_value.zero_cost
-    if not isinstance(cost, cost_value.CostValue):
-            raise TypeError('cost function %s for %s did not return 0 or a '
-                            'CostValue' % (computation, computation.cost))
-    return cost
+    return computation.get_cost(meta_args) + INVOCATION
 
 class BaseCompiler(object):
     def __init__(self):
