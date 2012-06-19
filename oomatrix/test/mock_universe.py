@@ -101,50 +101,21 @@ class MockMatricesUniverse:
 def remove_blanks(x):
     return re.sub('\s', '', x)
 
-class FormatTaskExpression(formatter.BasicExpressionFormatter):
-    def __init__(self):
-        formatter.BasicExpressionFormatter.__init__(self, {})
-        self.task_names = {}
-        self.name_counter = 0
-
-    def register_task(self, task):
-        name = 'T%d' % self.name_counter
-        self.name_counter += 1
-        self.register_task_with_name(task, name)
-        return name
-
-    def register_task_with_name(self, task, name):
-        self.task_names[task] = name
-
-    def get_task_name(self, task):
-        return self.task_names[task]
-
-    def is_task_registered(self, task):
-        return task in self.task_names
-    
-    def visit_metadata_leaf(self, expr):
-        return True, self.task_names[expr]
-
-    def visit_task_leaf(self, expr):
-        return True, self.task_names[expr.task]
-    
-def serialize_task(lines, task, args, formatter):
+def serialize_task(lines, task, args, task_names):
     if isinstance(task, Argument):
         leaf_matrix = args[task.argument_index]
-        name = leaf_matrix.name
-        formatter.register_task_with_name(task, name)
-        return name
-    elif not formatter.is_task_registered(task):
+        return leaf_matrix.name
+    elif task in task_names:
+        return task_names[task]
+    else:
         # must 'compute' task
-        task_name = formatter.register_task(task)
-        arg_names = [serialize_task(lines, arg, args, formatter)
+        task_name = 'T%d' % len(task_names)
+        task_names[task] = task_name
+        arg_names = [serialize_task(lines, arg, args, task_names)
                      for arg in task.args]
         expr_str = '%s(%s)' % (task.computation.name, ', '.join(arg_names))
-        #expr_str = formatter.format(task.descriptive_expression)
         lines.append('%s = %s' % (task_name, expr_str))
         return task_name
-    else:
-        return formatter.get_task_name(task)
 
 def check_compilation(compiler_obj, expected_task_graph, matrix):
     tree, args = compiler_obj.compile(matrix._expr)
@@ -153,7 +124,6 @@ def check_compilation(compiler_obj, expected_task_graph, matrix):
     task = tree.task
     #assert expected_transposed == is_transposed
     task_lines = []
-    formatter = FormatTaskExpression()
-    serialize_task(task_lines, task, args, formatter)
+    serialize_task(task_lines, task, args, {})
     task_str = '; '.join(task_lines)
     assert remove_blanks(expected_task_graph) == remove_blanks(task_str)
