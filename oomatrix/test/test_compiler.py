@@ -51,19 +51,19 @@ def test_add():
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
-    assert_compile('T0 = a + b', a + b)
-    assert_compile('T1 = b + b; T0 = a + T1', a + b + b)
+    assert_compile('T0 = add_A_B(a, b)', a + b)
+    assert_compile('T1 = add_B_B(b, b); T0 = add_A_B(a, T1)', a + b + b)
 
 def test_multiply():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A * B, A)
-    assert_compile('T0 = a * b', a * b)
+    assert_compile('T0 = multiply_A_B(a, b)', a * b)
     with assert_raises(compiler.ImpossibleOperationError):
-        assert_compile('T1 = b * b; T0 = a + T1', a * b * b)
+        assert_compile('', a * b * b)
     ctx.define(B * B, B)
-    assert_compile('T1 = b * b; T0 = a * T1', a * b * b)
+    assert_compile('T1 = multiply_B_B(b, b); T0 = multiply_A_B(a, T1)', a * b * b)
     
 
 def test_caching():
@@ -87,12 +87,11 @@ def test_distributive():
     ctx.define(A * B, A)
     ctx.define(A * C, A)
     assert_compile('''
-    T2 = a + a;
-    T1 = T2 * b;
-    T3 = T2 * c;
-    T0 = T1 + T3
+    T2 = add_A_A(a, a);
+    T1 = multiply_A_B(T2, b);
+    T3 = multiply_A_C(T2, c);
+    T0 = add_A_A(T1, T3)
     ''', (a + a) * (b + c)) # b + c is impossible
-    
 
 def test_transpose():
     ctx = MockMatricesUniverse()
@@ -100,7 +99,7 @@ def test_transpose():
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(B.h, A)
     ctx.define(A * A, A)
-    assert_compile('T1 = b.h; T0 = T1 * a', b.h * a)
+    assert_compile('T1 = Bh(b); T0 = multiply_A_A(T1, a)', b.h * a)
 
 def test_factor():
     ctx = MockMatricesUniverse()
@@ -110,11 +109,11 @@ def test_factor():
     ctx.define(B.h * A, A)
     ctx.define(B.f, B)
     ctx.define(B.i, B)
-    assert_compile('T0 = b.f', b.f)
-    assert_compile('T1 = b + b; T0 = T1.f', (b + b).f)
-    assert_compile('T1 = b.f; T0 = T1 * a', b.f * a)
-    assert_compile('T2 = b.f; T1 = T2.i; T0 = T1 * a', b.f.i * a)
-    assert_compile('T2 = b.i; T1 = T2.f; T0 = T1 * a', b.i.f * a)
+    assert_compile('T0 = Bf(b)', b.f)
+    assert_compile('T1 = add_B_B(b, b); T0 = Bf(T1)', (b + b).f)
+    assert_compile('T1 = Bf(b); T0 = multiply_B_A(T1, a)', b.f * a)
+    assert_compile('T2 = Bf(b); T1 = Bi(T2); T0 = multiply_B_A(T1, a)', b.f.i * a)
+    assert_compile('T2 = Bi(b); T1 = Bf(T2); T0 = multiply_B_A(T1, a)', b.i.f * a)
 
 def test_inverse():
     ctx = MockMatricesUniverse()
@@ -123,10 +122,10 @@ def test_inverse():
     ctx.define(B * A, A)
     ctx.define(B.i, B)
     ctx.define(B.h, B)
-    assert_compile('T0 = b.i', b.i)
-    assert_compile('T1 = b.i; T0 = T1 * a', b.i * a)
-    assert_compile('T2 = b.i; T1 = T2.h; T0 = T1 * a', b.i.h * a)
-    assert_compile('T2 = b.i; T1 = T2.h; T0 = T1 * a', b.h.i * a)
+    assert_compile('T0 = Bi(b)', b.i)
+    assert_compile('T1 = Bi(b); T0 = multiply_B_A(T1, a)', b.i * a)
+    assert_compile('T2 = Bi(b); T1 = Bh(T2); T0 = multiply_B_A(T1, a)', b.i.h * a)
+    assert_compile('T2 = Bi(b); T1 = Bh(T2); T0 = multiply_B_A(T1, a)', b.h.i * a)
 
     
     

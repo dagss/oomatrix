@@ -4,8 +4,8 @@ import numpy as np
 from ..cost_value import FLOP
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import computation, conversion
-from .. import formatter, Matrix, symbolic, compiler
-from ..task import Task
+from .. import formatter, Matrix, symbolic, compiler, kind
+from ..task import Task, Argument
 from ..symbolic import MatrixMetadataLeaf
 
 class MockKind(MatrixImpl):
@@ -18,6 +18,26 @@ class MockKind(MatrixImpl):
     def __repr__(self):
         return '%s:%s' % (type(self).name, self.value)
 
+def match_tree_to_name(node, parens_used=False):
+    if isinstance(node, kind.AddPatternNode) and not parens_used:
+        return 'add_' + '_'.join(['%s' % match_tree_to_name(child, True)
+                                  for child in node.children])
+    elif isinstance(node, kind.MultiplyPatternNode) and not parens_used:
+        return 'multiply_' + '_'.join(['%s' % match_tree_to_name(child, True)
+                                       for child in node.children])
+    elif isinstance(node, kind.MatrixKind):
+        return node.name
+    elif isinstance(node, kind.InversePatternNode):
+        return match_tree_to_name(node.children[0]) + 'i'
+    elif isinstance(node, kind.ConjugateTransposePatternNode):
+        return match_tree_to_name(node.children[0]) + 'h'
+    elif isinstance(node, kind.FactorPatternNode):
+        return match_tree_to_name(node.children[0]) + 'f'
+    else:
+        raise AssertionError('Please provide a computation name manually')
+        
+
+
 class MockMatricesUniverse:
     def __init__(self):
         self.reset()
@@ -26,13 +46,14 @@ class MockMatricesUniverse:
     def reset(self):
         self.computation_index = 0
 
-    def define(self, match, result_kind, reprtemplate='', cost=1 * FLOP):
+    def define(self, match, result_kind, name=None, reprtemplate='', cost=1 * FLOP):
+        if name is None:
+            name = match_tree_to_name(match)                
         reprtemplate = '(%s)' % reprtemplate
         # If '#' is in reprtemplate, substitute it with the number of
         # times called
         times_called = [0]
-        @computation(match, result_kind, cost=cost,
-                     name='%r:%r' % (result_kind, match.get_key()))
+        @computation(match, result_kind, cost=cost, name=name)
         def comp(*args):
             template = reprtemplate.replace('#', str(self.computation_index))
             result = result_kind(template % tuple(arg.value for arg in args),
@@ -64,7 +85,7 @@ class MockMatricesUniverse:
         # Always have within-kind addition
         @computation(NewKind + NewKind, NewKind,
                      cost=lambda a, b: 1 * FLOP,
-                     name='%s+%s' % (name_, name_))
+                     name='add_%s_%s' % (name_, name_))
         def add(a, b):
             return NewKind('(%s + %s)' % (a.value, b.value),
                            a.nrows, b.ncols)
@@ -108,17 +129,18 @@ class FormatTaskExpression(formatter.BasicExpressionFormatter):
         return True, self.task_names[expr.task]
     
 def serialize_task(lines, task, args, formatter):
-    if isinstance(task, MatrixMetadataLeaf):
-        leaf_matrix = args[task.leaf_index]
+    if isinstance(task, Argument):
+        leaf_matrix = args[task.argument_index]
         name = leaf_matrix.name
         formatter.register_task_with_name(task, name)
         return name
     elif not formatter.is_task_registered(task):
         # must 'compute' task
         task_name = formatter.register_task(task)
-        for arg in task.args:
-            serialize_task(lines, arg, args, formatter)
-        expr_str = formatter.format(task.descriptive_expression)
+        arg_names = [serialize_task(lines, arg, args, formatter)
+                     for arg in task.args]
+        expr_str = '%s(%s)' % (task.computation.name, ', '.join(arg_names))
+        #expr_str = formatter.format(task.descriptive_expression)
         lines.append('%s = %s' % (task_name, expr_str))
         return task_name
     else:

@@ -24,7 +24,7 @@ from functools import total_ordering
 
 from .cost_value import FLOP, INVOCATION
 from .utils import argsort, invert_permutation
-from . import kind, cost_value, metadata
+from . import kind, cost_value, metadata, task
 
 import numpy as np
 
@@ -87,6 +87,7 @@ class ExpressionNode(object):
     name = None
     kind = None
     _hash = None
+    task_dependencies = frozenset()
 
     def get_type(self):
         return TODO
@@ -485,6 +486,9 @@ class MatrixMetadataLeaf(ExpressionNode):
     def _repr(self, indent):
         return [indent + '<arg:%s, %r>' % (self.leaf_index, self.metadata)]
 
+    def as_task(self):
+        return task.Argument(self.leaf_index, self.metadata)
+
 class TaskLeaf(ExpressionNode):
     kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
     children = ()
@@ -496,9 +500,8 @@ class TaskLeaf(ExpressionNode):
         self.dependencies = task.dependencies
 
     def as_tuple(self):
-        # TaskNode compares by its metadata first and then the task (which must
-        # be different from the integer IDs used in MatrixMetadataNode).
-        # This ensures that sorting happens by class first.
+        # ##TaskLeaf essentially compares by the its output and its dependencies,
+        # ##not how the computation is performed.
         return self.metadata.as_tuple() + ('task', id(self.task))
 
     def accept_visitor(self, visitor, *args, **kw):
@@ -507,3 +510,5 @@ class TaskLeaf(ExpressionNode):
     def _repr(self, indent):
         return [indent + '<TaskLeaf %r>' % self.metadata]
 
+    def as_task(self):
+        return self.task

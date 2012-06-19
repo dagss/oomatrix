@@ -112,11 +112,13 @@ class NeighbourExpressionGraphGenerator(object):
     
     def generate_neighbours(self, node):
         for subtree in self.process(node):
-            tasks = getattr(subtree, 'dependencies', ())
-            cost = sum([task.cost for task in tasks], cost_value.zero_cost)
+            cost = sum([task.cost for task in subtree.task_dependencies],
+                       cost_value.zero_cost)
             yield cost, subtree
         
     def generate_direct_computations(self, node):
+        # Important: This spawns new Task objects, so important to
+        # only call from process so that each task is cached
         if isinstance(node, Task):
             return
         key, universe = transforms.kind_key_transform(node)
@@ -127,11 +129,12 @@ class NeighbourExpressionGraphGenerator(object):
                 root_meta, args = transforms.flatten(node)
                 root_meta = root_meta.copy_with_kind(target_kind)
                 meta_args = [arg.metadata for arg in args]
-                args = [arg.task if isinstance(arg, TaskLeaf) else arg
-                        for arg in args]
+                args = [arg.as_task() for arg in args]
                 cost = find_cost(computation, meta_args)
                 task = Task(computation, cost, args, root_meta, node)
-                yield TaskLeaf(task)
+                node = TaskLeaf(task)
+                node.task_dependencies = frozenset([task])
+                yield node
 
     def process(self, node):
         # The cache here is important, see class docstring
@@ -157,18 +160,31 @@ class NeighbourExpressionGraphGenerator(object):
                 new_children.append(new_child)
                 # Important: keep the children sorted (by kind)
                 new_children.sort()
-                new_dependencies = frozenset_union(*[getattr(x, 'dependencies', ())
+                new_dependencies = frozenset_union(*[x.task_dependencies
                                                      for x in new_children])
                 new_node = symbolic.AddNode(new_children)
-                new_node.dependencies = new_dependencies
+                new_node.task_dependencies = new_dependencies
                 yield new_node
 
         # Use associative rules to split up expression
+        def add(children):
+            if len(children) == 1:
+                return children[0]
+            else:
+                node = symbolic.AddNode(children)
+                node.task_dependencies  = frozenset_union(*[x.task_dependencies
+                                                            for x in children])
+                return node
+                
+                
         for subset, complement in set_of_pairwise_nonempty_splits(children):
-            left = symbolic.AddNode(subset) if len(subset) > 1 else subset[0]
-            right = (symbolic.AddNode(complement)
-                     if len(complement) > 1 else complement[0])
-            new_parent = symbolic.AddNode(sorted([left, right]))
+            left = add(subset)
+            right = add(complement)
+            new_children = sorted([left, right])
+            new_dependencies = frozenset_union(*[x.task_dependencies
+                                                 for x in new_children])
+            new_parent = symbolic.AddNode(new_children)
+            new_parent.task_dependencies = new_dependencies
             yield new_parent
 
     def visit_multiply(self, node):
@@ -178,43 +194,61 @@ class NeighbourExpressionGraphGenerator(object):
         for i, child in enumerate(children):
             for new_child in self.process(child):            
                 new_children = children[:i] + [new_child] + children[i + 1:]
-                new_dependencies = frozenset_union(*[getattr(x, 'dependencies', ())
+                new_dependencies = frozenset_union(*[x.task_dependencies
                                                      for x in new_children])
                 new_node = symbolic.MultiplyNode(new_children)
-                new_node.dependencies = new_dependencies
+                new_node.task_dependencies = new_dependencies
                 yield new_node
 
         # Use associative rules to split up expression
+        def multiply(children):
+            if len(children) == 1:
+                return children[0]
+            else:
+                node = symbolic.MultiplyNode(children)
+                node.task_dependencies  = frozenset_union(*[x.task_dependencies
+                                                            for x in children])
+                return node
+        
         for i in range(1, len(children) - 1):
             left_children, right_children = children[:i], children[i:]
-            left_node = (symbolic.MultiplyNode(left_children)
-                         if len(left_children) > 1 else left_children[0])
-            right_node = (symbolic.MultiplyNode(right_children)
-                          if len(right_children) > 1 else right_children[0])
-            yield symbolic.MultiplyNode([left_node, right_node])
+            left_node = multiply(left_children)
+            right_node = multiply(right_children)
+            yield multiply([left_node, right_node])
 
         if len(node.children) == 2:
             # Use distributive rule; it is enough to consider this case because
             # larger cases are eventually reduced to this one in all possible
             # ways
             left, right = node.children
+            new_dependencies = left.task_dependencies.union(right.task_dependencies)
             if left.can_distribute():
-                yield left.distribute_right(right)
+                new_node = left.distribute_right(right)
+                new_node.task_dependencies = new_dependencies
+                yield new_node
             if right.can_distribute():
-                yield right.distribute_left(left)
+                new_node = right.distribute_left(left)
+                new_node.task_dependencies = new_dependencies
+                yield new_node
              
 
     def visit_conjugate_transpose(self, node):
         for new_child in self.process(node.child):
-            yield symbolic.ConjugateTransposeNode(new_child)
+            new_node = symbolic.ConjugateTransposeNode(new_child)
+            new_node.task_dependencies = new_child.task_dependencies
+            yield new_node
 
     def visit_inverse(self, node):
         for new_child in self.process(node.child):
-            yield symbolic.InverseNode(new_child)
+            new_node = symbolic.InverseNode(new_child)
+            new_node.task_dependencies = new_child.task_dependencies
+            yield new_node
     
     def visit_decomposition(self, node):
         for new_child in self.process(node.child):
-            yield symbolic.DecompositionNode(new_child, node.decomposition)
+            new_node = symbolic.DecompositionNode(new_child, node.decomposition)
+            new_node.task_dependencies = new_child.task_dependencies
+            yield new_node
         
     def visit_metadata_leaf(self, node):
         # self.process has already covered all conversions of the leaf-node,
@@ -240,10 +274,12 @@ class ShortestPathCompilation(object):
         tentative_queue = Heap()
         tentative_queue.push(0, root)
         while len(tentative_queue) > 0:
-            _, head = tentative_queue.pop()
+            head_cost, head = tentative_queue.pop()
             if head in visited:
                 continue # visited earlier with a lower cost
             visited.add(head)
+
+            #print 'POPPED', head
             if self.is_goal(head):
                 return head # Done!
             

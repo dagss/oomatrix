@@ -1,5 +1,6 @@
 from . import metadata, symbolic, utils, task
-    
+
+
 class ImplToMetadataTransform(object):
     """
     Split a tree with MatrixImpl leafs
@@ -27,29 +28,34 @@ class ImplToMetadataTransform(object):
         permutation = utils.argsort(child_trees)
         child_trees = [child_trees[i] for i in permutation]
         child_arg_lists = [child_arg_lists[i] for i in permutation]
-        return symbolic.add(child_trees), sum(child_arg_lists, [])
+        new_node = symbolic.add(child_trees)
+        return new_node, sum(child_arg_lists, [])
 
     def visit_multiply(self, node):
         child_trees, child_arg_lists = self.process_children(node)
-        return symbolic.multiply(child_trees), sum(child_arg_lists, [])
+        new_node = symbolic.multiply(child_trees)
+        return new_node, sum(child_arg_lists, [])
 
     def visit_conjugate_transpose(self, node):
         tree, args = node.child.accept_visitor(self, node.child)
-        return symbolic.conjugate_transpose(tree), args
+        new_node = symbolic.conjugate_transpose(tree)
+        return new_node, args
 
     def visit_inverse(self, node):
         tree, args = node.child.accept_visitor(self, node.child)
-        return symbolic.inverse(tree), args
+        new_node = symbolic.inverse(tree)
+        return new_node, args
 
     def visit_decomposition(self, node):
         tree, args = node.child.accept_visitor(self, node.child)
-        return symbolic.DecompositionNode(tree, node.decomposition), args    
-
+        new_node = symbolic.DecompositionNode(tree, node.decomposition)
+        return new_node, args
 
     def visit_leaf(self, node):
         meta = metadata.MatrixMetadata(node.kind, (node.nrows,), (node.ncols,),
                                        node.dtype)
-        return symbolic.MatrixMetadataLeaf(None, meta), [node]
+        new_node = symbolic.MatrixMetadataLeaf(None, meta)
+        return new_node, [node]
 
 class IndexMetadataTransform(object):
     """
@@ -58,33 +64,29 @@ class IndexMetadataTransform(object):
     """
     def execute(self, node):
         self.leaf_index = 0
-        return node.accept_visitor(self, node)
+        node.accept_visitor(self, node)
+        return node
 
     def recurse_multi_child(self, node):
-        return type(node)([child.accept_visitor(self, child)
-                           for child in node.children])
+        for child in node.children:
+            child.accept_visitor(self, child)
 
     def recurse_single_child(self, node):
-        child = node.child
-        return type(node)(child.accept_visitor(self, child))
+        child, = node.children
+        child.accept_visitor(self, child)
 
     visit_add = visit_multiply = recurse_multi_child
     visit_conjugate_transpose = visit_inverse = recurse_single_child
-
-    def visit_decomposition(self, node):
-        child = node.child
-        return symbolic.DecompositionNode(child.accept_visitor(self, child),
-                                          node.decomposition)    
+    visit_decomposition = recurse_single_child
 
     def visit_metadata_leaf(self, node):
         node.leaf_index = self.leaf_index
         self.leaf_index += 1
-        return node
 
 def metadata_transform(tree):
-    pre_tree, args_list = ImplToMetadataTransform().execute(tree)
-    result_tree = IndexMetadataTransform().execute(pre_tree)
-    return result_tree, args_list
+    tree, args_list = ImplToMetadataTransform().execute(tree)
+    IndexMetadataTransform().execute(tree)
+    return tree, args_list
 
 class KindKeyTransform(object):
     """

@@ -1,6 +1,5 @@
 import numpy as np
 
-from . import symbolic
 from .cost_value import zero_cost
 
 class Argument(object):
