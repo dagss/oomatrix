@@ -61,10 +61,13 @@ def test_multiply():
     ctx.define(A * B, A)
     assert_compile('T0 = multiply_A_B(a, b)', a * b)
     with assert_raises(compiler.ImpossibleOperationError):
-        assert_compile('', a * b * b)
+        assert_compile('', b * b)
     ctx.define(B * B, B)
     assert_compile('T1 = multiply_B_B(b, b); T0 = multiply_A_B(a, T1)', a * b * b)
-    
+    C, c, cu, cuh = ctx.new_matrix('B')
+    ctx.define(A * C, A)
+    assert_compile('T1 = multiply_A_B(a, b); T0 = multiply_A_B(T1, b)',
+                   a * b * c)
 
 def test_caching():
     ctx = MockMatricesUniverse()

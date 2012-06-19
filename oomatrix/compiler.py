@@ -225,7 +225,7 @@ class NeighbourExpressionGraphGenerator(object):
                                                             for x in children])
                 return node
         
-        for i in range(1, len(children) - 1):
+        for i in range(1, len(children)):
             left_children, right_children = children[:i], children[i:]
             left_node = multiply(left_children)
             right_node = multiply(right_children)
