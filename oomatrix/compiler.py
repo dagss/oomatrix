@@ -53,10 +53,12 @@ bubbles up to the top; i.e. psuedo-code for an add statement would be::
 
 """
 
-
+import os
 import sys
 import numpy as np
 from itertools import izip, chain, combinations, permutations
+
+do_trace = bool(int(os.environ.get("T", '0')))
 
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
@@ -88,6 +90,11 @@ def set_of_pairwise_nonempty_splits(iterable):
             
 def frozenset_union(*args):
     return frozenset().union(*args)
+
+def is_leaf(node):
+    return (isinstance(node, (symbolic.MatrixMetadataLeaf, TaskLeaf)) or
+            (isinstance(node, (symbolic.ConjugateTransposeNode, symbolic.InverseNode)) and
+             isinstance(node.children[0], (symbolic.MatrixMetadataLeaf, TaskLeaf))))
 
 class NeighbourExpressionGraphGenerator(object):
     """
@@ -150,25 +157,37 @@ class NeighbourExpressionGraphGenerator(object):
             for x in node.accept_visitor(self, node):
                 results.append(x)
             self.cache[node] = results
+        else:
+            pass
         return results
 
-    def visit_add(self, node):
-        # Forward possibilities in sub-trees. These include conversions,
-        # so that all direction additions are already covered by process
+    def compile_add_children(self, node):
         children = node.children
+        new_children = []
         for i, child in enumerate(children):
-            for new_child in self.process(child):
-                new_children = children[:i] + children[i + 1:]
+            if is_leaf(child):
+                # todo: this will never explicitly transpose a matrix...
+                new_children.append(child)
+            else:
+                sub_compiler = ShortestPathCompilation(self)
+                if do_trace:
+                    print '>>> SUBCOMPILATION START %x' % id(sub_compiler)
+                try:
+                    new_child = sub_compiler.compile(child)
+                    if do_trace:
+                        print '<<< SUBCOMPILATION SUCCESS %x' % id(sub_compiler)
+                except ImpossibleOperationError:
+                    if do_trace:
+                        print '<<< SUBCOMPILATION FAILED %x' % id(sub_compiler)
+                    return # yield no neighbours
                 new_children.append(new_child)
-                # Important: keep the children sorted (by kind)
-                new_children.sort()
-                new_dependencies = frozenset_union(*[x.task_dependencies
-                                                     for x in new_children])
-                new_node = symbolic.AddNode(new_children)
-                new_node.task_dependencies = new_dependencies
-                yield new_node
+        new_dependencies = frozenset_union(*[x.task_dependencies
+                                             for x in new_children])
+        new_node = symbolic.AddNode(new_children)
+        new_node.task_dependencies = new_dependencies
+        yield new_node        
 
-        # Use associative rules to split up expression
+    def process_add_associative(self, node):
         def add(children):
             if len(children) == 1:
                 return children[0]
@@ -177,8 +196,8 @@ class NeighbourExpressionGraphGenerator(object):
                 node.task_dependencies  = frozenset_union(*[x.task_dependencies
                                                             for x in children])
                 return node
-
-        for subset, complement in set_of_pairwise_nonempty_splits(children):
+            
+        for subset, complement in set_of_pairwise_nonempty_splits(node.children):
             left = add(subset)
             right = add(complement)
             new_children = sorted([left, right])
@@ -188,15 +207,52 @@ class NeighbourExpressionGraphGenerator(object):
             new_parent.task_dependencies = new_dependencies
             yield new_parent
 
+    def visit_add(self, node):
+        # At this point, a direction match of +-ing the children has
+        # already been attempted by self.process()
+        children = node.children
+        if not all(is_leaf(child) for child in children):
+            # Some children are not fully computed; we turn greedy and
+            # launch a sub-compilation for each of the children
+            for x in self.compile_add_children(node):
+                yield x
+        else:
+            # All children are fully computed; use the associative rule to
+            # split up the expression
+            for x in self.process_add_associative(node):
+                yield x
+
+
     def visit_multiply(self, node):
         # Forward possibilities in sub-trees. These include conversions.
+        # We only do one sub-tree at the time, i.e. all left siblings should
+        # be leaves when processing a sub-tree
         children = node.children
         for i, child in enumerate(children):
-            for new_child in self.process(child):            
+            did_process = False
+            for new_child in self.process(child):
+                did_process = True
                 new_children = children[:i] + [new_child] + children[i + 1:]
                 new_dependencies = frozenset_union(*[x.task_dependencies
                                                      for x in new_children])
                 new_node = symbolic.MultiplyNode(new_children)
+                new_node.task_dependencies = new_dependencies
+                yield new_node
+            if did_process:
+                break
+
+        # Use distributive rule; it is enough to consider the n=2 case
+        # because larger cases are eventually reduced to this one in
+        # all possible ways
+        if len(node.children) == 2:
+            left, right = node.children
+            new_dependencies = left.task_dependencies.union(right.task_dependencies)
+            if left.can_distribute():
+                new_node = left.distribute_right(right)
+                new_node.task_dependencies = new_dependencies
+                yield new_node
+            if right.can_distribute():
+                new_node = right.distribute_left(left)
                 new_node.task_dependencies = new_dependencies
                 yield new_node
 
@@ -216,28 +272,15 @@ class NeighbourExpressionGraphGenerator(object):
             right_node = multiply(right_children)
             yield multiply([left_node, right_node])
 
-        # Use distributive rule; it is enough to consider the n=2 case
-        # because larger cases are eventually reduced to this one in
-        # all possible ways
-        if len(node.children) == 2:
-            left, right = node.children
-            new_dependencies = left.task_dependencies.union(right.task_dependencies)
-            if left.can_distribute():
-                new_node = left.distribute_right(right)
-                new_node.task_dependencies = new_dependencies
-                yield new_node
-            if right.can_distribute():
-                new_node = right.distribute_left(left)
-                new_node.task_dependencies = new_dependencies
-                yield new_node
-
         # Try the conjugate transpose expression
-        new_children = [symbolic.conjugate_transpose(x) for x in children[::-1]]
-        new_node = symbolic.MultiplyNode(new_children)
-        new_node.task_dependencies = node.task_dependencies
-        new_node_t = symbolic.ConjugateTransposeNode(new_node)
-        new_node_t.task_dependencies = node.task_dependencies
-        yield new_node_t
+        if all(is_leaf(child) for child in children):
+            new_children = [symbolic.conjugate_transpose(x) for x in children[::-1]]
+            new_node = symbolic.MultiplyNode(new_children)
+            new_node.task_dependencies = node.task_dependencies
+            new_node_t = symbolic.ConjugateTransposeNode(new_node)
+            new_node_t.task_dependencies = node.task_dependencies
+            yield new_node_t
+
 
     def visit_conjugate_transpose(self, node):
         for new_child in self.process(node.child):
@@ -267,8 +310,10 @@ class NeighbourExpressionGraphGenerator(object):
     visit_task_leaf = visit_metadata_leaf
 
 class ShortestPathCompilation(object):
-    def __init__(self):
-        self.neighbour_generator = NeighbourExpressionGraphGenerator()
+    def __init__(self, neighbour_generator=None):
+        if neighbour_generator is None:
+            neighbour_generator = NeighbourExpressionGraphGenerator()
+        self.neighbour_generator = neighbour_generator
         self.cost_map = cost_value.default_cost_map
         
     def compile(self, root):
@@ -289,19 +334,30 @@ class ShortestPathCompilation(object):
         visited = set()
         tentative_queue = Heap()
         tentative_queue.push(0, root)
+        vertex_count = 0
+        edge_count = 0
         while len(tentative_queue) > 0:
             head_cost, head = tentative_queue.pop()
+            edge_count += 1
+            if do_trace and edge_count % 1000 == 0:
+                print '|E|,|V|:', edge_count, vertex_count
             if head in visited:
                 continue # visited earlier with a lower cost
             visited.add(head)
+            vertex_count += 1
 
-            #rint 'POPPED', head_cost, head, hash(head)
+            if do_trace:
+                print 'POP %x' % id(self), head
             if self.is_goal(head):
+                if do_trace:
+                    print 'GOAL REACHED, |E|, |V|:', edge_count, vertex_count
                 return head # Done!
             
             gen = self.neighbour_generator.generate_neighbours(head)
             for cost, node in gen:
                 cost_scalar = cost.weigh(self.cost_map)
+                if do_trace:
+                    print 'PUSH %x' % id(self), node
                 tentative_queue.push(cost_scalar, node)
         raise ImpossibleOperationError()
 

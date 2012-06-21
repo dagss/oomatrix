@@ -97,6 +97,14 @@ class MockMatricesUniverse:
                        name_.lower() + 'uh'))
 
 
+def create_mock_matrices(matrix_names):
+    matrix_names = matrix_names.split()
+    ctx = MockMatricesUniverse()
+    result = (ctx,)
+    for name in matrix_names:
+        A, a, au, auh = ctx.new_matrix(name)
+        result += ((A, a),)
+    return result
 
 def remove_blanks(x):
     return re.sub('\s', '', x)

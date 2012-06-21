@@ -9,7 +9,8 @@ from ..computation import (computation, conversion, ImpossibleOperationError,
 from ..compiler import ShortestPathCompiler
 from .. import compiler, formatter, metadata, transforms, task
 
-from .mock_universe import MockKind, MockMatricesUniverse, check_compilation
+from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
+                            create_mock_matrices)
 
 def test_splits():
     # odd number of elements
@@ -52,7 +53,7 @@ def test_add():
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
-    assert_compile('T0 = add_A_B(a, b)', a + b)
+    #assert_compile('T0 = add_A_B(a, b)', a + b)
     assert_compile('T1 = add_B_B(b, b); T0 = add_A_B(a, T1)', a + b + b)
 
 def test_multiply():
@@ -106,6 +107,37 @@ def test_distributive():
     T3 = multiply_A_C(T2, c);
     T0 = add_A_A(T1, T3)
     ''', (a + a) * (b + c)) # b + c is impossible
+
+def test_multi_distributive():
+    ctx = MockMatricesUniverse()
+    A, a, au, auh = ctx.new_matrix('A')
+    B, b, bu, buh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
+    ctx.define(B * C, C)
+    ctx.define(A * C, C)
+    # Force distributive law (there's no A+B)
+    assert_compile('''
+       T3 = multiply_A_C(a, c);
+       T4 = multiply_B_C(b, c);
+       T2 = add_C_C(T3, T4);
+       T1 = multiply_A_C(a, T2);
+       T5 = multiply_B_C(b, T2);
+       T0 = add_C_C(T1, T5)''', (a + b) * (a + b) * c)
+
+def test_does_not_reuse_tasks():
+    # Currently, matrices are identified by position, not
+    #
+    # This test is a starting point in case we want to change this behaviour...
+    ctx, (A, a), (B, b), (C, c) = create_mock_matrices('A B C')
+    ctx.define(B * C, C)
+    ctx.define(A * C, C)
+    # Force distributive law (there's no A*A)
+    assert_compile('''
+    T1 = multiply_A_C(a, c);
+    T3 = multiply_A_C(a, c);
+    T2 = multiply_A_C(a, T3);
+    T0 = add_C_C(T1, T2)
+    ''', (a + a * a) * c)
 
 def test_transpose():
     ctx = MockMatricesUniverse()
@@ -163,5 +195,5 @@ def test_loop():
     with assert_raises(ImpossibleOperationError):
         assert_compile('', a + c)
 
-    
+
     

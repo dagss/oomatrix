@@ -493,8 +493,9 @@ class TaskLeaf(ExpressionNode):
         return visitor.visit_task_leaf(*args, **kw)
 
     def _repr(self, indent):
-        return [indent + '<TaskLeaf %r %r %r>' % (self.metadata,
-                                                  sorted(list(self.argument_index_set)))]
+        return [indent + '<TaskLeaf %r %r>' % (
+            self.metadata,
+            sorted(list(self.argument_index_set)))]
 
     def as_task(self):
         return self.task
