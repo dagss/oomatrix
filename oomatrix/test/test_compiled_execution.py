@@ -173,7 +173,7 @@ def test_add():
     assert_impossible(a.h + a)
     ctx.define(A.h + A, A, '%s.h + %s')
     co_('A:(a.h + a)', a.h + a)
-    co_('A:(a + ((a.h + a) + (a.h + a)))', a + a.h + a + a.h + a)
+    co_('A:(a + (a + (a.h + (a.h + a))))', a + a.h + a + a.h + a)
     co_('A:(a.h + (a.h + a))', a.h + a.h + a)
     ctx.define(B + B.h, B, '%s + %s.h')
     co_('B:(b + b.h)', b.h + b)
