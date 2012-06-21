@@ -217,10 +217,27 @@ class NeighbourExpressionGraphGenerator(object):
             for x in self.compile_add_children(node):
                 yield x
         else:
-            # All children are fully computed; use the associative rule to
+            # All children are fully computed; we a) use the associative rule to
             # split up the expression
             for x in self.process_add_associative(node):
                 yield x
+
+            def add(children):
+                node = symbolic.AddNode(children)
+                node.task_dependencies  = frozenset_union(*[x.task_dependencies
+                                                            for x in children])
+                return node
+            
+            # ...and b) when we're down to a pair, look
+            # at possible conversions. (This is a mediocre solution...)
+            if len(children) == 2:
+                left, right = children
+                for new_left in self.process(left):
+                    new_children = sorted([new_left, right])
+                    yield add(new_children)
+                for new_right in self.process(right):
+                    new_children = sorted([left, new_right])
+                    yield add(new_children)                    
 
 
     def visit_multiply(self, node):

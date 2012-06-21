@@ -56,6 +56,11 @@ def test_add():
     #assert_compile('T0 = add_A_B(a, b)', a + b)
     assert_compile('T1 = add_B_B(b, b); T0 = add_A_B(a, T1)', a + b + b)
 
+def test_add_conversion():
+    ctx, (A, a), (B, b) = create_mock_matrices('A B')
+    ctx.define(B, A)
+    assert_compile('T1 = B(b); T0 = add_A_A(a, T1)', a + b)
+
 def test_multiply():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 
