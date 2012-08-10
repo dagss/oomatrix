@@ -412,4 +412,4 @@ class ShortestPathCompiler(BaseCompiler):
             self.cache[meta_tree] = result
         return result, args
 
-default_compiler_instance = ShortestPathCompilation()
+default_compiler_instance = ShortestPathCompiler()

@@ -69,9 +69,11 @@ class Computation(object):
         if self.cost_callable is None:
             raise AssertionError('The cost of %s is not assigned' % self.name)
         cost = self.cost_callable(*meta_args)
+        if cost == 0:
+            cost = zero_cost
         if not isinstance(cost, CostValue):
             raise TypeError('cost function %s for %s did not return 0 or a '
-                            'CostValue' % (computation, computation.cost))
+                            'CostValue' % (self.cost_callable, self.callable))
         return cost
 
     def __call__(self, *args, **kw):

@@ -55,3 +55,6 @@ def meta_multiply(children):
     return MatrixMetadata(None,
                           children[0].rows_shape, children[-1].cols_shape,
                           children[0].dtype)
+
+def meta_transpose(m):
+    return MatrixMetadata(m.kind, m.cols_shape, m.rows_shape, m.dtype)

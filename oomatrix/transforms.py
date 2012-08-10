@@ -149,8 +149,12 @@ class FlattenTransform(object):
     def visit_single(self, node):
         return node.child.accept_visitor(self, node.child) 
 
-    visit_conjugate_transpose = visit_inverse = visit_single
-    visit_decomposition = visit_single
+    def visit_conjugate_transpose(self, node):
+        m = node.child.accept_visitor(self, node.child)
+        return metadata.meta_transpose(m)
+
+    visit_inverse = visit_single
+    visit_decomposition = visit_single # todo
 
 
 def flatten(node):
