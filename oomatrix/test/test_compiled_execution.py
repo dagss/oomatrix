@@ -1,5 +1,5 @@
 from .common import *
-from .. import Matrix, compute, explain, symbolic
+from .. import Matrix, compute, explain, symbolic, compiler
 
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import (computation, conversion, ImpossibleOperationError,
@@ -13,13 +13,14 @@ def arrayeq_(x, y):
     assert np.all(x == y)
 
 def assert_impossible(M):
-    compiler = ShortestPathCompiler()
+    c = compiler.DepthFirstCompiler()
     with assert_raises(ImpossibleOperationError):
-        compiler.compile(M._expr)
+        c.compile(M._expr)
 
 def co_(expected, M, target_kind=None):
-    compiler = ShortestPathCompiler()
-    expr = M.compute(compiler=compiler)._expr
+    #c = compiler.DepthFirstCompiler()
+    c = compiler.DepthFirstCompiler()
+    expr = M.compute(compiler=c)._expr
     if isinstance(expr, symbolic.ConjugateTransposeNode):
         r = '[%r].h' % expr.child.matrix_impl
     else:

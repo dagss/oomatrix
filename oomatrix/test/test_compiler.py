@@ -45,8 +45,8 @@ def test_sorted_mixed_list():
     assert matrix_b < task_a
 
 def assert_compile(expected_task_graph, matrix):
-    compiler = ShortestPathCompiler()
-    check_compilation(compiler, expected_task_graph, matrix)
+    c = compiler.DepthFirstCompiler() #ShortestPathCompiler()
+    check_compilation(c, expected_task_graph, matrix)
 
 def test_add():
     ctx = MockMatricesUniverse()

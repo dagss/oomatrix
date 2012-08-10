@@ -118,10 +118,13 @@ class NeighbourExpressionGraphGenerator(object):
         self.cache = {}
     
     def generate_neighbours(self, node):
+        #print 'ENTERING GENERATE'
         for subtree in self.process(node):
+            #print 'another subtree'
             cost = sum([task.cost for task in subtree.task_dependencies],
                        cost_value.zero_cost)
             yield cost, subtree
+        #print 'LEAVING GENERATE'
         
     def generate_direct_computations(self, node):
         # Important: This spawns new Task objects, so important to
@@ -169,7 +172,7 @@ class NeighbourExpressionGraphGenerator(object):
                 # todo: this will never explicitly transpose a matrix...
                 new_children.append(child)
             else:
-                sub_compiler = ShortestPathCompilation(self)
+                sub_compiler = DepthFirstCompilation(self)
                 if do_trace:
                     print '>>> SUBCOMPILATION START %x' % id(sub_compiler)
                 try:
@@ -383,6 +386,55 @@ class ShortestPathCompilation(object):
                 (isinstance(node, symbolic.ConjugateTransposeNode) and
                  isinstance(node.child, TaskLeaf)))
 
+class DepthFirstCompilation(object):
+    def __init__(self, neighbour_generator=None):
+        if neighbour_generator is None:
+            neighbour_generator = NeighbourExpressionGraphGenerator()
+        self.neighbour_generator = neighbour_generator
+        self.cost_map = cost_value.default_cost_map
+        
+    def compile(self, root):
+        print root
+        print 'STARTING COMPILE'
+        self.node_count = 0
+        self.upper_bound = np.inf
+        self.solutions = []
+        self.visited = set()
+        self.explore(root)
+        print 'ENDING COMPILE'
+        self.solutions.sort()
+        if len(self.solutions) == 0:
+            raise ImpossibleOperationError()
+        else:
+            return self.solutions[0][1]
+
+    def explore(self, node):
+        #print node
+        self.node_count += 1
+        if self.node_count % 100 == 0:
+            print self.node_count
+        self.visited.add(node)
+        #1/0
+        gen = self.neighbour_generator.generate_neighbours(node)
+        for cost, child in gen:
+            #print 'new child'
+            if child in self.visited:
+                continue
+            cost_scalar = cost.weigh(self.cost_map)
+            if cost_scalar > self.upper_bound:
+                # prune branch
+                continue
+            if self.is_goal(child):
+                if cost_scalar < self.upper_bound:
+                    self.upper_bound = cost_scalar
+                self.solutions.append((cost_scalar, child))
+            self.explore(child)
+
+    def is_goal(self, node):
+        return (isinstance(node, TaskLeaf) or
+                (isinstance(node, symbolic.ConjugateTransposeNode) and
+                 isinstance(node.child, TaskLeaf)))
+
 def find_cost(computation, meta_args):
     assert all(isinstance(x, MatrixMetadata) for x in meta_args)
     return computation.get_cost(meta_args) + INVOCATION
@@ -412,4 +464,8 @@ class ShortestPathCompiler(BaseCompiler):
             self.cache[meta_tree] = result
         return result, args
 
-default_compiler_instance = ShortestPathCompiler()
+class DepthFirstCompiler(ShortestPathCompiler):
+    compilation_factory = DepthFirstCompilation
+
+#default_compiler_instance = ShortestPathCompiler()
+default_compiler_instance = DepthFirstCompiler()
