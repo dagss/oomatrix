@@ -22,8 +22,7 @@ def test_basic():
     # Can only compile expressions on the form (expr * vector)
     ctx.define(A * A, A)
     assert_compile('T0 = multiply_A_A(a, a)', a * a)
-    with assert_raises(compiler.ImpossibleOperationError):
-        assert_compile('', a + a)
+    assert_compile('T0 = add_A_A(a, a)', a + a)
 
 def test_multiply():
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
@@ -32,6 +31,15 @@ def test_multiply():
                    'T0 = multiply_A_B(a, T1)', a * a * a * b)
     with assert_raises(compiler.ImpossibleOperationError):
         assert_compile('', a * a * a)
+
+def test_add_many():
+    ctx, (A, a) = create_mock_matrices('A')
+    ctx.define(A * A, A)
+    assert_compile('T1 = multiply_A_A(a, a); '
+                   'T3 = multiply_A_A(a, a); '
+                   'T4 = multiply_A_A(a, a); '
+                   'T2 = add_A_A(T3, T4); '
+                   'T0 = add_A_A(T1, T2)', (a + a + a) * a)
     
 def test_distributive():
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
