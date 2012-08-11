@@ -440,6 +440,27 @@ class RightToLeftCompilation(object):
     def __init__(self):
         self.cost_map = cost_value.default_cost_map
 
+    def compile(self, root):
+        possibilities = list(self.visit_multiply(root))
+        if len(possibilities) == 0:
+            raise ImpossibleOperationError()
+        elif len(possibilities) > 1:
+            raise NotImplementedError('Need to propagate task_dependencies?')
+        min_cost = np.inf
+        for root_task in possibilities:
+            # todo: fix task_dependencies
+            #print root_task.task_dependencies
+            cost = sum([task.cost for task in root_task.task_dependencies],
+                       cost_value.zero_cost)
+            cost_scalar = cost.weigh(self.cost_map)
+            if cost_scalar < min_cost:
+                min_cost = cost_scalar
+                min_root_task = root_task
+        return min_root_task
+
+    def visit(self, node):
+        return node.accept_visitor(self, node)
+
     def generate_direct_computations(self, node):
         # Important: This spawns new Task objects, so important to
         # only call from process() so that each task is cached
@@ -462,27 +483,6 @@ class RightToLeftCompilation(object):
                 new_node.task_dependencies = node.task_dependencies.union([task])
                 yield new_node
 
-    def compile(self, root):
-        if not isinstance(root, symbolic.MultiplyNode):
-            raise ImpossibleOperationError()
-        possibilities = list(self.visit_multiply(root))
-        if len(possibilities) == 0:
-            raise ImpossibleOperationError()
-        min_cost = np.inf
-        for root_task in possibilities:
-            # todo: fix task_dependencies
-            print root_task.task_dependencies
-            cost = sum([task.cost for task in root_task.task_dependencies],
-                       cost_value.zero_cost)
-            cost_scalar = cost.weigh(self.cost_map)
-            if cost_scalar < min_cost:
-                min_cost = cost_scalar
-                min_root_task = root_task
-        return min_root_task
-
-    def visit(self, node):
-        return node.accept_visitor(self, node)
-
     def visit_multiply(self, node):
         assert len(node.children) >= 2
         # Try direct computation...
@@ -496,13 +496,20 @@ class RightToLeftCompilation(object):
                 for y in self.visit(symbolic.multiply([left, x])):
                     yield y
         else:
-            # Try for the distributive law
             left, right = node.children
-            if left.can_distribute():
+            if isinstance(right, symbolic.AddNode):
+                # Allow summing up the right vector
+                for right_task_node in self.visit(right):
+                    new_node = symbolic.multiply([left, right_task_node])
+                    for x in self.visit(new_node):
+                        yield x
+            elif left.can_distribute():
+                # Allow using the right-distributive law
                 new_node = left.distribute_right(right)
                 for x in self.visit(new_node):
                     yield x
             elif isinstance(left, symbolic.ConjugateTransposeNode):
+                # Allow using A.h->B rules
                 for new_left in self.generate_direct_computations(left):
                     new_node = symbolic.multiply([new_left, right])
                     for x in self.generate_direct_computations(new_node):
