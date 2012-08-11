@@ -12,6 +12,8 @@ class Argument(object):
         self.metadata = metadata
         self.args = ()
         self.dependencies = frozenset()
+        self.computation = None
+        self.descriptive_expression = None
 
     def get_total_cost(self):
         return zero_cost
@@ -142,7 +144,6 @@ class Scheduler(object):
             return self.executor.get_result(task)
         
         self.gray_tasks.add(task)
-
         n = len(task.args)
         arg_results = [None] * n
         if n > 0:

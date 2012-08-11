@@ -127,8 +127,11 @@ class Matrix(object):
         from .task import Scheduler
         from .formatter import ExplainingExecutor, BasicExpressionFormatter
 
-        task, is_transpose = self.compile(compiler=compiler)
-
+        task_tree, args = self.compile(compiler=compiler)
+        is_transpose = isinstance(task_tree, symbolic.ConjugateTransposeNode)
+        if is_transpose:
+            task_tree, = task_tree.children
+        task = task_tree.as_task()
         stream = StringIO()
         name_to_matrices = {}
         expression_formatter = BasicExpressionFormatter(name_to_matrices)
@@ -275,6 +278,11 @@ class Matrix(object):
     #
     def as_array(self, order=None):
         from .impl.dense import RowMajor, ColumnMajor, Strided
+        # TODO: Remove need for this hack
+        if (isinstance(self._expr, symbolic.LeafNode) and
+            self._expr.kind in (RowMajor, ColumnMajor, Strided)):
+            return self._expr.matrix_impl.array.copy(order)
+            
         computed = self.as_kind([RowMajor, ColumnMajor, Strided]).compute()
         if isinstance(computed._expr, symbolic.ConjugateTransposeNode):
             array = computed._expr.child.matrix_impl.array.T.conjugate()

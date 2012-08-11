@@ -94,13 +94,12 @@ class ExplainingExecutor(object):
     def execute_task(self, task, arguments):
         if task.computation is None:
             # leaf task
-            return task.value
+            return task.argument_index
         else:
             task_id = self.num_tasks
             self.num_tasks += 1
             arg_strs = []
-            for arg_task, arg_result in zip(task.argument_tasks,
-                                            arguments):
+            for arg_task, arg_result in zip(task.args, arguments):
                 expr = arg_task.descriptive_expression
                 #print expr
                 #arg_str = self.expression_formatter.format(expr)
