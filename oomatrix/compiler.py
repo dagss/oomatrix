@@ -435,6 +435,102 @@ class DepthFirstCompilation(object):
                 (isinstance(node, symbolic.ConjugateTransposeNode) and
                  isinstance(node.child, TaskLeaf)))
 
+
+class RightToLeftCompilation(object):
+    def __init__(self):
+        self.cost_map = cost_value.default_cost_map
+
+    def generate_direct_computations(self, node):
+        # Important: This spawns new Task objects, so important to
+        # only call from process() so that each task is cached
+        if isinstance(node, Task):
+            assert False
+        key, universe = transforms.kind_key_transform(node)
+        computations_by_kind = universe.get_computations(key)
+        root_meta, args = transforms.flatten(node)
+        meta_args = [arg.metadata for arg in args]
+        argument_index_set = frozenset_union(*[arg.argument_index_set
+                                               for arg in args])
+        args = [arg.as_task() for arg in args]
+
+        for target_kind, computations in computations_by_kind.iteritems():
+            root_meta = root_meta.copy_with_kind(target_kind)
+            for computation in computations:
+                cost = find_cost(computation, meta_args)
+                task = Task(computation, cost, args, root_meta, node)
+                new_node = TaskLeaf(task, argument_index_set)
+                new_node.task_dependencies = node.task_dependencies.union([task])
+                yield new_node
+
+    def compile(self, root):
+        if not isinstance(root, symbolic.MultiplyNode):
+            raise ImpossibleOperationError()
+        possibilities = list(self.visit_multiply(root))
+        if len(possibilities) == 0:
+            raise ImpossibleOperationError()
+        min_cost = np.inf
+        for root_task in possibilities:
+            # todo: fix task_dependencies
+            print root_task.task_dependencies
+            cost = sum([task.cost for task in root_task.task_dependencies],
+                       cost_value.zero_cost)
+            cost_scalar = cost.weigh(self.cost_map)
+            if cost_scalar < min_cost:
+                min_cost = cost_scalar
+                min_root_task = root_task
+        return min_root_task
+
+    def visit(self, node):
+        return node.accept_visitor(self, node)
+
+    def visit_multiply(self, node):
+        assert len(node.children) >= 2
+        # Try direct computation...
+        for x in self.generate_direct_computations(node):
+            yield x
+        if len(node.children) > 2:
+            # Always parenthize right-to-left
+            left = symbolic.multiply(node.children[:-2])
+            right = symbolic.multiply(node.children[-2:])
+            for x in self.visit(right):
+                for y in self.visit(symbolic.multiply([left, x])):
+                    yield y
+        else:
+            # Try for the distributive law
+            left, right = node.children
+            if left.can_distribute():
+                new_node = left.distribute_right(right)
+                for x in self.visit(new_node):
+                    yield x
+            elif isinstance(left, symbolic.ConjugateTransposeNode):
+                for new_left in self.generate_direct_computations(left):
+                    new_node = symbolic.multiply([new_left, right])
+                    for x in self.generate_direct_computations(new_node):
+                        yield x
+
+    def visit_add(self, node):
+        for x in self.generate_direct_computations(node):
+            yield x
+        # Always parenthize right-to-left
+        if len(node.children) > 2:
+            # Always parenthize right-to-left
+            left = symbolic.multiply(node.children[:-2])
+            right = symbolic.multiply(node.children[-2:])
+            for x in self.visit(right):
+                for y in self.visit(symbolic.multiply([left, x])):
+                    yield y
+        else:
+            # Always fully compute all children
+            left_node, right_node = node.children
+            for left_task in self.visit(left_node):
+                for right_task in self.visit(right_node):
+                    query_tree = symbolic.AddNode([left_task, right_task])
+                    for x in self.generate_direct_computations(query_tree):
+                        yield x
+        
+            
+    
+
 def find_cost(computation, meta_args):
     assert all(isinstance(x, MatrixMetadata) for x in meta_args)
     return computation.get_cost(meta_args) + INVOCATION
@@ -446,26 +542,19 @@ class BaseCompiler(object):
     def compile(self, expression):
         meta_tree, args = transforms.metadata_transform(expression)
         result = self.cache.get(meta_tree, None)
-        if result is None or True: # TODO: Tasks must have switchable args
-            task_node = self.compilation_factory().compile(meta_tree)
-            result = (task_node.task, task_node.is_conjugate_transpose)
-            self.cache[key] = result
-        return result
-
-
-class ShortestPathCompiler(BaseCompiler):
-    compilation_factory = ShortestPathCompilation
-
-    def compile(self, expression):
-        meta_tree, args = transforms.metadata_transform(expression)
-        result = self.cache.get(meta_tree, None)
         if result is None:
             result = self.compilation_factory().compile(meta_tree)
             self.cache[meta_tree] = result
         return result, args
 
-class DepthFirstCompiler(ShortestPathCompiler):
+class ShortestPathCompiler(BaseCompiler):
+    compilation_factory = ShortestPathCompilation
+
+class DepthFirstCompiler(BaseCompiler):
     compilation_factory = DepthFirstCompilation
+
+class RightToLeftCompiler(BaseCompiler):
+    compilation_factory = RightToLeftCompilation
 
 #default_compiler_instance = ShortestPathCompiler()
 default_compiler_instance = DepthFirstCompiler()
