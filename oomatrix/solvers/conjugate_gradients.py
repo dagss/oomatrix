@@ -23,14 +23,14 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
                         maxit=10**3, eps=10**-8,
                         relative_eps=True,
                         raise_error=True,
-                        norm_order=None, logger=None):
+                        norm_order=None, logger=None, compiler=None):
     """
    
 
     """
     b = np.asarray(b)
     if x0 is None:
-        x0 = np.zeros(b.shape, dtype=b.dtype)
+        x0 = np.zeros(b.shape, dtype=b.dtype, order='F')
     if preconditioner is None:
         preconditioner = Matrix(np.ones(b.shape[0], dtype=b.dtype), diagonal=True)
 
@@ -41,7 +41,7 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
     #  d - preconditioned residual, "P r"
     #  
     # P = inv(M)
-    r = b - compute_array(A * x0)
+    r = b - compute_array(A * x0, compiler=compiler)
 
     residual = ndnorm(r, axis=0, ord=norm_order)
     max_residual = np.max(residual)
@@ -50,8 +50,7 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
         logger.info('Initial residuals between %e and %e',
                     min_residual, max_residual)
 
-    d = compute_array(preconditioner * r)
-    
+    d = compute_array(preconditioner * r, compiler=compiler).copy('F')
     delta_0 = delta_new = np.sum(r * d, axis=0)
 
     info['max_residuals'] = max_residuals = [max_residual]
@@ -66,7 +65,7 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
 
     x = x0
     for k in xrange(maxit):
-        q = compute_array(A * d)
+        q = compute_array(A * d, compiler=compiler)
         dAd = np.sum(d * q, axis=0)
         if not np.all(np.isfinite(dAd)):
             raise AssertionError("conjugate_gradients: A * d yielded inf values")
@@ -96,7 +95,7 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
             # Before terminating, make sure to recompute the residual
             # exactly, to avoid terminating too early due to numerical errors
             r_est = r
-            r = b - compute_array(A * x)
+            r = b - compute_array(A * x, compiler=compiler)
             #logger.info('Recomputing residual, relative error in estimate: %e',
             #            np.linalg.norm(r - r_est) / np.linalg.norm(r))
             residuals = ndnorm(r, axis=0, ord=norm_order)
@@ -106,11 +105,11 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
             else:
                 logger.info('Avoided early termination due to recomputing residual')
                 
-        s = compute_array(preconditioner * r)
+        s = compute_array(preconditioner * r, compiler=compiler)
         delta_old = delta_new
         delta_new = np.sum(r * s, axis=0)
         beta = delta_new / delta_old
-        d = s + beta * d
+        d = (s + beta * d).copy('F')
 
     err = ConvergenceError("Did not converge in %d iterations" % maxit)
     if raise_error:
