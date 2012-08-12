@@ -394,14 +394,11 @@ class DepthFirstCompilation(object):
         self.cost_map = cost_value.default_cost_map
         
     def compile(self, root):
-        print root
-        print 'STARTING COMPILE'
         self.node_count = 0
         self.upper_bound = np.inf
         self.solutions = []
         self.visited = set()
         self.explore(root)
-        print 'ENDING COMPILE'
         self.solutions.sort()
         if len(self.solutions) == 0:
             raise ImpossibleOperationError()

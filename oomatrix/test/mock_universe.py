@@ -53,7 +53,7 @@ class MockMatricesUniverse:
         # If '#' is in reprtemplate, substitute it with the number of
         # times called
         times_called = [0]
-        @computation(match, result_kind, cost=cost, name=name)
+        @computation(match, result_kind, cost=lambda *args: cost, name=name)
         def comp(*args):
             template = reprtemplate.replace('#', str(self.computation_index))
             result = result_kind(template % tuple(arg.value for arg in args),
@@ -70,7 +70,7 @@ class MockMatricesUniverse:
 
     def new_matrix(self, name_,
                    right=(), right_h=(), add=(),
-                   result='self'):
+                   result='self', addition_cost=1 * FLOP):
         class NewKind(MockKind):
             name = name_
             _sort_id = name_
@@ -84,7 +84,7 @@ class MockMatricesUniverse:
 
         # Always have within-kind addition
         @computation(NewKind + NewKind, NewKind,
-                     cost=lambda a, b: 1 * FLOP,
+                     cost=lambda a, b: addition_cost,
                      name='add_%s_%s' % (name_, name_))
         def add(a, b):
             return NewKind('(%s + %s)' % (a.value, b.value),
@@ -97,12 +97,15 @@ class MockMatricesUniverse:
                        name_.lower() + 'uh'))
 
 
-def create_mock_matrices(matrix_names):
+def create_mock_matrices(matrix_names, addition_costs=None):
     matrix_names = matrix_names.split()
     ctx = MockMatricesUniverse()
     result = (ctx,)
-    for name in matrix_names:
-        A, a, au, auh = ctx.new_matrix(name)
+    if addition_costs is None:
+        addition_costs = [1 * FLOP] * len(matrix_names)
+    for name, cost in zip(matrix_names, addition_costs):
+        print cost
+        A, a, au, auh = ctx.new_matrix(name, addition_cost=cost)
         result += ((A, a),)
     return result
 

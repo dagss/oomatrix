@@ -5,12 +5,14 @@ from .. import Matrix, compute, explain, symbolic
 
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import (computation, conversion, ImpossibleOperationError,
-                           FLOP, UGLY)
+                           FLOP, UGLY, MEMOP)
 from ..compiler import ShortestPathCompiler
 from .. import compiler, formatter, metadata, transforms, task
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
                             create_mock_matrices)
+
+import time
 
 def test_splits():
     # odd number of elements
@@ -201,4 +203,30 @@ def test_loop():
         assert_compile('', a + c)
 
 
-    
+def test_benchmarks():
+    ctx, (Dense, de), (Diagonal, di) = create_mock_matrices(
+        'Dense Diagonal', [100 * FLOP, 10 * FLOP])
+    ctx.define(Diagonal, Dense, cost=100 * MEMOP)
+    ctx.define(Diagonal * Diagonal, Diagonal, cost=10 * FLOP)
+
+    def mat(name):
+        return Matrix(Diagonal(i, 10, 10), name=name)
+
+    nprod_outer = 2
+    nadd = 3
+#    nprod_inner = 4
+
+    matexpr = 1
+    for i in range(nprod_outer):
+        terms = 0
+        for j in range(nadd):
+            terms += mat('m%d_%d' % (i, j))
+        matexpr = matexpr * terms
+        
+    print matexpr
+    c = compiler.DepthFirstCompiler()
+    t0 = time.clock()
+    c.compile(matexpr._expr)
+    t = time.clock()
+    print 'Time taken', t - t0
+
