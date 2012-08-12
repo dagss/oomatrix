@@ -535,6 +535,162 @@ class RightToLeftCompilation(object):
 
     def visit_task_leaf(self, node):
         return node
+
+
+
+
+
+
+
+
+
+
+def generate_direct_computations(node):
+    # Important: This spawns new Task objects, so important to
+    # only call from process() so that each task is cached
+    if isinstance(node, Task):
+        assert False
+    key, universe = transforms.kind_key_transform(node)
+    computations_by_kind = universe.get_computations(key)
+    root_meta, args = transforms.flatten(node)
+    meta_args = [arg.metadata for arg in args]
+    argument_index_set = frozenset_union(*[arg.argument_index_set
+                                           for arg in args])
+    args = [arg.as_task() for arg in args]
+
+    for target_kind, computations in computations_by_kind.iteritems():
+        root_meta = root_meta.copy_with_kind(target_kind)
+        for computation in computations:
+            cost = find_cost(computation, meta_args)
+            task = Task(computation, cost, args, root_meta, node)
+            new_node = TaskLeaf(task, argument_index_set)
+            new_node.task_dependencies = node.task_dependencies.union([task])
+            yield new_node
+
+def find_cheapest_direct_computation(node, cost_map):
+    min_cost = {}
+    best_task_node = {}
+    for task_node in generate_direct_computations(node):
+        cost = sum([task.cost for task in task_node.task_dependencies],
+                   cost_value.zero_cost)
+        cost_scalar = cost.weigh(cost_map)
+        kind = task.metadata.kind
+        if cost_scalar < min_cost.get(kind, np.inf):
+            min_cost[kind] = cost_scalar
+            best_task_node[kind] = (cost_scalar, task_node)
+    return best_task_node
+
+# Utilities
+def multiply_if_not_single(children):
+    if len(children) == 1:
+        return children[0]
+    else:
+        return symbolic.MultiplyNode(children)
+
+def reduce_best_tasks(tasks_lst):
+    # tasks_lst is a list [ { kind : (cost, task) }, { kind : (...) ]
+    # This function produces a single task-dict taking the cheapest for
+    # each kind
+    min_cost = {}
+    result = {}
+    for tasks in tasks_lst:
+        for kind, (cost, task) in tasks.iteritems():
+            if cost < min_cost.get(kind, np.inf):
+                min_cost[kind] = cost
+                result[kind] = (cost, task)
+    return result
+    
+
+class GreedyCompilation():
+    """
+    During tree traversal, each node returns
+    { kind : (cost, task) } for the *optimal* task for each kind, while
+    the other solutions are ignored.
+    """
+    def __init__(self):
+        self.cost_map = cost_value.default_cost_map
+        self.cache = {}
+    
+    def compile(self, root):
+        self.nodes_visited = 0
+        result = self.cached_visit(root)
+        self.stats = {'nodes_visited' : self.nodes_visited}
+        results_by_cost = [(cost, task) for kind, (cost, task) in result.iteritems()]
+        results_by_cost.sort()
+        return results_by_cost[0][1]
+
+    def cached_visit(self, node):
+        self.nodes_visited += 1
+        if node in self.cache:
+            result = self.cache[node]
+        else:
+            result = node.accept_visitor(self, node)
+            self.cache[node] = result
+        return result
+
+    def apply_distributive_rule(self, left, right):
+        # Left distributive rule
+        taskmaps = []
+        if left.can_distribute():
+            new_node = left.distribute_right(right)
+            taskmaps.append(self.cached_visit(new_node))
+        if right.can_distribute():
+            new_node = right.distribute_left(left)
+            taskmaps.append(self.cached_visit(new_node))
+        return reduce_best_tasks(taskmaps)
+
+    def visit_multiply(self, node):
+        if len(node.children) > 2:
+            # Break up expression using associative rule
+            tasks_lst = []
+            for i in range(1, len(node.children)):
+                left = multiply_if_not_single(node.children[:i])
+                right = multiply_if_not_single(node.children[i:])
+                tasks = self.cached_visit(multiply_if_not_single([left, right]))
+                tasks_lst.append(tasks)
+            # TODO: cutoffs
+            tasks = reduce_best_tasks(tasks_lst)
+            return tasks
+        else:
+            left, right = node.children
+            taskmaps = []
+            # Try to apply the distributive rules
+            taskmaps.append(self.apply_distributive_rule(left, right))
+            
+            # Recurse to compute children
+            left_tasks = self.cached_visit(left)
+            right_tasks = self.cached_visit(right)
+            # Must find best 'hybridization' of child tasks (todo: cutoffs!)
+            for left_kind, (left_cost, left_task) in left_tasks.iteritems():
+                for right_kind, (right_cost, right_task) in right_tasks.iteritems():
+                    new_node = multiply_if_not_single([left_task, right_task])
+                    tasks = find_cheapest_direct_computation(new_node, self.cost_map)
+                    taskmaps.append(tasks)
+            tasks = reduce_best_tasks(taskmaps)
+            return tasks
+
+    def visit_add(self, node):
+        child_taskmaps = [self.cached_visit(child) for child in node.children]
+        assert len(child_taskmaps) == 2
+
+        left_taskmap, right_taskmap = child_taskmaps
+        tasks_lst = []
+        for left_kind, (left_cost, left_task) in left_taskmap.iteritems():
+            for right_kind, (right_cost, right_task) in right_taskmap.iteritems():
+                new_node = symbolic.AddNode([left_task, right_task])
+                tasks = find_cheapest_direct_computation(new_node, self.cost_map)
+                tasks_lst.append(tasks)
+        tasks = reduce_best_tasks(tasks_lst)
+        return tasks
+
+    def visit_metadata_leaf(self, node):
+        # Find all conversions
+        taskmap = find_cheapest_direct_computation(node, self.cost_map)
+        # Add just using the leaf directly with no cost
+        taskmap[node.metadata.kind] = (0, node)
+        return taskmap
+            
+
             
     
 
@@ -550,8 +706,11 @@ class BaseCompiler(object):
         meta_tree, args = transforms.metadata_transform(expression)
         result = self.cache.get(meta_tree, None)
         if result is None:
-            result = self.compilation_factory().compile(meta_tree)
+            compilation = self.compilation_factory()
+            result = compilation.compile(meta_tree)
             self.cache[meta_tree] = result
+            if hasattr(compilation, 'stats'):
+                self.stats = compilation.stats
         return result, args
 
 class ShortestPathCompiler(BaseCompiler):
@@ -563,5 +722,9 @@ class DepthFirstCompiler(BaseCompiler):
 class RightToLeftCompiler(BaseCompiler):
     compilation_factory = RightToLeftCompilation
 
+class GreedyCompiler(BaseCompiler):
+    compilation_factory = GreedyCompilation
+
 #default_compiler_instance = ShortestPathCompiler()
 default_compiler_instance = DepthFirstCompiler()
+

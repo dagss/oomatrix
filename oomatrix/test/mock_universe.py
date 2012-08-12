@@ -47,6 +47,8 @@ class MockMatricesUniverse:
         self.computation_index = 0
 
     def define(self, match, result_kind, reprtemplate='', name=None, cost=1 * FLOP):
+        if isinstance(cost, int):
+            cost *= FLOP
         if name is None:
             name = match_tree_to_name(match)
         reprtemplate = '(%s)' % reprtemplate
@@ -74,6 +76,9 @@ class MockMatricesUniverse:
         class NewKind(MockKind):
             name = name_
             _sort_id = name_
+
+        if isinstance(addition_cost, int):
+            addition_cost *= FLOP
 
         self.kind_count += 1
 
@@ -104,7 +109,6 @@ def create_mock_matrices(matrix_names, addition_costs=None):
     if addition_costs is None:
         addition_costs = [1 * FLOP] * len(matrix_names)
     for name, cost in zip(matrix_names, addition_costs):
-        print cost
         A, a, au, auh = ctx.new_matrix(name, addition_cost=cost)
         result += ((A, a),)
     return result
@@ -130,15 +134,18 @@ def serialize_task(lines, task, args, task_names):
 
 def check_compilation(compiler_obj, expected_task_graph, matrix):
     tree, args = compiler_obj.compile(matrix._expr)
+    task_str = task_node_to_str(tree, args)
+    assert remove_blanks(expected_task_graph) == remove_blanks(task_str)
+
+def task_node_to_str(tree, args, sep='; '):
     is_transposed = isinstance(tree, symbolic.ConjugateTransposeNode)
     if is_transposed:
         tree, = tree.children
     assert isinstance(tree, symbolic.TaskLeaf)
     task = tree.task
-    #assert expected_transposed == is_transposed
     task_lines = []
     serialize_task(task_lines, task, args, {})
-    task_str = '; '.join(task_lines)
+    task_str = sep.join(task_lines)
     if is_transposed:
         task_str = 'transposed: %s' % task_str
-    assert remove_blanks(expected_task_graph) == remove_blanks(task_str)
+    return task_str

@@ -7,10 +7,10 @@ from ..kind import MatrixImpl, MatrixKind
 from ..computation import (computation, conversion, ImpossibleOperationError,
                            FLOP, UGLY, MEMOP)
 from ..compiler import ShortestPathCompiler
-from .. import compiler, formatter, metadata, transforms, task
+from .. import compiler, formatter, metadata, transforms, task, cost_value
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
-                            create_mock_matrices)
+                            create_mock_matrices, task_node_to_str)
 
 import time
 
@@ -47,7 +47,8 @@ def test_sorted_mixed_list():
     assert matrix_b < task_a
 
 def assert_compile(expected_task_graph, matrix):
-    c = compiler.DepthFirstCompiler() #ShortestPathCompiler()
+    c = compiler.GreedyCompiler()
+    #c = compiler.DepthFirstCompiler() #ShortestPathCompiler()
     check_compilation(c, expected_task_graph, matrix)
 
 def test_add():
@@ -203,17 +204,53 @@ def test_loop():
         assert_compile('', a + c)
 
 
-def test_benchmarks():
+def test_find_cheapest_direct_computation():
+    raise SkipTest()
+    cost_map = cost_value.default_cost_map
     ctx, (Dense, de), (Diagonal, di) = create_mock_matrices(
-        'Dense Diagonal', [100 * FLOP, 10 * FLOP])
+        'Dense Diagonal', [100 * FLOP, 11 * FLOP])
+    ctx.define(Diagonal, Dense, 100 * MEMOP)
+    def expr_of(mat):
+        meta_tree, args = transforms.metadata_transform(mat._expr)
+        return meta_tree
+    #print compiler.find_cheapest_direct_computation(expr_of(de + di), cost_map)
+
+def test_correct_distributive_cost():
+    ctx, (A, a), (B, b), (C, c), (D, d), (E, e) = create_mock_matrices('A B C D E')
+    # look at (a + b) * c * d = (a * c * d) + (b * c * d)
+    # Now, make sure that the reuse of the result of (c * d) (kind E) is
+    # taken into account in cost calculations:
+    
+    # ((a * c) * d): Impossible, so always takes a * (c * d) (cost=1)
+    # b * (c * d): Costs 2 + 2 = 4; though 2 shared
+    # (b * c) * d: Costs 3; no share
+    
+    ctx.define(C * D, E, cost=2)
+    ctx.define(A * E, A, cost=0)
+    ctx.define(B * E, A, cost=2)
+    ctx.define(B * C, A, cost=3)
+    ctx.define(A * D, A, cost=0) # should not take!
+
+    assert_compile('T2 = multiply_C_D(c, d); '
+                   'T1 = multiply_A_E(a, T2); '
+                   'T3 = multiply_B_E(b, T2); '
+                   'T0 = add_A_A(T1, T3)', (a + b) * c * d)
+    
+
+
+def test_benchmarks():
+    # prefer diagonal multiplication to addition, to create a deterministic
+    # result
+    ctx, (Dense, de), (Diagonal, di) = create_mock_matrices(
+        'Dense Diagonal', [100 * FLOP, 11 * FLOP])
     ctx.define(Diagonal, Dense, cost=100 * MEMOP)
     ctx.define(Diagonal * Diagonal, Diagonal, cost=10 * FLOP)
 
     def mat(name):
         return Matrix(Diagonal(i, 10, 10), name=name)
 
-    nprod_outer = 2
-    nadd = 3
+    nprod_outer = 4
+    nadd = 2
 #    nprod_inner = 4
 
     matexpr = 1
@@ -222,11 +259,14 @@ def test_benchmarks():
         for j in range(nadd):
             terms += mat('m%d_%d' % (i, j))
         matexpr = matexpr * terms
-        
+
     print matexpr
-    c = compiler.DepthFirstCompiler()
+    print
+    c = compiler.GreedyCompiler()
     t0 = time.clock()
-    c.compile(matexpr._expr)
+    tree, args = c.compile(matexpr._expr)
     t = time.clock()
-    print 'Time taken', t - t0
+    print 'Time taken %s, stats %s' % (t - t0, c.stats)
+    print 'Cost:', tree.as_task().get_total_cost()
+    print 'Solution:\n   ', task_node_to_str(tree, args, sep='\n    ')
 
