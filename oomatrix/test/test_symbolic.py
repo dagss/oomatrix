@@ -77,44 +77,6 @@ def test_as_tuple():
          ('+', b, a, ('h', ('i', b))),
          a), tup)
 
-def test_call_func():
-    class A(MockImpl):
-        _sort_id = 1
-    class B(MockImpl):
-        _sort_id = 2
-    class C(MockImpl):
-        _sort_id = 3
-    ao = A()
-    bo = B()
-    co = C()
-    a = LeafNode('a', ao)
-    b = LeafNode('b', bo)
-    c = LeafNode('c', co)
-
-    def assert_argslist(expected, expr, match):
-        args = expr.as_computable_list(match)
-        for arg in args:
-            assert isinstance(arg, LeafNode)
-        eq_(expected, [x.matrix_impl for x in args])
-
-    yield assert_argslist, [ao], I(a), A.i
-    yield assert_raises, PatternMismatchError, a.as_computable_list, A.i
-    yield assert_argslist, [ao], H(I(a)), A.i.h
-
-    yield assert_argslist, [co, ao, bo], add(a, b, c), C + A + B
-    yield assert_argslist, [ao, bo, co], add(a, b, c), A + B + C
-    yield assert_argslist, [bo, co, ao], add(a, b, c), B + C + A
-
-    yield assert_argslist, [co, ao, bo], mul(c, a, b), C * A * B
-
-    yield (assert_argslist, [co, ao, bo, bo, co], 
-           mul(c, add(mul(H(I(a)), b), mul(H(b), c))), 
-           C * (A.i.h * B + B.h * C))
-
-    # make C appear before A and try again, should be exact same behaviour
-    C._sort_id = 0
-    yield assert_argslist, [co, ao, bo], add(a, b, c), C + A + B
-    
 def test_hash_and_eq():
     from ..symbolic import conjugate_transpose, inverse
 

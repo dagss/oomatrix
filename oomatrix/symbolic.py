@@ -126,12 +126,6 @@ class ExpressionNode(object):
         return ((self.symbol,) + 
                 tuple(child.as_tuple() for child in self.children))
 
-    def as_computable_list(self, pattern):
-        """Converts tree to an argument list matching `pattern` (a
-        tree from kind.py)
-        """
-        raise NotImplementedError('please override')
-
     def __hash__(self):
         if self._hash is None:
             self._hash = hash(self.as_tuple())
@@ -188,40 +182,10 @@ class AddNode(ArithmeticNode):
         return add([multiply([other, term])
                     for term in self.children])
 
-    def as_computable_list(self, pattern):
-        1/0
-        if not isinstance(pattern, kind.AddPatternNode):
-            raise PatternMismatchError()
-        if len(self.sorted_children) != len(pattern.sorted_children):
-            raise PatternMismatchError()
-        
-        # Now, we need to apply the inverse permutation in `pattern`
-        # to figure out how the function wants to be called and how our
-        # own arguments match
-        sorted_to_pattern = invert_permutation(pattern.child_permutation)
-        arguments_in_sorted_order = [child.as_computable_list(pattern_child)
-                                     for child, pattern_child in zip(
-                                         self.sorted_children,
-                                         pattern.sorted_children)]
-        result = []
-        for i in range(len(sorted_to_pattern)):
-            result.extend(arguments_in_sorted_order[sorted_to_pattern[i]])
-        return result
-
 class MultiplyNode(ArithmeticNode):
     symbol = '*'
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_multiply(*args, **kw)
-
-    def as_computable_list(self, pattern):
-        if not isinstance(pattern, kind.MultiplyPatternNode):
-            raise PatternMismatchError()
-        if len(self.children) != len(pattern.children):
-            raise PatternMismatchError()
-        result = []
-        for expr_child, pattern_child in zip(self.children, pattern.children):
-            result.extend(expr_child.as_computable_list(pattern_child))
-        return result
 
 class SingleChildNode(ExpressionNode):
     pass
@@ -270,11 +234,6 @@ class ConjugateTransposeNode(SingleChildNode):
     def conjugate_transpose(self):
         return self.child
 
-    def as_computable_list(self, pattern):
-        if not isinstance(pattern, kind.ConjugateTransposePatternNode):
-            raise PatternMismatchError()
-        return self.child.as_computable_list(pattern.child)
-
     def compute(self):
         return ConjugateTransposeNode(LeafNode(None, self.child.compute()))
 
@@ -291,11 +250,6 @@ class InverseNode(SingleChildNode):
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_inverse(*args, **kw)
-
-    def as_computable_list(self, pattern):
-        if not isinstance(pattern, kind.InversePatternNode):
-            raise PatternMismatchError()
-        return self.child.as_computable_list(pattern.child)
 
 class BracketNode(ExpressionNode):
     symbol = 'b'
@@ -335,11 +289,6 @@ class BaseComputable(ExpressionNode):
     # TODO: REMOVE
     children = ()
 
-    def as_computable_list(self, pattern):
-        if pattern != self.kind:
-            raise PatternMismatchError()
-        return [self]
-
 class Promise(BaseComputable):
     def __init__(self, task):
         metadata = task.metadata
@@ -357,11 +306,6 @@ class Promise(BaseComputable):
     def __hash__(self):
         return id(self)
 
-    def as_computable_list(self, pattern):
-        if pattern != self.metadata.kind:
-            raise PatternMismatchError()
-        return [self.task]
-
 class DecompositionNode(ExpressionNode):
     """
     Represents a promise to perform a matrix decomposition.
@@ -378,11 +322,6 @@ class DecompositionNode(ExpressionNode):
 
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_decomposition(*args, **kw)
-
-    def as_computable_list(self, pattern):
-        if not isinstance(pattern, kind.FactorPatternNode):
-            raise PatternMismatchError()
-        return self.child.as_computable_list(pattern.child)
 
 
 for x, val in [
