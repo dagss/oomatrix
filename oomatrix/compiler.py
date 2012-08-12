@@ -606,6 +606,25 @@ class GreedyCompilation():
     During tree traversal, each node returns
     { kind : (cost, task) } for the *optimal* task for each kind, while
     the other solutions are ignored.
+
+    The following restrictions/heuristics are used to keep things tractable
+    at the moment. Note that this can mean that even if an expression can
+    be computed by the rules in the system, this compiler may not find the
+    solution!
+
+     - Currently only a single conversion will be considered, not a chain of
+       them in a row (this should be fixed)
+       
+     - Either the distributive rule is used on all terms, or it is not. I.e.,
+       (a + b + c) * x can turn into (a * x + b * x + c * x), but
+       NOT (a + b) * x + c * x.
+
+     - When the distributive rule is used, one always computes the 'distributee'
+       first and reuse it. I.e., for (a + b) * c * e, one will always get
+       (a * [c * e] + ...); never ((a * c) * e + ...); where [c * e] denotes
+       one specific chosen computation for [c * e] (the one that minimizes the
+       total cost of the sum).
+
     """
     def __init__(self):
         self.cost_map = cost_value.default_cost_map
@@ -617,7 +636,10 @@ class GreedyCompilation():
         self.stats = {'nodes_visited' : self.nodes_visited}
         results_by_cost = [(cost, task) for kind, (cost, task) in result.iteritems()]
         results_by_cost.sort()
-        return results_by_cost[0][1]
+        if len(results_by_cost) == 0:
+            raise ImpossibleOperationError()
+        else:
+            return results_by_cost[0][1]
 
     def cached_visit(self, node):
         self.nodes_visited += 1
@@ -628,15 +650,27 @@ class GreedyCompilation():
             self.cache[node] = result
         return result
 
-    def apply_distributive_rule(self, left, right):
-        # Left distributive rule
+    def apply_distributive_rule(self, distributor, distributee, direction):
+        # In the case of (a * b) * c -> a * c + b * c; (a * b) is 'distributor' and
+        # c is 'distributee'
+        if not isinstance(distributor, symbolic.AddNode):
+            return {}
+
+        distributee_taskmap = self.cached_visit(distributee)
+        # For each of the possible results, attempt to distribute it on all
+        # terms and look at the resulting cost
         taskmaps = []
-        if left.can_distribute():
-            new_node = left.distribute_right(right)
-            taskmaps.append(self.cached_visit(new_node))
-        if right.can_distribute():
-            new_node = right.distribute_left(left)
-            taskmaps.append(self.cached_visit(new_node))
+        for kind, (cost, distributed_task) in distributee_taskmap.iteritems():
+            terms = []
+            for term in distributor.children:
+                if direction == 'left':
+                    new_term = symbolic.multiply([term, distributed_task])
+                elif direction == 'right':
+                    new_term = symbolic.multiply([distributed_task, term])
+                terms.append(new_term)
+            new_node = symbolic.add(terms)
+            taskmap = self.cached_visit(new_node)
+            taskmaps.append(taskmap)
         return reduce_best_tasks(taskmaps)
 
     def visit_multiply(self, node):
@@ -655,7 +689,8 @@ class GreedyCompilation():
             left, right = node.children
             taskmaps = []
             # Try to apply the distributive rules
-            taskmaps.append(self.apply_distributive_rule(left, right))
+            taskmaps.append(self.apply_distributive_rule(left, right, 'left'))
+            taskmaps.append(self.apply_distributive_rule(right, left, 'right'))
             
             # Recurse to compute children
             left_tasks = self.cached_visit(left)
@@ -684,14 +719,16 @@ class GreedyCompilation():
         return tasks
 
     def visit_metadata_leaf(self, node):
-        # Find all conversions
+        # Find all conversions (TODO: find more conversions by converting multiple times!)
         taskmap = find_cheapest_direct_computation(node, self.cost_map)
         # Add just using the leaf directly with no cost
         taskmap[node.metadata.kind] = (0, node)
         return taskmap
             
-
-            
+    def visit_task_leaf(self, node):
+        task = node.as_task()
+        taskmap = {node.metadata.kind : (task.get_total_cost(), node)}
+        return taskmap
     
 
 def find_cost(computation, meta_args):

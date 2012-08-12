@@ -221,9 +221,9 @@ def test_correct_distributive_cost():
     # Now, make sure that the reuse of the result of (c * d) (kind E) is
     # taken into account in cost calculations:
     
-    # ((a * c) * d): Impossible, so always takes a * (c * d) (cost=1)
-    # b * (c * d): Costs 2 + 2 = 4; though 2 shared
-    # (b * c) * d: Costs 3; no share
+    # ((a * c) * d): Impossible, so always takes a * (c * d) (cost=2)
+    # b * (c * d): Costs 2 + 2 = 4; but 2 shared, so in reality 2
+    # (b * c) * d: Costs 3; no cost sharing
     
     ctx.define(C * D, E, cost=2)
     ctx.define(A * E, A, cost=0)
@@ -235,6 +235,24 @@ def test_correct_distributive_cost():
                    'T1 = multiply_A_E(a, T2); '
                    'T3 = multiply_B_E(b, T2); '
                    'T0 = add_A_A(T1, T3)', (a + b) * c * d)
+
+def test_nonoptimal_distribution():
+    # This is a case where the compiler returns suboptimal results!
+    # (Or, currently, doesn't allow the operation)
+    # So this is a test case one can use if one wants to work on that
+    ctx, (A, a), (B, b), (C, c), (D, d), (E, e) = create_mock_matrices('A B C D E')
+    ctx.define(A * C, A)
+    ctx.define(A * D, A)
+    ctx.define(C * D, E)
+    ctx.define(B * E, A)
+
+    # A solution is
+    # T2 = multiply_A_C(a, c); T1 = multiply_A_D(T2, d); T4 = multiply_C_D(c, d);
+    # T3 = multiply_B_E(b, T4); T0 = add_A_A(T1, T3)
+    # but this is not found
+    with assert_raises(ImpossibleOperationError):
+        assert_compile('', (a + b) * c * d)
+    
     
 
 
