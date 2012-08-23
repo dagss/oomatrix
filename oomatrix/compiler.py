@@ -705,18 +705,74 @@ class GreedyCompilation():
             return tasks
 
     def visit_add(self, node):
-        child_taskmaps = [self.cached_visit(child) for child in node.children]
-        assert len(child_taskmaps) == 2
+        def taskmap_to_sorted_list(taskmap):
+            return [(cost, kind, task) for kind, (cost, task) in taskmap.iteritems()]
 
-        left_taskmap, right_taskmap = child_taskmaps
-        tasks_lst = []
-        for left_kind, (left_cost, left_task) in left_taskmap.iteritems():
-            for right_kind, (right_cost, right_task) in right_taskmap.iteritems():
-                new_node = symbolic.AddNode([left_task, right_task])
-                tasks = find_cheapest_direct_computation(new_node, self.cost_map)
-                tasks_lst.append(tasks)
-        tasks = reduce_best_tasks(tasks_lst)
-        return tasks
+        child_taskmaps = [self.cached_visit(child) for child in node.children]
+        # We explore all permutations for addition, but sort the options
+        # of each term from cheapest to most costly, and process the most
+        # expensive term first, as a heuristic to cut off early
+        operands = [taskmap_to_sorted_list(taskmap) for taskmap in child_taskmaps]
+        for options in operands:
+            options.sort()
+        operands.sort()
+        operands = operands[::-1]
+
+
+        def explore_add_permutations(best_cost, taskmap_so_far, remaining_operands):
+            self.nodes_visited += 1
+            #best_cost = np.inf
+            best_task = None
+            
+            if len(remaining_operands) == 0:
+                if len(taskmap_so_far) > 0:
+                    cost, kind, task = taskmap_so_far[0]
+                    if cost < best_cost:
+                        return cost, task
+                return None, None
+            
+            for i, operand_options in enumerate(remaining_operands):
+                next_remaining_operands = list(remaining_operands)
+                del next_remaining_operands[i]
+
+                if taskmap_so_far is None:
+                    # First operand
+                    next_taskmap_so_far = operand_options
+                else:
+                    # Try to join previously computed expression with the current
+                    # operand in all possible ways.
+                    taskmaps = []
+                    for left_cost, _, left_task in taskmap_so_far:
+                        # Cutoff: If the cost of the expression so far is larger
+                        # than the smallest cost of the total path found so far.
+                        # Note that taskmap_so_far is sorted by cost.
+                        if left_cost >= best_cost:
+                            break
+                        for right_cost, _, right_task in operand_options:
+                            if left_cost + right_cost >= best_cost:
+                                break
+                            node = symbolic.AddNode(sorted([left_task, right_task]))
+                            taskmap = find_cheapest_direct_computation(node, self.cost_map)
+                            taskmaps.append(taskmap)
+                    taskmap = reduce_best_tasks(taskmaps)
+                    next_taskmap_so_far = taskmap_to_sorted_list(taskmap)
+
+                if len(next_taskmap_so_far) > 0:
+                    result_cost, result_task = explore_add_permutations(
+                        best_cost, next_taskmap_so_far, next_remaining_operands)
+                    if result_task is not None:
+                        return result_cost, result_task
+                return None, None
+
+        for opt in operands:
+            print [len(opt) for opt in operands], [len(x) for x in child_taskmaps]
+        #pprint(operands)
+        cost, task = explore_add_permutations(np.inf, None, operands)
+        if task is None:
+            1/0
+            return {}
+        else:
+            return {task.metadata.kind : (cost, task)}
 
     def visit_metadata_leaf(self, node):
         # Find all conversions (TODO: find more conversions by converting multiple times!)
