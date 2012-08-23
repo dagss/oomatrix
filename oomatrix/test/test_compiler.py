@@ -51,6 +51,36 @@ def assert_compile(expected_task_graph, matrix):
     #c = compiler.DepthFirstCompiler() #ShortestPathCompiler()
     check_compilation(c, expected_task_graph, matrix)
 
+
+#
+# Test the addition compilation utilities
+#
+def mock_meta(kind):
+    return metadata.MatrixMetadata(kind, (3,), (3,), np.double)
+
+def mock_arg(kind):
+    return task.Argument(0, mock_meta(kind))
+
+def mock_task(kind, cost):
+    return task.Task(None, cost * FLOP, [], mock_meta(kind), None)
+
+mock_cost_map = dict(FLOP=1, INVOCATION=0)
+
+def test_fill_in_conversions():
+    ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')
+    ctx.define(A, B, cost=2, name='A->B')
+    ctx.define(B, C, cost=1, name='B->C')
+    ctx.define(C, D, cost=2, name='C->D')
+    options = [mock_task(A, 2), mock_task(C, 1), mock_task(D, 100)]
+    full_options = compiler.fill_in_conversions(options, mock_cost_map)
+    expected = [(C, 1), (A, 2), (D, 3), (B, 4)]
+    got = [(opt.metadata.kind, opt.get_total_cost().weigh(mock_cost_map)) for opt in full_options]
+    assert expected == got
+    
+#
+# Full expression compilation tests
+#
+
 def test_add():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 

@@ -538,6 +538,53 @@ class RightToLeftCompilation(object):
 
 
 
+def fill_in_conversions(options, cost_map):
+    """
+    The given task_options are supposed to be different possible
+    tasks for the *same* computation. Complete this list by adding
+    conversions to all possible kinds. The resulting list will contain
+    exactly one option for each kind (the cheapest one), and will be
+    sorted from cheapest to most expensive.
+    """
+    # For each option task, run a depth first search through all conversions
+    def dfs_insert(d, task):
+        meta = task.metadata
+        kind = meta.kind
+        # Abort if it is more expensive than existing task
+        old_cost, old_task = d.get(kind, (np.inf, None))
+        cost = task.get_total_cost().weigh(cost_map)
+        if cost >= old_cost:
+            return
+
+        # Insert new, cheaper task...
+        d[kind] = (cost, task)
+
+        # ...and recursively try all conversions from here
+        conversions_by_kind = kind.get_conversions()
+        for target_kind, conversions in conversions_by_kind.iteritems():
+            new_meta = meta.copy_with_kind(target_kind)
+            # For each kind, we pick out the cheapest conversion
+            costs = [conv.get_cost([meta]) for conv in conversions]
+            cost_scalars = [cost.weigh(cost_map) for cost in costs]
+            i = np.argmin(cost_scalars)
+
+            new_cost, conversion = costs[i], conversions[i]
+            new_task = Task(conversion, new_cost, [task], new_meta, None)
+            dfs_insert(d, new_task)
+
+    # For each input option, run a dfs with that task as root to insert
+    # it with all conversions. Once the dfs encounters the result of an
+    # earlier inserted task with lower cost it aborts the branch.
+    d = {} # { kind : (cost, task) }
+    for task in options:
+        dfs_insert(d, task)
+
+    # Sort the result into a list and return it
+    pre_result = [(cost, task) for kind, (cost, task) in d.iteritems()]
+    pre_result.sort()
+    result = [task for cost, task in pre_result]
+    return result
+
 
 
 
@@ -789,7 +836,8 @@ class GreedyCompilation():
 
 def find_cost(computation, meta_args):
     assert all(isinstance(x, MatrixMetadata) for x in meta_args)
-    return computation.get_cost(meta_args) + INVOCATION
+    return computation.get_cost(meta_args)
+
 
 class BaseCompiler(object):
     def __init__(self):

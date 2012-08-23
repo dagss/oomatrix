@@ -276,6 +276,9 @@ class MatrixKind(type, PatternNode):
     def get_key(cls):
         return cls
 
+    def get_conversions(self):
+        return self.universe.get_computations(self.get_key())        
+
     def accept_visitor(self, visitor, *args, **kw):
         return visitor.visit_kind(*args, **kw)
  

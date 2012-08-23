@@ -1,6 +1,6 @@
 import types
 
-from .cost_value import CostValue, FLOP, MEM, MEMOP, UGLY, zero_cost
+from .cost_value import CostValue, FLOP, MEM, MEMOP, UGLY, INVOCATION, zero_cost
 from . import utils
 
 class ImpossibleOperationError(NotImplementedError):
@@ -58,7 +58,6 @@ class Computation(object):
         self.target_kind = target_kind
         self.name = (name if name is not None
                      else '%s.%s' % (callable.__module__, callable.__name__))
-        self.name = name
         self.cost_callable = cost_callable
 
     def compute(self, matrices):
@@ -74,7 +73,7 @@ class Computation(object):
         if not isinstance(cost, CostValue):
             raise TypeError('cost function %s for %s did not return 0 or a '
                             'CostValue' % (self.cost_callable, self.callable))
-        return cost
+        return cost + INVOCATION
 
     def __call__(self, *args, **kw):
         """A direct call of the computation function
