@@ -63,7 +63,7 @@ do_trace = bool(int(os.environ.get("T", '0')))
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
 
-from . import formatter, symbolic, cost_value, transforms
+from . import formatter, symbolic, cost_value, transforms, utils, metadata
 from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
@@ -536,7 +536,31 @@ class RightToLeftCompilation(object):
     def visit_task_leaf(self, node):
         return node
 
+def get_cheapest_computations(universe, match_expr, args, target_meta, cost_map, symbolic_expr):
+    """
+    Returns the cheapest computation for each target kind, as
+    a list of Task.
 
+    match_expr: Kind-expression to match ("kind", "kind_a + kind_b", etc.)
+    args: List of Task arguments to the computation
+    target_meta: The metadata of the result, *except* that the kind is ignored/overwritten. This is
+      used as a template when constructing tasks. (TBD: refactor)
+    
+    """
+    key = match_expr.get_key()
+    meta_args = [arg.metadata for arg in args]
+    computations_by_kind = universe.get_computations(key)
+    possible_tasks = []
+    for target_kind, computations in computations_by_kind.iteritems():
+        new_meta = target_meta.copy_with_kind(target_kind)
+        # For each kind, we pick out the cheapest computation
+        costs = [comp.get_cost(meta_args) for comp in computations]
+        cost_scalars = [cost.weigh(cost_map) for cost in costs]
+        i = np.argmin(cost_scalars)
+        new_cost, computation = costs[i], computations[i]
+        new_task = Task(computation, new_cost, args, new_meta, symbolic_expr)
+        possible_tasks.append(new_task)
+    return possible_tasks
 
 def fill_in_conversions(options, cost_map):
     """
@@ -560,16 +584,8 @@ def fill_in_conversions(options, cost_map):
         d[kind] = (cost, task)
 
         # ...and recursively try all conversions from here
-        conversions_by_kind = kind.get_conversions()
-        for target_kind, conversions in conversions_by_kind.iteritems():
-            new_meta = meta.copy_with_kind(target_kind)
-            # For each kind, we pick out the cheapest conversion
-            costs = [conv.get_cost([meta]) for conv in conversions]
-            cost_scalars = [cost.weigh(cost_map) for cost in costs]
-            i = np.argmin(cost_scalars)
-
-            new_cost, conversion = costs[i], conversions[i]
-            new_task = Task(conversion, new_cost, [task], new_meta, None)
+        new_tasks = get_cheapest_computations(kind.universe, kind, [task], meta, cost_map, None)
+        for new_task in new_tasks:
             dfs_insert(d, new_task)
 
     # For each input option, run a dfs with that task as root to insert
@@ -585,8 +601,88 @@ def fill_in_conversions(options, cost_map):
     result = [task for cost, task in pre_result]
     return result
 
+class AdditionFinder(object):
 
+    def __init__(self, cost_map):
+        self.cost_map = cost_map
 
+    def cost_of(self, task):
+        return task.get_total_cost().weigh(self.cost_map)
+
+    def find_cheapest_addition(self, operands):
+        """
+        Generates possible additions of the matrices described by the
+        given metadata, taking into account both available conversion
+        operations and addition operations.  For now, only the cheapest
+        possible addition is found. but taking into account conversions.
+
+        operands is a list with one entry per matrix; the entry
+        is a list [task, task...] with the possible representations
+        of the matrix
+
+        cost_map is used to map possible operations to a scalar comparable cost.
+        """
+        self.nodes_visited = 0
+
+        
+        # In addition to the available options for each operand, we'll want to pursue
+        # the different conversions of all input matrices, so simply add those to
+        # the available options
+        operands = [fill_in_conversions(possible_tasks, self.cost_map)
+                    for possible_tasks in operands]
+
+        # Result of fill_in_conversions is sorted; sort operands from most expensive
+        # to least
+        cost_of_first = [tasks[0].get_total_cost().weigh(self.cost_map) for tasks in operands]
+        operands = utils.sort_by(operands, cost_of_first)
+
+        taken = [False] * len(operands)
+        cost, task = self.explore_add_permutations(None, taken, operands)
+        
+
+    def explore_add_permutations(self, possible_tasks_so_far, taken, remaining_operands):
+        self.nodes_visited += 1
+        best_task = None
+
+        # task_so_far represents the matrix sum so far; remaining_operands remains
+        # to be summed. We attempt all possible choices as our next operand to add.
+        for i, operand_possible_tasks in enumerate(remaining_operands):
+            if taken[i]:
+                continue
+            taken[i] = True # push taken status; pop this when we are done
+            if possible_tasks_so_far is None:
+                resulting_possible_tasks = operand_possible_tasks
+            else:
+                # Try to join previously computed expression with the current
+                # operand in all possible ways.
+                resulting_possible_tasks = []
+                for left_task in possible_tasks_so_far:
+                    left_cost = self.cost_of(left_task)
+                    # Cutoff: If the cost of the expression so far is larger
+                    # than the smallest cost of the total path found so far.
+                    # Note that taskmap_so_far is sorted by cost.
+                    #if left_cost >= best_cost:
+                    #    break
+                    for right_task in operand_possible_tasks:
+                        right_cost = self.cost_of(right_task)
+                        #if left_cost + right_cost >= best_cost:
+                        #    break
+                        kinds = [left_task.metadata.kind, right_task.metadata.kind]
+                        args = utils.sort_by([left_task, right_task], kinds)
+                        kinds.sort()
+                        kind_a, kind_b = kinds
+                        target_meta = metadata.meta_add([x.metadata for x in args])
+                        resulting_possible_tasks = get_cheapest_computations(
+                            kind_a.universe, kind_a + kind_b,
+                            args, target_meta, self.cost_map, None)
+                        resulting_possible_tasks = fill_in_conversions(resulting_possible_tasks,
+                                                                       self.cost_map)
+                        
+            self.explore_add_permutations(resulting_possible_tasks, taken, remaining_operands)
+            print resulting_possible_tasks
+            taken[i] = False
+        
+        return None, None
 
 
 
@@ -678,6 +774,7 @@ class GreedyCompilation():
         self.cache = {}
     
     def compile(self, root):
+        self.minimum_possible_cost = 0
         self.nodes_visited = 0
         result = self.cached_visit(root)
         self.stats = {'nodes_visited' : self.nodes_visited}

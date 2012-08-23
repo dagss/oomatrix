@@ -52,6 +52,7 @@ def assert_compile(expected_task_graph, matrix):
     check_compilation(c, expected_task_graph, matrix)
 
 
+
 #
 # Test the addition compilation utilities
 #
@@ -71,12 +72,21 @@ def test_fill_in_conversions():
     ctx.define(A, B, cost=2, name='A->B')
     ctx.define(B, C, cost=1, name='B->C')
     ctx.define(C, D, cost=2, name='C->D')
-    options = [mock_task(A, 2), mock_task(C, 1), mock_task(D, 100)]
+    options = [mock_task(A, 200), mock_task(C, 1), mock_task(D, 100), mock_task(A, 2)]
     full_options = compiler.fill_in_conversions(options, mock_cost_map)
     expected = [(C, 1), (A, 2), (D, 3), (B, 4)]
     got = [(opt.metadata.kind, opt.get_total_cost().weigh(mock_cost_map)) for opt in full_options]
     assert expected == got
     
+
+def test_find_cheapest_addition():
+    ctx, (A, a), (B, b) = create_mock_matrices('A B')
+    matrix_descriptions = [[mock_task(A, 3.0), mock_task(B, 4.0)],
+                           [mock_task(B, 3.0)],
+                           [mock_task(A, 1.0), mock_task(B, 1.0)]]
+    obj = compiler.AdditionFinder(mock_cost_map)
+    obj.find_cheapest_addition(matrix_descriptions)
+
 #
 # Full expression compilation tests
 #
@@ -141,10 +151,11 @@ def test_distributive():
     ctx.define(A * C, A)
     assert_compile('''
     T2 = add_A_A(a, a);
-    T1 = multiply_A_B(T2, b);
-    T3 = multiply_A_C(T2, c);
+    T1 = multiply_A_C(T2, c);
+    T3 = multiply_A_B(T2, b);
     T0 = add_A_A(T1, T3)
     ''', (a + a) * (b + c)) # b + c is impossible
+
 
 def test_multi_distributive():
     ctx = MockMatricesUniverse()
@@ -171,11 +182,14 @@ def test_does_not_reuse_tasks():
     ctx.define(A * C, C)
     # Force distributive law (there's no A*A)
     assert_compile('''
-    T1 = multiply_A_C(a, c);
+    T2 = multiply_A_C(a, c);
+    T1 = multiply_A_C(a, T2);
     T3 = multiply_A_C(a, c);
-    T2 = multiply_A_C(a, T3);
-    T0 = add_C_C(T1, T2)
+    T0 = add_C_C(T1, T3)
     ''', (a + a * a) * c)
+
+
+
 
 def test_transpose():
     ctx = MockMatricesUniverse()
@@ -262,8 +276,8 @@ def test_correct_distributive_cost():
     ctx.define(A * D, A, cost=0) # should not take!
 
     assert_compile('T2 = multiply_C_D(c, d); '
-                   'T1 = multiply_A_E(a, T2); '
-                   'T3 = multiply_B_E(b, T2); '
+                   'T1 = multiply_B_E(b, T2); '
+                   'T3 = multiply_A_E(a, T2); '
                    'T0 = add_A_A(T1, T3)', (a + b) * c * d)
 
 def test_nonoptimal_distribution():
@@ -298,7 +312,7 @@ def test_benchmarks():
         return Matrix(Diagonal(i, 10, 10), name=name)
 
     nprod_outer = 4
-    nadd = 2
+    nadd = 4
 #    nprod_inner = 4
 
     matexpr = 1
