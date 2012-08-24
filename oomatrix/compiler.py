@@ -602,6 +602,13 @@ def fill_in_conversions(options, cost_map):
     return result
 
 class AdditionFinder(object):
+    """
+    Find the cheapest way(s) to add a number of operands together, when
+    combining all two-term addition computations and (one-term) conversions.
+
+    We suppose that we want to find the cost for all reachable kinds; and
+    always maintain a list with the cheapest possibility per kind.
+    """
 
     def __init__(self, cost_map):
         self.cost_map = cost_map
@@ -636,13 +643,25 @@ class AdditionFinder(object):
         cost_of_first = [tasks[0].get_total_cost().weigh(self.cost_map) for tasks in operands]
         operands = utils.sort_by(operands, cost_of_first)
 
-        taken = [False] * len(operands)
-        cost, task = self.explore_add_permutations(None, taken, operands)
-        
+        taken = [False] * (len(operands) - 1)
 
-    def explore_add_permutations(self, possible_tasks_so_far, taken, remaining_operands):
+        # Since addition is commutative, we only need to include a single case for
+        # the root, we don't need to repeat the process with all possible roots.
+        self.best_tasks = []
+        self.max_cost = np.inf
+        self.explore_add_permutations(len(operands) - 1, operands[0], taken, operands[1:])
+        return self.best_tasks
+
+    def update_solutions(self, solutions):
+        # Update self.best_tasks with any solutions that are cheaper than what we have.
+        self.best_tasks = fill_in_conversions(self.best_tasks + solutions, self.cost_map)
+
+    def explore_add_permutations(self, level, possible_tasks_so_far, taken, remaining_operands):
         self.nodes_visited += 1
-        best_task = None
+
+        if level == 0:
+            self.update_solutions(possible_tasks_so_far)
+            return
 
         # task_so_far represents the matrix sum so far; remaining_operands remains
         # to be summed. We attempt all possible choices as our next operand to add.
@@ -650,40 +669,40 @@ class AdditionFinder(object):
             if taken[i]:
                 continue
             taken[i] = True # push taken status; pop this when we are done
-            if possible_tasks_so_far is None:
-                resulting_possible_tasks = operand_possible_tasks
-            else:
-                # Try to join previously computed expression with the current
-                # operand in all possible ways.
-                resulting_possible_tasks = []
-                for left_task in possible_tasks_so_far:
-                    left_cost = self.cost_of(left_task)
-                    # Cutoff: If the cost of the expression so far is larger
-                    # than the smallest cost of the total path found so far.
-                    # Note that taskmap_so_far is sorted by cost.
-                    #if left_cost >= best_cost:
-                    #    break
-                    for right_task in operand_possible_tasks:
-                        right_cost = self.cost_of(right_task)
-                        #if left_cost + right_cost >= best_cost:
-                        #    break
-                        kinds = [left_task.metadata.kind, right_task.metadata.kind]
-                        args = utils.sort_by([left_task, right_task], kinds)
-                        kinds.sort()
-                        kind_a, kind_b = kinds
-                        target_meta = metadata.meta_add([x.metadata for x in args])
-                        resulting_possible_tasks = get_cheapest_computations(
-                            kind_a.universe, kind_a + kind_b,
-                            args, target_meta, self.cost_map, None)
-                        resulting_possible_tasks = fill_in_conversions(resulting_possible_tasks,
-                                                                       self.cost_map)
-                        
-            self.explore_add_permutations(resulting_possible_tasks, taken, remaining_operands)
-            print resulting_possible_tasks
-            taken[i] = False
-        
-        return None, None
 
+            # Try to join previously computed expression with the current
+            # operand in all possible ways.
+            resulting_possible_tasks = []
+            for left_task in possible_tasks_so_far:
+                left_cost = self.cost_of(left_task)
+                # Cutoff: If the cost of the expression so far is larger
+                # than the smallest cost of the total path found so far.
+                # Note that taskmap_so_far is sorted by cost.
+                #if left_cost >= best_cost:
+                #    break
+                for right_task in operand_possible_tasks:
+                    right_cost = self.cost_of(right_task)
+                    #if left_cost + right_cost >= best_cost:
+                    #    break
+                    kinds = [left_task.metadata.kind, right_task.metadata.kind]
+                    args = utils.sort_by([left_task, right_task], kinds)
+                    kinds.sort()
+                    kind_a, kind_b = kinds
+                    target_meta = metadata.meta_add([x.metadata for x in args])
+                    tasks = get_cheapest_computations(
+                        kind_a.universe, kind_a + kind_b,
+                        args, target_meta, self.cost_map, None)
+                    #print level, [int(x) for x in taken], kinds, tasks
+                    resulting_possible_tasks.extend(tasks)
+
+            # Fill in post-operation conversions.
+            resulting_possible_tasks = fill_in_conversions(resulting_possible_tasks,
+                                                           self.cost_map)
+            # Recurse to process the remaining operands
+            self.explore_add_permutations(level - 1, resulting_possible_tasks,
+                                          taken, remaining_operands)
+            # Put the operand tried back in
+            taken[i] = False
 
 
 

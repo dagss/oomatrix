@@ -4,13 +4,13 @@ from .common import *
 from .. import Matrix, compute, explain, symbolic
 
 from ..kind import MatrixImpl, MatrixKind
-from ..computation import (computation, conversion, ImpossibleOperationError,
+from ..computation import (Computation, computation, conversion, ImpossibleOperationError,
                            FLOP, UGLY, MEMOP)
 from ..compiler import ShortestPathCompiler
 from .. import compiler, formatter, metadata, transforms, task, cost_value
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
-                            create_mock_matrices, task_node_to_str)
+                            create_mock_matrices, task_node_to_str, task_to_str)
 
 import time
 
@@ -63,7 +63,9 @@ def mock_arg(kind):
     return task.Argument(0, mock_meta(kind))
 
 def mock_task(kind, cost):
-    return task.Task(None, cost * FLOP, [], mock_meta(kind), None)
+    comp = Computation(None, kind, kind, 'mock_%s[cost=%s]' % (kind.name, cost),
+                       lambda *args: cost * FLOP)
+    return task.Task(comp, cost * FLOP, [], mock_meta(kind), None)
 
 mock_cost_map = dict(FLOP=1, INVOCATION=0)
 
@@ -80,12 +82,31 @@ def test_fill_in_conversions():
     
 
 def test_find_cheapest_addition():
+    obj = compiler.AdditionFinder(mock_cost_map)
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
+
+    def format_options(options):
+        return [(x.get_total_cost().weigh(mock_cost_map), task_to_str(x)) for x in options]
+
+    B_solution = (10.0,
+                  'T1 = mock_B[cost=3.0](); T3 = mock_B[cost=4.0](); T4 = mock_B[cost=1.0](); '
+                  'T2 = add_B_B(T3, T4); T0 = add_B_B(T1, T2)')
+
     matrix_descriptions = [[mock_task(A, 3.0), mock_task(B, 4.0)],
                            [mock_task(B, 3.0)],
                            [mock_task(A, 1.0), mock_task(B, 1.0)]]
-    obj = compiler.AdditionFinder(mock_cost_map)
-    obj.find_cheapest_addition(matrix_descriptions)
+    options = format_options(obj.find_cheapest_addition(matrix_descriptions))
+    assert [B_solution] == options
+    print
+    ctx.define(A + B, A, cost=1)
+    options = format_options(obj.find_cheapest_addition(matrix_descriptions))
+    print options
+    assert options == [
+      (9.0, 'T2 = mock_A[cost=3.0](); T3 = mock_A[cost=1.0](); '
+            'T1 = add_A_A(T2, T3); T4 = mock_B[cost=3.0](); T0 = add_A_B(T1, T4)'),
+      B_solution]
+
+
 
 #
 # Full expression compilation tests
