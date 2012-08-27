@@ -537,6 +537,31 @@ class RightToLeftCompilation(object):
         return node
 
 def get_cheapest_computations(universe, match_expr, args, target_meta, cost_map, symbolic_expr):
+def get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas, target_metadata,
+                                          cost_map):
+def get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas, cost_map):
+    """
+    Returns the cheapest computation for each target kind, as
+    a dict { target_kind : (cost_scalar, computation_object) }.
+
+    match_expr: Kind-expression to match ("kind", "kind_a + kind_b", etc.)
+    arg_metadatas: List of metadatas of each task
+    target_meta: Kind-less MatrixMetadata.
+    
+    """
+    key = match_expr.get_key()
+    computations_by_kind = universe.get_computations(key)
+    result = {}
+    for target_kind, computations in computations_by_kind.iteritems():
+        # For each kind, we pick out the cheapest computation
+        costs = [comp.get_cost(arg_metadatas) for comp in computations]
+        cost_scalars = [cost.weigh(cost_map) for cost in costs]
+        i = np.argmin(cost_scalars)
+        new_cost, computation = costs[i], computations[i]
+        result[target_kind] = (new_cost, computation)
+    return result
+
+def get_cheapest_computations(universe, match_expr, args, target_metadata, cost_map, symbolic_expr):
     """
     Returns the cheapest computation for each target kind, as
     a list of Task.
@@ -547,19 +572,14 @@ def get_cheapest_computations(universe, match_expr, args, target_meta, cost_map,
       used as a template when constructing tasks. (TBD: refactor)
     
     """
-    key = match_expr.get_key()
-    meta_args = [arg.metadata for arg in args]
-    computations_by_kind = universe.get_computations(key)
+    arg_metadatas = [arg.metadata for arg in args]
+    d = get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas,
+                                              cost_map)
     possible_tasks = []
-    for target_kind, computations in computations_by_kind.iteritems():
-        new_meta = target_meta.copy_with_kind(target_kind)
-        # For each kind, we pick out the cheapest computation
-        costs = [comp.get_cost(meta_args) for comp in computations]
-        cost_scalars = [cost.weigh(cost_map) for cost in costs]
-        i = np.argmin(cost_scalars)
-        new_cost, computation = costs[i], computations[i]
-        new_task = Task(computation, new_cost, args, new_meta, symbolic_expr)
-        possible_tasks.append(new_task)
+    for target_kind, (cost, computation) in d.iteritems():
+        metadata = target_metadata.copy_with_kind(target_kind)
+        task = Task(computation, cost, args, metadata, symbolic_expr)
+        possible_tasks.append(task)
     return possible_tasks
 
 def fill_in_conversions(options, cost_map):
