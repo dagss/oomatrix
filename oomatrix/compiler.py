@@ -536,9 +536,41 @@ class RightToLeftCompilation(object):
     def visit_task_leaf(self, node):
         return node
 
-def get_cheapest_computations(universe, match_expr, args, target_meta, cost_map, symbolic_expr):
-def get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas, target_metadata,
-                                          cost_map):
+
+
+class ConversionCache(object):
+    def __init__(self, cost_map, kindless_metadata):
+        self.kindless_metadata = kindless_metadata.kindless()
+        self._conversions = {} # { source_kind : { target_kind : (cost, conversion_obj_list) } }
+        self.cost_map = cost_map
+
+    def _dfs(self, d, target_kind, cost, conversion_list):
+        old_cost, _ = d.get(target_kind, (np.inf, None))
+        if cost >= old_cost:
+            return
+        
+        # Insert new, cheaper task...
+        d[target_kind] = (cost, conversion_list)
+        # ...and recursively try all conversions from here to update kinds reachable from here
+        target_metadata = self.kindless_metadata.copy_with_kind(target_kind)        
+        conversions = get_cheapest_computations_by_metadata(target_kind.universe, target_kind,
+                                                            [metadata], self.cost_map)
+        for next_target, (next_cost_scalar, next_cost, next_conversion_obj) in (
+            conversions.iteritems()):
+            next_conversion_list = conversion_list + [next_conversion_obj]
+            self._dfs(d, next_target, next_cost_scalar + cost, next_conversion_list)
+            
+    def get_conversions_from(self, source_kind):
+        """
+        Returns { kind : (cost_scalar, [computation]) }, with the cheapest
+        way of converting `kind` to every other reachable kind.
+        """
+        d = self._conversions.get(source_kind, None)
+        if d is None:
+            self._conversions[source_kind] = d = {}
+            self._dfs(d, source_kind, 0, [])
+        return d
+
 def get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas, cost_map):
     """
     Returns the cheapest computation for each target kind, as
@@ -557,8 +589,7 @@ def get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas, c
         costs = [comp.get_cost(arg_metadatas) for comp in computations]
         cost_scalars = [cost.weigh(cost_map) for cost in costs]
         i = np.argmin(cost_scalars)
-        new_cost, computation = costs[i], computations[i]
-        result[target_kind] = (new_cost, computation)
+        result[target_kind] = (cost_scalars[i], costs[i], computations[i])
     return result
 
 def get_cheapest_computations(universe, match_expr, args, target_metadata, cost_map, symbolic_expr):
@@ -576,7 +607,7 @@ def get_cheapest_computations(universe, match_expr, args, target_metadata, cost_
     d = get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas,
                                               cost_map)
     possible_tasks = []
-    for target_kind, (cost, computation) in d.iteritems():
+    for target_kind, (cost_scalar, cost, computation) in d.iteritems():
         metadata = target_metadata.copy_with_kind(target_kind)
         task = Task(computation, cost, args, metadata, symbolic_expr)
         possible_tasks.append(task)

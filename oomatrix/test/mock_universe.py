@@ -62,6 +62,7 @@ class MockMatricesUniverse:
                                  args[0].nrows, args[-1].ncols)
             self.computation_index += 1
             return result
+        return comp
 
     def define_conv(self, from_kind, to_kind, cost=1 * FLOP):
         @conversion(from_kind, to_kind, cost=cost, name='%s:%s(%s)' %

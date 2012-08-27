@@ -1,3 +1,4 @@
+from __future__ import division
 import re
 
 from .common import *
@@ -68,6 +69,30 @@ def mock_task(kind, cost):
     return task.Task(comp, cost * FLOP, [], mock_meta(kind), None)
 
 mock_cost_map = dict(FLOP=1, INVOCATION=0)
+
+def test_conversion_cache():
+    ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')
+    A2B = ctx.define(A, B, cost=2, name='A->B')
+    B2C = ctx.define(B, C, cost=1, name='B->C')
+    C2D = ctx.define(C, D, cost=2, name='C->D')
+    D2B = ctx.define(D, B, cost=1, name='D->B')
+    cache = compiler.ConversionCache(mock_cost_map, mock_meta(None))
+    for X in [A, B, C, D]:
+        cache.get_conversions_from(X)
+ 
+    assert cache._conversions ==  {A: {A: (0, []),
+                                       B: (2, [A2B]),
+                                       C: (3, [A2B, B2C]),
+                                       D: (5, [A2B, B2C, C2D])},
+                                   B: {B: (0, []),
+                                       C: (1, [B2C]),
+                                       D: (3, [B2C, C2D])},
+                                   C: {B: (3, [C2D, D2B]),
+                                       C: (0, []),
+                                       D: (2, [C2D])},
+                                   D: {B: (1, [D2B]),
+                                       C: (2, [D2B, B2C]),
+                                       D: (0, [])}}
 
 def test_fill_in_conversions():
     ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')

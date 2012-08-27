@@ -47,6 +47,8 @@ class Computation(object):
     """
     Wraps a computation function to provide metadata, and enable calling it
     in a standardized fashion.
+
+    Compares as `object`
     """
     
     def __init__(self, callable, match_expression, target_kind,
@@ -82,6 +84,10 @@ class Computation(object):
         of arguments
         """
         return self.callable(*args, **kw)
+
+    def __repr__(self):
+        return '<Computation:%s>' % self.name
+
    
 
 def register_computation(match, target_kind, obj):
