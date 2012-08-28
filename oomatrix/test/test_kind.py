@@ -21,8 +21,15 @@ def test_basic():
 def test_ordering():
     # kinds
     yield ok_, Dense < Diagonal
+    yield ok_, not Dense < Dense
+    yield ok_, Dense <= Diagonal
+    yield ok_, Dense <= Dense
     yield ok_, Dense != Diagonal
     yield ok_, Dense == Dense
+    yield ok_, Diagonal > Dense
+    yield ok_, not Dense > Dense
+    yield ok_, Diagonal >= Dense
+    yield ok_, Dense >= Dense
 
     # expressions always larger than kinds
     yield ok_, Dense + Dense > Diagonal

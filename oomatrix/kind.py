@@ -256,12 +256,22 @@ class MatrixKind(type, PatternNode):
     def __repr__(cls):
         return "<kind:%s>" % cls.name
 
+    # Must provide complete set of comparisons because we inherit from type!
     def __eq__(cls, other_cls):
         return cls is other_cls
 
+    def __gt__(cls, other_cls):
+        result = not cls < other_cls and not cls == other_cls
+        return result
+
+    def __ge__(cls, other_cls):
+        return cls > other_cls or cls == other_cls
+
+    def __le__(cls, other_cls):
+        return cls < other_cls or cls == other_cls
+
     def __lt__(cls, other_cls):
         # sort by id in this particular run, or _sort_id if available
-        
         if not isinstance(other_cls, MatrixKind):
             # A single MatrixKind is always less than a more complicated
             # pattern/tuple
@@ -271,7 +281,8 @@ class MatrixKind(type, PatternNode):
         # we have _sort_id
         key = getattr(cls, '_sort_id', id(cls))
         otherkey = getattr(other_cls, '_sort_id', id(other_cls))
-        return key < otherkey
+        result = key < otherkey
+        return result
 
     def get_key(cls):
         return cls
