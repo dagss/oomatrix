@@ -76,23 +76,42 @@ def test_conversion_cache():
     B2C = ctx.define(B, C, cost=1, name='B->C')
     C2D = ctx.define(C, D, cost=2, name='C->D')
     D2B = ctx.define(D, B, cost=1, name='D->B')
-    cache = compiler.ConversionCache(mock_cost_map, mock_meta(None))
+    cache = compiler.ConversionCache(mock_cost_map)
     for X in [A, B, C, D]:
-        cache.get_conversions_from(X)
- 
-    assert cache._conversions ==  {A: {A: (0, []),
-                                       B: (2, [A2B]),
-                                       C: (3, [A2B, B2C]),
-                                       D: (5, [A2B, B2C, C2D])},
-                                   B: {B: (0, []),
-                                       C: (1, [B2C]),
-                                       D: (3, [B2C, C2D])},
-                                   C: {B: (3, [C2D, D2B]),
-                                       C: (0, []),
-                                       D: (2, [C2D])},
-                                   D: {B: (1, [D2B]),
-                                       C: (2, [D2B, B2C]),
-                                       D: (0, [])}}
+        cache.get_conversions_from(mock_meta(X))
+
+    d = dict((meta.kind, dict((meta.kind, lst) for meta, lst in sub_d.iteritems()))
+             for meta, sub_d in cache._conversions.iteritems())
+    assert d ==  {A: {A: (0, []),
+                      B: (2, [A2B]),
+                      C: (3, [A2B, B2C]),
+                      D: (5, [A2B, B2C, C2D])},
+                  B: {B: (0, []),
+                      C: (1, [B2C]),
+                      D: (3, [B2C, C2D])},
+                  C: {B: (3, [C2D, D2B]),
+                      C: (0, []),
+                      D: (2, [C2D])},
+                  D: {B: (1, [D2B]),
+                      C: (2, [D2B, B2C]),
+                      D: (0, [])}}
+
+def test_addition_cache():
+    obj = compiler.AdditionFinder(mock_cost_map)
+    ctx, (A, a), (B, b), (C, c) = create_mock_matrices('A B C')
+
+    BplusB = ctx.adders[B]
+    CplusC = ctx.adders[C]
+    AplusB = ctx.define(A + B, A, cost=3)
+    AplusC = ctx.define(A + C, A, cost=4)
+    A2B = ctx.define(A, B, name='A2B', cost=1)
+    B2C = ctx.define(B, C, name='B2C', cost=1)
+    add_cache = compiler.AdditionCache(compiler.ConversionCache(mock_cost_map))
+    result = add_cache.get_computations([mock_meta(A), mock_meta(B)])
+    #pprint(result)
+    eq_(result, {A: (3, (0, 1), AplusB, [], []),
+                 B: (2, (0, 1), BplusB, [A2B], []),
+                 C: (4, (0, 1), CplusC, [A2B, B2C], [B2C])})
 
 def test_fill_in_conversions():
     ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')

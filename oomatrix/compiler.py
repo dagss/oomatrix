@@ -539,37 +539,101 @@ class RightToLeftCompilation(object):
 
 
 class ConversionCache(object):
-    def __init__(self, cost_map, kindless_metadata):
-        self.kindless_metadata = kindless_metadata.kindless()
-        self._conversions = {} # { source_kind : { target_kind : (cost, conversion_obj_list) } }
+    def __init__(self, cost_map):
+        self._conversions = {} # { source_metadata : { target_metadata : (cost, conversion_obj_list) } } }
         self.cost_map = cost_map
 
-    def _dfs(self, d, target_kind, cost, conversion_list):
-        old_cost, _ = d.get(target_kind, (np.inf, None))
+    def _dfs(self, d, target_metadata, cost, conversion_list):
+        old_cost, _ = d.get(target_metadata, (np.inf, None))
         if cost >= old_cost:
             return
         
         # Insert new, cheaper task...
-        d[target_kind] = (cost, conversion_list)
+        d[target_metadata] = (cost, conversion_list)
         # ...and recursively try all conversions from here to update kinds reachable from here
-        target_metadata = self.kindless_metadata.copy_with_kind(target_kind)        
-        conversions = get_cheapest_computations_by_metadata(target_kind.universe, target_kind,
-                                                            [metadata], self.cost_map)
-        for next_target, (next_cost_scalar, next_cost, next_conversion_obj) in (
+        conversions = get_cheapest_computations_by_metadata(target_metadata.kind.universe,
+                                                            target_metadata.kind,
+                                                            [target_metadata], self.cost_map)
+        for next_target_kind, (next_cost_scalar, next_cost, next_conversion_obj) in (
             conversions.iteritems()):
+            next_target_metadata = target_metadata.copy_with_kind(next_target_kind)
             next_conversion_list = conversion_list + [next_conversion_obj]
-            self._dfs(d, next_target, next_cost_scalar + cost, next_conversion_list)
+            self._dfs(d, next_target_metadata, next_cost_scalar + cost, next_conversion_list)
             
-    def get_conversions_from(self, source_kind):
+    def get_conversions_from(self, source_metadata):
         """
         Returns { kind : (cost_scalar, [computation]) }, with the cheapest
-        way of converting `kind` to every other reachable kind.
+        way of converting `source_metadata` to every other reachable kind.
+        `[computation]` is a list of conversion computation to be applied
+        to the input operand, in order.
         """
-        d = self._conversions.get(source_kind, None)
+        d = self._conversions.get(source_metadata)
         if d is None:
-            self._conversions[source_kind] = d = {}
-            self._dfs(d, source_kind, 0, [])
+            self._conversions[source_metadata] = d = {}
+            self._dfs(d, source_metadata, 0, [])
         return d
+
+class ComputationCache(object):
+    """
+    For every (left_kind, right_kind), string together one (1!) computation
+    and many conversions in order to figure out a way to perform the computation
+    in the cheapest way under a given cost map. (Combining this to string together
+    multiple computation is the job of the user of this component.)
+
+    Overridden in AdditionCache and MultiplicationCache.
+    """
+    commutative_computation = False
+
+    def __init__(self, conversion_cache):
+        self.conversion_cache = conversion_cache
+        self.cost_map = conversion_cache.cost_map
+        self._computations = {} # { (op_kind, op_kind, ...) :
+                                #   { result_kind : (cost_scalar, permutation, computation, [op_conversions],
+                                #   [op_conversions], ...) } }
+
+    def get_computations(self, metadata_list):
+        if self.commutative_computation:
+            kinds = [x.kind for x in metadata_list]
+            if sorted(kinds) != kinds:
+                raise ValueError("must have sorted operands")
+        key = tuple(metadata_list)
+        x = self._computations.get(key)
+        if x is None:
+            x = self._find_computation(key)
+            self._computations[key] = x
+        return x
+
+class AdditionCache(ComputationCache):
+    commutative_computation = True
+
+    def _find_computation(self, metadata_list):
+        # For now, assume that the number of operands is 2
+        if len(metadata_list) != 2:
+            raise NotImplementedError()
+        left_meta, right_meta = metadata_list
+        
+        ld = self.conversion_cache.get_conversions_from(left_meta)
+        rd = self.conversion_cache.get_conversions_from(right_meta)
+
+        best = {} # { kind : (cost_scalar, permutation, adder, left_conv_list, right_conv_list) }
+        for new_left_meta, (left_cost, left_ops) in ld.iteritems():
+            for new_right_meta, (right_cost, right_ops) in rd.iteritems():
+                lmeta, rmeta = new_left_meta, new_right_meta # avoid overwriting iteration vars
+                reverse_order = lmeta.kind > rmeta.kind
+                if reverse_order:
+                    lmeta, rmeta = rmeta, lmeta
+                d = get_cheapest_computations_by_metadata(
+                    lmeta.kind.universe, lmeta.kind + rmeta.kind,
+                    [lmeta, rmeta], self.cost_map)
+
+                for target_kind, (adder_cost, _, adder) in d.iteritems():
+                    old_result = best.get(target_kind, (np.inf,))
+                    total_cost = left_cost + right_cost + adder_cost
+                    if total_cost < old_result[0]:
+                        p = (1, 0) if reverse_order else (0, 1)
+                        best[target_kind] = (total_cost, p, adder, left_ops, right_ops)
+        return best
+    
 
 def get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas, cost_map):
     """
