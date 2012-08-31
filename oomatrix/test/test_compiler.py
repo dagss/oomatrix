@@ -126,30 +126,62 @@ def test_fill_in_conversions():
     
 
 def test_find_cheapest_addition():
-    obj = compiler.AdditionFinder(mock_cost_map)
+    # This used to be the test case for compiler.AdditionFinder, so check
+    # git history for that...
+    obj = compiler.CheapestAdditionFinder(compiler.AdditionCache(
+        compiler.ConversionCache(mock_cost_map)))
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
+    ctx.define(A, B, name='A2B', cost=100)
+
+    matrix_descriptions = [mock_task(A, 2), mock_task(B, 2), mock_task(B, 3)]
+    options = obj.find_cheapest_addition(matrix_descriptions)
+    print
+    print options
+    1/0
+
 
     def format_options(options):
         return [(x.get_total_cost().weigh(mock_cost_map), task_to_str(x)) for x in options]
 
     B_solution = (10.0,
-                  'T1 = mock_B[cost=3.0](); T3 = mock_B[cost=4.0](); T4 = mock_B[cost=1.0](); '
+                  'T1 = mock_B[cost=4.0](); T3 = mock_B[cost=3.0](); T4 = mock_B[cost=1.0](); '
                   'T2 = add_B_B(T3, T4); T0 = add_B_B(T1, T2)')
 
-    matrix_descriptions = [[mock_task(A, 3.0), mock_task(B, 4.0)],
-                           [mock_task(B, 3.0)],
-                           [mock_task(A, 1.0), mock_task(B, 1.0)]]
-    options = format_options(obj.find_cheapest_addition(matrix_descriptions))
     assert [B_solution] == options
     print
     ctx.define(A + B, A, cost=1)
     options = format_options(obj.find_cheapest_addition(matrix_descriptions))
-    print options
     assert options == [
-      (9.0, 'T2 = mock_A[cost=3.0](); T3 = mock_A[cost=1.0](); '
-            'T1 = add_A_A(T2, T3); T4 = mock_B[cost=3.0](); T0 = add_A_B(T1, T4)'),
-      B_solution]
+        (9.0, 'T1 = mock_A[cost=3.0](); T3 = mock_B[cost=3.0](); T4 = mock_B[cost=1.0](); '
+         'T2 = add_B_B(T3, T4); T0 = add_A_B(T1, T2)'),
+        (10.0, 'T2 = mock_B[cost=3.0](); T3 = mock_B[cost=1.0](); T1 = add_B_B(T2, T3); '
+         'T4 = mock_B[cost=4.0](); T0 = add_B_B(T1, T4)')]
 
+def benchmark_cheapest_addition():
+    k = 4
+    n = 5
+    case = 'dense' # 'sparse', 'dense'
+    
+    obj = compiler.CheapestAdditionFinder(compiler.AdditionCache(
+        compiler.ConversionCache(mock_cost_map)))
+    mocks = create_mock_matrices(['Kind%d' % i for i in range(k)])
+    ctx = mocks[0]
+    kinds = [x[0] for x in mocks[1:]]
+
+    if case == 'dense':
+        for i, lkind in enumerate(kinds):
+            for rkind in kinds[i:]:
+                ctx.define(lkind, rkind, cost=1)
+                ctx.define(lkind + rkind, lkind, cost=1)
+
+    matrix_descriptions = [mock_task(kinds[i % k], 100) for i in range(n)]
+    t0 = time.clock()
+    obj.find_cheapest_addition(matrix_descriptions)
+    t = time.clock()
+    print
+    print 'n=%d k=%d %s: time taken %s, nodes visited %s' % (n, k, case, t - t0, obj.nodes_visited)
+
+    
 
 
 #
@@ -162,7 +194,8 @@ def test_add():
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
     #assert_compile('T0 = add_A_B(a, b)', a + b)
-    assert_compile('T1 = add_B_B(b, b); T0 = add_A_B(a, T1)', a + b + b)
+    assert_compile(['T1 = add_B_B(b, b); T0 = add_A_B(a, T1)',
+                    'T1 = add_A_B(a, b); T0 = add_A_B(T1, b)'], a + b + b)
 
 def test_add_conversion():
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
@@ -365,7 +398,7 @@ def test_nonoptimal_distribution():
     
 
 
-def test_benchmarks():
+def benchmark_distributive():
     # prefer diagonal multiplication to addition, to create a deterministic
     # result
     ctx, (Dense, de), (Diagonal, di) = create_mock_matrices(

@@ -79,6 +79,7 @@ def powerset(iterable):
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
 
 def set_of_pairwise_nonempty_splits(iterable):
+    # todo: may be able to trim off last half of last chunk when n is even
     pool = tuple(iterable)
     n = len(pool)
     for r in range(1, n // 2 + 1):
@@ -725,8 +726,9 @@ class AdditionFinder(object):
     always maintain a list with the cheapest possibility per kind.
     """
 
-    def __init__(self, cost_map):
+    def __init__(self, cost_map, precision=0.95):
         self.cost_map = cost_map
+        self.precision = precision
 
     def cost_of(self, task):
         return task.get_total_cost().weigh(self.cost_map)
@@ -770,6 +772,8 @@ class AdditionFinder(object):
     def update_solutions(self, solutions):
         # Update self.best_tasks with any solutions that are cheaper than what we have.
         self.best_tasks = fill_in_conversions(self.best_tasks + solutions, self.cost_map)
+        #self.max_cost = min([self.cost_of(t) for t in self.best_tasks])
+        #self.max_cost *= self.precision
 
     def explore_add_permutations(self, level, possible_tasks_so_far, taken, remaining_operands):
         self.nodes_visited += 1
@@ -819,7 +823,81 @@ class AdditionFinder(object):
             # Put the operand tried back in
             taken[i] = False
 
+class CheapestAdditionFinder(object):
+    """
+    Find the cheapest way to add a number of operands together, when
+    combining all two-term addition computations and (one-term) conversions.
 
+    We suppose that we want to find the cost for only the cheapest computation
+    that can be performed and then cut off.
+
+    Currently this is very slow, massive cutoffs and caching possible beyond this,
+    though the algorithm will remain exponential in number of kinds involved at
+    least.
+    """
+    def __init__(self, addition_cache):
+        self.addition_cache = addition_cache
+        self.cost_map = addition_cache.cost_map
+        self.nodes_visited = 0
+
+    def lookup_addition_cache(self, tasks):
+        metas = [task.metadata for task in tasks]
+        # Add the cost of the input tasks to all output costs
+        base_cost = sum([t.get_total_cost().weigh(self.cost_map) for t in tasks])
+        utils.sort_by(tasks, metas)
+        metas.sort()
+        d = self.addition_cache.get_computations(metas)
+        # Convert the results of the task to Task TODO Refactor so
+        # that Task takes arguments on execution and is not pre-bound to
+        # concrete leafs, thus making it possible for the addition_cache to
+        # store this directly.
+        result = []
+        for kind, (cost, p, adder, lconvs, rconvs) in d.iteritems():
+            if p == (1, 0):
+                lconvs, rconvs = rconvs, lconvs
+            # apply conversions
+            converted_tasks = []
+            for task, convs in zip(tasks, [lconvs, rconvs]):
+                for conv in convs:
+                    task = Task(conv, conv.get_cost([task.metadata]), [task],
+                                task.metadata.copy_with_kind(conv.target_kind), None)
+                converted_tasks.append(task)
+            # do the addition
+            converted_metas = [t.metadata for t in converted_tasks]
+            utils.sort_by(converted_tasks, converted_metas)
+            converted_metas.sort()
+            add_task = Task(adder, adder.get_cost(converted_metas), converted_tasks,
+                            metadata.meta_add(converted_metas).copy_with_kind(adder.target_kind),
+                            None)
+            result.append((base_cost + cost, add_task))
+        return result
+            
+
+    def find_cheapest_addition(self, operand_tasks):
+        self.nodes_visited += 1
+        n = len(operand_tasks)
+        if n == 1:
+            task, = operand_tasks
+            return [(task.get_total_cost().weigh(self.cost_map), task)]
+        elif n == 2:
+            return self.lookup_addition_cache(operand_tasks)
+        else:
+            for left_operands, right_operands in set_of_pairwise_nonempty_splits(operand_tasks):
+                left_options = self.find_cheapest_addition(left_operands)
+                right_options = self.find_cheapest_addition(right_operands)
+                # Zip together the two lists combining the costs, then do the sort, then
+                # recurse from cheapest to more expensive
+                options = []
+                for lcost, ltask in left_options:
+                    for rcost, rtask in right_options:
+                        options.append((lcost + rcost, ltask, rtask))
+                options.sort()
+                result = []
+                for base_cost, ltask, rtask in options:
+                    result.extend(self.lookup_addition_cache([ltask, rtask]))
+                return result
+
+        
 
 
 def generate_direct_computations(node):
@@ -987,70 +1065,14 @@ class GreedyCompilation():
             return [(cost, kind, task) for kind, (cost, task) in taskmap.iteritems()]
 
         child_taskmaps = [self.cached_visit(child) for child in node.children]
-        # We explore all permutations for addition, but sort the options
-        # of each term from cheapest to most costly, and process the most
-        # expensive term first, as a heuristic to cut off early
-        operands = [taskmap_to_sorted_list(taskmap) for taskmap in child_taskmaps]
-        for options in operands:
-            options.sort()
-        operands.sort()
-        operands = operands[::-1]
 
-
-        def explore_add_permutations(best_cost, taskmap_so_far, remaining_operands):
-            self.nodes_visited += 1
-            #best_cost = np.inf
-            best_task = None
-            
-            if len(remaining_operands) == 0:
-                if len(taskmap_so_far) > 0:
-                    cost, kind, task = taskmap_so_far[0]
-                    if cost < best_cost:
-                        return cost, task
-                return None, None
-            
-            for i, operand_options in enumerate(remaining_operands):
-                next_remaining_operands = list(remaining_operands)
-                del next_remaining_operands[i]
-
-                if taskmap_so_far is None:
-                    # First operand
-                    next_taskmap_so_far = operand_options
-                else:
-                    # Try to join previously computed expression with the current
-                    # operand in all possible ways.
-                    taskmaps = []
-                    for left_cost, _, left_task in taskmap_so_far:
-                        # Cutoff: If the cost of the expression so far is larger
-                        # than the smallest cost of the total path found so far.
-                        # Note that taskmap_so_far is sorted by cost.
-                        if left_cost >= best_cost:
-                            break
-                        for right_cost, _, right_task in operand_options:
-                            if left_cost + right_cost >= best_cost:
-                                break
-                            node = symbolic.AddNode(sorted([left_task, right_task]))
-                            taskmap = find_cheapest_direct_computation(node, self.cost_map)
-                            taskmaps.append(taskmap)
-                    taskmap = reduce_best_tasks(taskmaps)
-                    next_taskmap_so_far = taskmap_to_sorted_list(taskmap)
-
-                if len(next_taskmap_so_far) > 0:
-                    result_cost, result_task = explore_add_permutations(
-                        best_cost, next_taskmap_so_far, next_remaining_operands)
-                    if result_task is not None:
-                        return result_cost, result_task
-                return None, None
-
-        for opt in operands:
-            print [len(opt) for opt in operands], [len(x) for x in child_taskmaps]
-        #pprint(operands)
-        cost, task = explore_add_permutations(np.inf, None, operands)
-        if task is None:
-            1/0
-            return {}
-        else:
-            return {task.metadata.kind : (cost, task)}
+        operands = [[task_node.as_task() for cost, task_node in taskmap.values()] for taskmap in child_taskmaps]
+        finder = AdditionFinder(self.cost_map)
+        result = finder.find_cheapest_addition(operands)
+        return dict([(task.metadata.kind,
+                      (task.get_total_cost().weigh(self.cost_map),
+                       TaskLeaf(task, [])))
+                      for task in result])
 
     def visit_metadata_leaf(self, node):
         # Find all conversions (TODO: find more conversions by converting multiple times!)
