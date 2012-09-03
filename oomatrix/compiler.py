@@ -717,7 +717,7 @@ def fill_in_conversions(options, cost_map):
     result = [task for cost, task in pre_result]
     return result
 
-class CheapestAdditionFinder(object):
+class GreedyAdditionFinder(object):
     """
     Find the cheapest way to add a number of operands together, when
     combining all two-term addition computations and (one-term) conversions.
@@ -764,34 +764,48 @@ class CheapestAdditionFinder(object):
                             metadata.meta_add(converted_metas).copy_with_kind(adder.target_kind),
                             None)
             result.append((base_cost + cost, add_task))
-        return result
-            
+        result.sort()
+        if len(result) == 0:
+            return (np.inf, None)
+        else:
+            return result[0]
 
     def find_cheapest_addition(self, operand_tasks):
         self.nodes_visited += 1
         n = len(operand_tasks)
         if n == 1:
             task, = operand_tasks
-            return [(task.get_total_cost().weigh(self.cost_map), task)]
+            return (task.get_total_cost().weigh(self.cost_map), task)
         elif n == 2:
-            return self.lookup_addition_cache(operand_tasks)
+            result = self.lookup_addition_cache(operand_tasks)
+            return result
         else:
+            options = []
             for left_operands, right_operands in set_of_pairwise_nonempty_splits(operand_tasks):
-                left_options = self.find_cheapest_addition(left_operands)
-                right_options = self.find_cheapest_addition(right_operands)
+                left_cost, left_task = self.find_cheapest_addition(left_operands)
+                right_cost, right_task = self.find_cheapest_addition(right_operands)
+                added_task = self.lookup_addition_cache([left_task, right_task])
+                options.append(added_task)
+                #for base_cost, ltask, rtask in options:
+                #    post_add_options.extend(self.lookup_addition_cache([ltask, rtask]))
                 # Zip together the two lists combining the costs, then do the sort, then
                 # recurse from cheapest to more expensive
-                options = []
-                for lcost, ltask in left_options:
-                    for rcost, rtask in right_options:
-                        options.append((lcost + rcost, ltask, rtask))
+                #pre_add_options = []
+                #for lcost, ltask in left_options:
+                #    for rcost, rtask in right_options:
+                #        pre_add_options.append((lcost + rcost, ltask, rtask))
+                #pre_add_options.sort()
+                #post_add_options = []
+                #for base_cost, ltask, rtask in options:
+                #    post_add_options.extend(self.lookup_addition_cache([ltask, rtask]))
+                #if len(post_add_options) > 0:
+                #    post_add_options.sort()
+                #    options.append(post_add_options[0])
+            if len(options) > 0:
                 options.sort()
-                result = []
-                for base_cost, ltask, rtask in options:
-                    result.extend(self.lookup_addition_cache([ltask, rtask]))
-                return result
-
-        
+                return options[0]
+            else:
+                return np.inf, None
 
 
 def generate_direct_computations(node):
@@ -878,18 +892,20 @@ class GreedyCompilation():
     def __init__(self):
         self.cost_map = cost_value.default_cost_map
         self.cache = {}
+        self.conversion_cache = ConversionCache(self.cost_map)
+        self.addition_cache = AdditionCache(self.conversion_cache)
+        self.addition_finder = GreedyAdditionFinder(self.addition_cache)
     
     def compile(self, root):
         self.minimum_possible_cost = 0
         self.nodes_visited = 0
         result = self.cached_visit(root)
         self.stats = {'nodes_visited' : self.nodes_visited}
-        results_by_cost = [(cost, task) for kind, (cost, task) in result.iteritems()]
-        results_by_cost.sort()
-        if len(results_by_cost) == 0:
+        cost, task = result
+        if np.isinf(cost):
             raise ImpossibleOperationError()
         else:
-            return results_by_cost[0][1]
+            return symbolic.TaskLeaf(task, []) # TODO refactor; for now, [] is unhashable
 
     def cached_visit(self, node):
         self.nodes_visited += 1
@@ -900,85 +916,88 @@ class GreedyCompilation():
             self.cache[node] = result
         return result
 
+    def best_task(self, options):
+        best_task = None
+        best_cost = np.inf
+        for cost, task in options:
+            if cost < best_cost:
+                best_task = task
+                best_cost = cost
+        return (best_cost, best_task)        
+
     def apply_distributive_rule(self, distributor, distributee, direction):
         # In the case of (a * b) * c -> a * c + b * c; (a * b) is 'distributor' and
         # c is 'distributee'
         if not isinstance(distributor, symbolic.AddNode):
-            return {}
+            return (np.inf, None)
 
-        distributee_taskmap = self.cached_visit(distributee)
+        distributee_cost, distributee_task = self.cached_visit(distributee)
+        print distributee, distributee_task
+        if distributee_task is None:
+            return np.inf, None
         # For each of the possible results, attempt to distribute it on all
         # terms and look at the resulting cost
-        taskmaps = []
-        for kind, (cost, distributed_task) in distributee_taskmap.iteritems():
-            terms = []
-            for term in distributor.children:
-                if direction == 'left':
-                    new_term = symbolic.multiply([term, distributed_task])
-                elif direction == 'right':
-                    new_term = symbolic.multiply([distributed_task, term])
-                terms.append(new_term)
-            new_node = symbolic.add(terms)
-            taskmap = self.cached_visit(new_node)
-            taskmaps.append(taskmap)
-        return reduce_best_tasks(taskmaps)
+        terms = []
+        for term in distributor.children:
+            if direction == 'left':
+                new_term = symbolic.multiply([term, symbolic.TaskLeaf(distributee_task, ())])
+            elif direction == 'right':
+                new_term = symbolic.multiply([symbolic.TaskLeaf(distributee_task, ()), term])
+            terms.append(new_term)
+        new_node = symbolic.add(terms)
+        result = self.visit_add(new_node)
+        print
+        print result, new_node
+        return result
+        
 
     def visit_multiply(self, node):
+        # We parenthize expression and compile each resulting part greedily, at least
+        # for now. Considering the entire multiplication expression non-greedily should
+        # be rather tractable though.
         if len(node.children) > 2:
-            # Break up expression using associative rule
-            tasks_lst = []
+            # Break up expression using associative rule, trying each split position
+            options = []
             for i in range(1, len(node.children)):
                 left = multiply_if_not_single(node.children[:i])
                 right = multiply_if_not_single(node.children[i:])
-                tasks = self.cached_visit(multiply_if_not_single([left, right]))
-                tasks_lst.append(tasks)
-            # TODO: cutoffs
-            tasks = reduce_best_tasks(tasks_lst)
-            return tasks
+                options.append(self.cached_visit(multiply_if_not_single([left, right])))
+            return self.best_task(options)
         else:
             left, right = node.children
-            taskmaps = []
+            options = []
             # Try to apply the distributive rules
-            taskmaps.append(self.apply_distributive_rule(left, right, 'left'))
-            taskmaps.append(self.apply_distributive_rule(right, left, 'right'))
+            options.append(self.apply_distributive_rule(left, right, 'left'))
+            options.append(self.apply_distributive_rule(right, left, 'right'))
             
             # Recurse to compute children
-            left_tasks = self.cached_visit(left)
-            right_tasks = self.cached_visit(right)
-            # Must find best 'hybridization' of child tasks (todo: cutoffs!)
-            for left_kind, (left_cost, left_task) in left_tasks.iteritems():
-                for right_kind, (right_cost, right_task) in right_tasks.iteritems():
-                    new_node = multiply_if_not_single([left_task, right_task])
-                    tasks = find_cheapest_direct_computation(new_node, self.cost_map)
-                    taskmaps.append(tasks)
-            tasks = reduce_best_tasks(taskmaps)
-            return tasks
+            left_cost, left_task = self.cached_visit(left)
+            right_cost, right_task = self.cached_visit(right)
+            if left_task is None or right_task is None:
+                # impossible
+                return (np.inf, None)
+            
+            new_node = multiply_if_not_single([symbolic.TaskLeaf(left_task, []),
+                                               symbolic.TaskLeaf(right_task, [])])
+            tasks = find_cheapest_direct_computation(new_node, self.cost_map)
+            for kind, (cost, tasknode) in tasks.iteritems():
+                options.append((cost, tasknode.as_task()))
+            return self.best_task(options)
 
     def visit_add(self, node):
-        def taskmap_to_sorted_list(taskmap):
-            return [(cost, kind, task) for kind, (cost, task) in taskmap.iteritems()]
-
-        child_taskmaps = [self.cached_visit(child) for child in node.children]
-
-        operands = [[task_node.as_task() for cost, task_node in taskmap.values()] for taskmap in child_taskmaps]
-        finder = AdditionFinder(self.cost_map)
-        result = finder.find_cheapest_addition(operands)
-        return dict([(task.metadata.kind,
-                      (task.get_total_cost().weigh(self.cost_map),
-                       TaskLeaf(task, [])))
-                      for task in result])
+        # Recurse
+        childresults = [self.cached_visit(child) for child in node.children]
+        
+        # For addition, we do consider all possible permutations
+        # (we want, e.g., CSC + Diagonal + CSR + Dense to work the right way)
+        result = self.addition_finder.find_cheapest_addition([task for cost, task in childresults])
+        return result
 
     def visit_metadata_leaf(self, node):
-        # Find all conversions (TODO: find more conversions by converting multiple times!)
-        taskmap = find_cheapest_direct_computation(node, self.cost_map)
-        # Add just using the leaf directly with no cost
-        taskmap[node.metadata.kind] = (0, node)
-        return taskmap
+        return 0, node.as_task()
             
     def visit_task_leaf(self, node):
-        task = node.as_task()
-        taskmap = {node.metadata.kind : (task.get_total_cost(), node)}
-        return taskmap
+        return 0, node.as_task()
     
 
 def find_cost(computation, meta_args):

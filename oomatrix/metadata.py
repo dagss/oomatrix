@@ -19,11 +19,15 @@ class MatrixMetadata(object):
                                            self.dtype)
 
     def as_tuple(self):
-        return (self.kind, self.rows_shape, self.cols_shape, self.dtype)
+        # TODO use something else than str(dtype)
+        return (self.kind, self.rows_shape, self.cols_shape, str(self.dtype))
 
     def copy_with_kind(self, kind):
         return MatrixMetadata(kind, self.rows_shape, self.cols_shape,
                               self.dtype)
+
+    def kindless(self):
+        return MatrixMetadata(None, self.rows_shape, self.cols_shape, self.dtype)
         
     def __eq__(self, other):
         if not isinstance(other, MatrixMetadata):

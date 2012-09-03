@@ -193,7 +193,7 @@ def test_add():
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
-    #assert_compile('T0 = add_A_B(a, b)', a + b)
+    assert_compile('T0 = add_A_B(a, b)', a + b)
     assert_compile(['T1 = add_B_B(b, b); T0 = add_A_B(a, T1)',
                     'T1 = add_A_B(a, b); T0 = add_A_B(T1, b)'], a + b + b)
 
@@ -247,12 +247,21 @@ def test_distributive():
     C, c, cu, cuh = ctx.new_matrix('C')
     ctx.define(A * B, A)
     ctx.define(A * C, A)
+    #TODO:
+    #assert_compile('''
+    #T2 = add_A_A(a, a);
+    #T1 = multiply_A_C(T2, c);
+    #T3 = multiply_A_B(T2, b);
+    #T0 = add_A_A(T1, T3)
+    #''', (a + a) * (b + c)) # b + c is impossible
+
     assert_compile('''
     T2 = add_A_A(a, a);
     T1 = multiply_A_C(T2, c);
     T3 = multiply_A_B(T2, b);
     T0 = add_A_A(T1, T3)
-    ''', (a + a) * (b + c)) # b + c is impossible
+    ''', a * (b + c)) # b + c is impossible
+
 
 
 def test_multi_distributive():

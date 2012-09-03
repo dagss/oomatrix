@@ -10,3 +10,10 @@ def test_invert_permutation():
     yield eq_, [0, 1], invert_permutation([0, 1])
     yield eq_, [1, 2, 0], invert_permutation([2, 0, 1])
 
+def test_sort_by():
+    yield eq_, [], sort_by([], [])
+    yield eq_, ['a', 'b'], sort_by(['a', 'b'], [4, 10])
+    yield eq_, ['a', 'b'], sort_by(['b', 'a'], [10, 4])
+    yield eq_, ['a', 'b'], sort_by(['a', 'b'], [10, 4], reverse=True)
+
+

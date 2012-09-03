@@ -4,6 +4,7 @@ from nose import SkipTest
 from textwrap import dedent
 import contextlib
 import os, sys, re
+from pprint import pprint
 
 def assert_eq_and_hash(a, b):
     eq_(a, b)

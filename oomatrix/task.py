@@ -18,6 +18,9 @@ class Argument(object):
     def get_total_cost(self):
         return zero_cost
 
+    def __repr__(self):
+        return '<Argument %x:%d %r>' % (id(self), self.argument_index, self.metadata)
+    
 class Task(object):
     """
     *Note*: It is not the case that the total_cost of the sum of two tasks

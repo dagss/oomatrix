@@ -26,6 +26,8 @@ from .cost_value import FLOP, INVOCATION
 from .utils import argsort, invert_permutation
 from . import kind, cost_value, metadata, task
 
+from hashlib import sha256
+
 import numpy as np
 
 def _flatten_children(cls, children):
@@ -48,11 +50,21 @@ def add(children):
 def sorted_add(children):
     children = _flatten_children(AddNode, children)
     children.sort()
-    return AddNode(children)
+    if len(children) == 0:
+        raise ValueError('children list is empty')
+    if len(children) == 1:
+        return children[0]
+    else:
+        return AddNode(children)
 
 def multiply(children):
     children = _flatten_children(MultiplyNode, children)
-    return MultiplyNode(children)
+    if len(children) == 0:
+        raise ValueError('children list is empty')
+    if len(children) == 1:
+        return children[0]
+    else:
+        return MultiplyNode(children)
 
 def conjugate_transpose(expr):
     if isinstance(expr, ConjugateTransposeNode):
@@ -364,7 +376,7 @@ class LeafNode(BaseComputable):
         return visitor.visit_leaf(*args, **kw)
 
     def as_tuple(self):
-        return self
+        return (self,)
 
     def __hash__(self):
         return id(self)

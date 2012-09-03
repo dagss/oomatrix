@@ -42,6 +42,7 @@ class MockMatricesUniverse:
     def __init__(self):
         self.reset()
         self.kind_count = 0
+        self.adders = {}
 
     def reset(self):
         self.computation_index = 0
@@ -95,6 +96,7 @@ class MockMatricesUniverse:
         def add(a, b):
             return NewKind('(%s + %s)' % (a.value, b.value),
                            a.nrows, b.ncols)
+        self.adders[NewKind] = add
         
         return (NewKind,
                 Matrix(NewKind(name_.lower(), 3, 3), name_.lower()),
@@ -104,7 +106,8 @@ class MockMatricesUniverse:
 
 
 def create_mock_matrices(matrix_names, addition_costs=None):
-    matrix_names = matrix_names.split()
+    if isinstance(matrix_names, str):
+        matrix_names = matrix_names.split()
     ctx = MockMatricesUniverse()
     result = (ctx,)
     if addition_costs is None:
@@ -133,10 +136,13 @@ def serialize_task(lines, task, args, task_names):
         lines.append('%s = %s' % (task_name, expr_str))
         return task_name
 
-def check_compilation(compiler_obj, expected_task_graph, matrix):
+def check_compilation(compiler_obj, expected_task_graphs, matrix):
     tree, args = compiler_obj.compile(matrix._expr)
     task_str = task_node_to_str(tree, args)
-    assert remove_blanks(expected_task_graph) == remove_blanks(task_str)
+    if isinstance(expected_task_graphs, str):
+        expected_task_graphs = [expected_task_graphs]
+    expected_task_graphs = [remove_blanks(x) for x in expected_task_graphs]
+    assert remove_blanks(task_str) in expected_task_graphs
 
 def task_node_to_str(tree, args, sep='; '):
     is_transposed = isinstance(tree, symbolic.ConjugateTransposeNode)
@@ -144,9 +150,13 @@ def task_node_to_str(tree, args, sep='; '):
         tree, = tree.children
     assert isinstance(tree, symbolic.TaskLeaf)
     task = tree.task
+    task_str = task_to_str(task, args, sep)
+    if is_transposed:
+        task_str = 'transposed: %s' % task_str
+    return task_str
+
+def task_to_str(task, args=None, sep='; '):
     task_lines = []
     serialize_task(task_lines, task, args, {})
     task_str = sep.join(task_lines)
-    if is_transposed:
-        task_str = 'transposed: %s' % task_str
     return task_str

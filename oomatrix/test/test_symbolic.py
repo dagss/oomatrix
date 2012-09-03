@@ -19,6 +19,12 @@ def assert_expr(expected_repr, expr):
     got = re.sub('\s', '', got)
     eq_(expected_repr, got)
 
+def assert_eq_and_hash_and_sha(a, b):
+    eq_(a, b)
+    eq_(hash(a), hash(b))
+    eq_(a.sha256(), b.sha256())
+
+
 impl = MockImpl()
 a = LeafNode('a', impl)
 b = LeafNode('b', impl)
@@ -66,6 +72,8 @@ def test_as_tuple():
     b = LeafNode('b', B())
     tup = mul(add(I(H(b)), b, a), a).as_tuple()
     # note that the + is sorted
+    #print a.as_tuple() < ('i',)
+    print b.as_tuple() < ('i',)
     eq_(('*',
          ('+', a, b, ('h', ('i', b))),
          a), tup)
@@ -94,11 +102,11 @@ def test_hash_and_eq():
     ne_(a, b)
     ok_(not a == b)
     # Plus eq
-    assert_eq_and_hash(add(a, a), add(a, a))
-    assert_eq_and_hash(add(a, b), add(b, a)) # commutativity of add
+    assert_eq_and_hash_and_sha(add(a, a), add(a, a))
+    assert_eq_and_hash_and_sha(add(a, b), add(b, a)) # commutativity of add
     ne_(add(a, a), add(a, b))
     # More complicated eq
-    assert_eq_and_hash(add(a, a, conjugate_transpose(mul(a, b))),
+    assert_eq_and_hash_and_sha(add(a, a, conjugate_transpose(mul(a, b))),
                        add(a, a, conjugate_transpose(mul(a, b))))
     ne_(add(a, a, conjugate_transpose(mul(a, b))),
         add(a, a, conjugate_transpose(mul(b, b))))
@@ -123,8 +131,8 @@ def test_metadata_tree():
     d1 = mul(a, b).metadata_tree()
     d2 = mul(b, a).metadata_tree()
 
-    yield assert_eq_and_hash, m1, m2
-    yield assert_eq_and_hash, m2, m3
+    yield assert_eq_and_hash_and_sha, m1, m2
+    yield assert_eq_and_hash_and_sha, m2, m3
     yield ok_, d1 != d2
     
 def test_comparison():
@@ -137,8 +145,8 @@ def test_comparison():
     a = LeafNode('a', ao)
     b = LeafNode('b', bo)
 
-    yield ok_, add(a, b) == add(b, a)
-    yield ok_, add(mul(a, a), a) == add(mul(a, a), a)
-    yield ok_, add(mul(a, a), a) != add(mul(conjugate_transpose(a), a), a)
-    yield ok_, add(a, a) > mul(a, a)
-    yield ok_, not add(a, a) < mul(a, a)
+    assert add(a, b) == add(b, a)
+    assert add(mul(a, a), a) == add(mul(a, a), a)
+    assert add(mul(a, a), a) != add(mul(conjugate_transpose(a), a), a)
+    assert add(a, a) > mul(a, a)
+    assert not add(a, a) < mul(a, a)

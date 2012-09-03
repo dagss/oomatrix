@@ -7,3 +7,8 @@ def invert_permutation(permutation):
         result[p] = ri
     return result
 
+def sort_by(items, keys, reverse=False):
+    zipped = zip(keys, items)
+    zipped.sort(reverse=reverse)
+    return [second for first, second in zipped]
+

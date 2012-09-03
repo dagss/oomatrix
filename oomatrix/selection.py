@@ -2,7 +2,7 @@ import numpy as np
 
 from .kind import MatrixImpl
 from .computation import computation
-from .impl.dense import RowMajor, ColumnMajor
+from .impl.dense import RowMajor, ColumnMajor, Strided
 
 class Selection(MatrixImpl):
     pass
@@ -30,7 +30,7 @@ class RangeSelection(Selection):
 def transpose(self):
     return self.transpose()
 
-for kind, order in [(RowMajor, 'C'), (ColumnMajor, 'F')]:
+for kind, order in [(RowMajor, 'C'), (ColumnMajor, 'F'), (Strided, 'C')]:
     @computation(RangeSelection * kind, kind, cost=0)
     def select_rows(self, dense_matrix):
         rows_start, rows_stop = self.rows_range
