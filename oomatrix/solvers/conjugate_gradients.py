@@ -86,8 +86,8 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
         max_residual = np.max(residual)
         min_residual = np.min(residual)
         if logger is not None:
-            logger.info('Iteration %d: Residual between %e and %e (terminating '
-                        'at %e)', k+1, min_residual, max_residual, eps)
+            logger.info('Iteration %d: Residual %e (terminating '
+                        'at %e)', k+1, max_residual, eps)
         max_residuals.append(max_residual)
         min_residuals.append(min_residual)
         
