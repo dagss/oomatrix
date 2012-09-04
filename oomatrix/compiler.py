@@ -108,15 +108,34 @@ class CompiledNode(object):
     `children` are other CompiledNode instances whose output should
     be fed into `computation`.
     """
-    def __init__(self, computation, weighted_cost, children, metadata, arg_passing=None):
+    def __init__(self, computation, weighted_cost, children, metadata, shuffle=None):
         self.computation = computation
         self.weighted_cost = float(weighted_cost)
         self.children = tuple(children)
         self.metadata = metadata
-        if arg_passing is None:
-            arg_passing = range(len(children))
-        self.arg_passing = tuple(arg_passing)
         self.is_leaf = computation is None
+        if self.is_leaf:
+            if shuffle not in (None, ()):
+                raise ValueError('invalid shuffle for leaf node')
+            self.shuffle = ()
+            self.args_consumed_count = 1
+        else:
+            if shuffle is None:
+                shuffle = []
+                i = 0
+                for child in self.children:
+                    n = 1 if child.is_leaf else child.args_consumed_count
+                    shuffle.append(tuple(range(i, i + n)))
+                    i += n
+                self.shuffle = tuple(shuffle)
+            else:
+                self.shuffle = tuple(shuffle)
+                valid_shuffle = len(self.shuffle) == len(self.children)
+                for child, indices in zip(self.children, self.shuffle):
+                    valid_shuffle = valid_shuffle and child.args_consumed_count == len(indices)
+                if not valid_shuffle:
+                    raise ValueError('Invalid shuffle')
+            self.args_consumed_count = sum(len(x) for x in self.shuffle)
         # total_cost is computed
         self.total_cost = self.weighted_cost + sum(child.total_cost for child in self.children)
 
@@ -131,11 +150,14 @@ class CompiledNode(object):
 
     def _repr(self, indent, lines):
         if self.is_leaf:
-            lines.append(indent + '<leaf cost=%.1f %s>' % (
-                self.weighted_cost, repr(self.metadata)[1:-1]))
+            lines.append(indent + '<leaf:%s cost=%.1f>' % (
+                self.metadata.kind.name, self.weighted_cost))
         else:
-            lines.append(indent + '<node:%s cost=%.1f %s;' % (
-                self.computation.name, self.total_cost, repr(self.metadata)[1:-1]))
+            lines.append(indent + '<node:%s:%s cost=%.1f shuffle=%s;' % (
+                self.metadata.kind.name,
+                self.computation.name,
+                self.total_cost,
+                self.shuffle))
             for child in self.children:
                 child._repr(indent + '  ', lines)
             lines.append(indent + '>')
@@ -146,7 +168,8 @@ class CompiledNode(object):
         return (self.computation == other.computation and
                 self.weighted_cost == other.weighted_cost and
                 self.metadata == other.metadata and
-                self.children == other.children)
+                self.children == other.children and
+                self.shuffle == other.shuffle)
 
     def __ne__(self, other):
         return not self == other
@@ -157,16 +180,17 @@ class CompiledNode(object):
         else:
             return sum([child.leaves() for child in self.children], [])
 
-
     def convert_to_task_graph(self, args):
+        d = {} # { (cnode, (argument_index, ...)) : task }
+        argument_indices = range(len(args))
         def node_factory(node, new_children):
             meta_args = [child.metadata for child in new_children]
             unweighted_cost = node.computation.get_cost(meta_args)
             return Task(node.computation, unweighted_cost, new_children,
                         node.metadata, None)
-        return self.substitute(args, node_factory)
+        return self.substitute(args, node_factory=node_factory)
             
-    def substitute(self, new_leaves, node_factory=None):
+    def substitute(self, args, shuffle=None, node_factory=None):
         """Substitute each leaf node of the tree rooted at `self` with the
         CompiledNodes given in args, and return the resulting tree.
 
@@ -175,29 +199,30 @@ class CompiledNode(object):
         """
         if node_factory is None:
             def node_factory(node, converted_children):
+                _shuffle = shuffle if node is self else None
                 return CompiledNode(node.computation, node.weighted_cost,
                                     converted_children, node.metadata,
-                                    node.arg_passing)
+                                    _shuffle)
         try:
-            root, remaining = self._substitute(new_leaves, node_factory)
+            root, remaining = self._substitute(args, node_factory)
             if len(remaining) != 0:
                 raise IndexError()
         except IndexError:
             raise ValueError("wrong len(new_leaves)")
         return root
 
-    def _substitute(self, remaining_leaves, node_factory):
+    def _substitute(self, remaining_args, node_factory):
         if self.is_leaf:
-            assert remaining_leaves[0].metadata == self.metadata
-            return remaining_leaves[0], remaining_leaves[1:]
+            assert remaining_args[0].metadata == self.metadata
+            return remaining_args[0], remaining_args[1:]
         else:
             new_children = []
             for child in self.children:
-                # note: remaining_leaves is updated in each iteration
-                new_child, remaining_leaves = child._substitute(remaining_leaves, node_factory)
+                # note: remaining_args is updated in each iteration
+                new_child, remaining_args = child._substitute(remaining_args, node_factory)
                 new_children.append(new_child)
             new_node = node_factory(self, new_children)
-            return new_node, remaining_leaves
+            return new_node, remaining_args
         
 
 
@@ -1009,12 +1034,10 @@ class GreedyCompilation():
         self.minimum_possible_cost = 0
         self.nodes_visited = 0
         result = self.cached_visit(root)
-        self.stats = {'nodes_visited' : self.nodes_visited}
-        cost, task = result
-        if np.isinf(cost):
+        if result is None:
             raise ImpossibleOperationError()
         else:
-            return symbolic.TaskLeaf(task, []) # TODO refactor; for now, [] is unhashable
+            return result
 
     def cached_visit(self, node):
         self.nodes_visited += 1
@@ -1094,19 +1117,30 @@ class GreedyCompilation():
             return self.best_task(options)
 
     def visit_add(self, node):
-        # Recurse
-        childresults = [self.cached_visit(child) for child in node.children]
+        # Recurse to compute cheapest way of computing each operand
+        compiled_children = [self.cached_visit(child) for child in node.children]
+        # For each operand, temporarily replace 
+        
         
         # For addition, we do consider all possible permutations
         # (we want, e.g., CSC + Diagonal + CSR + Dense to work the right way)
-        result = self.addition_finder.find_cheapest_addition([task for cost, task in childresults])
+        result = self.addition_finder.find_cheapest_addition(compiled_children)
         return result
 
     def visit_metadata_leaf(self, node):
-        return 0, node.as_task()
+        return CompiledNode.create_leaf(node.metadata)
             
     def visit_task_leaf(self, node):
+        1/0
         return 0, node.as_task()
+
+    def visit_decomposition(self, node):
+        child_cost, child_task = self.cached_visit(node.child)
+        print node.decomposition.__dict__
+        for new_child in self.process(node.child):
+            new_node = symbolic.DecompositionNode(new_child, node.decomposition)
+            new_node.task_dependencies = new_child.task_dependencies
+            yield new_node
     
 
 def find_cost(computation, meta_args):
@@ -1141,6 +1175,17 @@ class RightToLeftCompiler(BaseCompiler):
 class GreedyCompiler(BaseCompiler):
     compilation_factory = GreedyCompilation
 
+    def compile(self, expression):
+        meta_tree, args = transforms.metadata_transform(expression)
+        compiled_tree = self.cache.get(meta_tree, None)
+        if compiled_tree is None:
+            compilation = self.compilation_factory()
+            self.cache[meta_tree] = compiled_tree = compilation.compile(meta_tree)
+        print args[0].__dict__
+        result = compiled_tree.convert_to_task_graph(args)
+        return result, args
+
 #default_compiler_instance = ShortestPathCompiler()
-default_compiler_instance = DepthFirstCompiler()
+#default_compiler_instance = DepthFirstCompiler()
+default_compiler_instance = GreedyCompiler()
 

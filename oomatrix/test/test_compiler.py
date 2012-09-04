@@ -74,6 +74,7 @@ def mock_compiled_node(kind):
 mock_cost_map = dict(FLOP=1, INVOCATION=0)
 
 def test_compiled_node():
+    # Tests basic operation, including some trivial substitutions
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
     AplusB = ctx.define(A + B, B)
     AtimesB = ctx.define(A * B, A)
@@ -90,25 +91,45 @@ def test_compiled_node():
     root_b = A_plus_B_node.substitute([A_times_B_node, B_leaf])
     # Test __eq__
     assert root_a == root_b and root_a is not root_b
+    assert root_a == root_a.substitute(root_a.leaves())
     # Test __ne__
     assert not root_a != root_b
     assert root_a != A_leaf
+    assert root_a != root_a.substitute(root_a.leaves(), shuffle=((1, 0), (2,)))
     # Make sure we don't infinitely recurse on substitution or getting leaves...
     x = A_times_B_node.substitute([A_times_B_node, B_leaf])
     assert x.children[0] is A_times_B_node
     assert x.leaves() == [A_leaf, B_leaf, B_leaf]
 
+def test_compiled_node_substitute():
+    # TODO Test substitutions together with shuffles
+    raise SkipTest()
+
+
 def test_compiled_node_convert_to_task_graph():
-    ctx, (A, a), (B, b) = create_mock_matrices('A B')
-    AplusB = ctx.define(A + B, B)
+    ctx, (A, a), (B, b), (C, c) = create_mock_matrices('A B C')
+    AplusA = ctx.adders[A]
     AtimesB = ctx.define(A * B, A)
-    # Create the tree (A * B) + B
+    BtimesC = ctx.define(B * C, B)
+    # Create the tree (A * (B * C)) + (A * (B * C)), where B is *the same* input
+    # argument (as would result from distributing (A + A) * (B * C)).
     A_leaf = mock_compiled_node(A)
     B_leaf = mock_compiled_node(B)
+    C_leaf = mock_compiled_node(C)
     A_times_B_node = CompiledNode(AtimesB, 1, [A_leaf, B_leaf], mock_meta(A))
+    B_times_C_node = CompiledNode(BtimesC, 2, [B_leaf, C_leaf], mock_meta(B))
+
+    a = A_times_B_node.substitute([A_leaf, B_times_C_node])
+    b = A_times_B_node.substitute([A_leaf, B_times_C_node])
+    root = CompiledNode(AplusA, 3, [a, b], mock_meta(A), shuffle=((0, 2, 3), (1, 2, 3)))
+
+    leaf_tasks = [mock_task(A, 1), mock_task(B, 2), mock_task(B, 3), mock_task(C, 4)]
+    task = root.convert_to_task_graph(leaf_tasks)
+    print task
+    print
+    print root
+    1/0
     root_a = CompiledNode(AplusB, 2, [A_times_B_node, B_leaf], mock_meta(B))
-    leaf_tasks = [mock_task(A, 1), mock_task(B, 2), mock_task(B, 3)]
-    task = root_a.convert_to_task_graph(leaf_tasks)
     assert (task_to_str(task) == 'T2 = mock_A[cost=1](); T3 = mock_B[cost=2](); '
             'T1 = multiply_A_B(T2, T3); T4 = mock_B[cost=3](); T0 = add_A_B(T1, T4)')
 
