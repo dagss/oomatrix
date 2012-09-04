@@ -157,19 +157,36 @@ class CompiledNode(object):
         else:
             return sum([child.leaves() for child in self.children], [])
 
-    def substitute(self, new_leaves):
+
+    def convert_to_task_graph(self, args):
+        def node_factory(node, new_children):
+            meta_args = [child.metadata for child in new_children]
+            unweighted_cost = node.computation.get_cost(meta_args)
+            return Task(node.computation, unweighted_cost, new_children,
+                        node.metadata, None)
+        return self.substitute(args, node_factory)
+            
+    def substitute(self, new_leaves, node_factory=None):
         """Substitute each leaf node of the tree rooted at `self` with the
         CompiledNodes given in args, and return the resulting tree.
+
+        Optionally also converts the interior nodes in the tree by using a supplied
+        node factory for the interior nodes.
         """
+        if node_factory is None:
+            def node_factory(node, converted_children):
+                return CompiledNode(node.computation, node.weighted_cost,
+                                    converted_children, node.metadata,
+                                    node.arg_passing)
         try:
-            root, remaining = self._substitute(new_leaves)
+            root, remaining = self._substitute(new_leaves, node_factory)
             if len(remaining) != 0:
                 raise IndexError()
         except IndexError:
             raise ValueError("wrong len(new_leaves)")
         return root
 
-    def _substitute(self, remaining_leaves):
+    def _substitute(self, remaining_leaves, node_factory):
         if self.is_leaf:
             assert remaining_leaves[0].metadata == self.metadata
             return remaining_leaves[0], remaining_leaves[1:]
@@ -177,13 +194,11 @@ class CompiledNode(object):
             new_children = []
             for child in self.children:
                 # note: remaining_leaves is updated in each iteration
-                new_child, remaining_leaves = child._substitute(remaining_leaves)
+                new_child, remaining_leaves = child._substitute(remaining_leaves, node_factory)
                 new_children.append(new_child)
-            return CompiledNode(self.computation, self.weighted_cost,
-                                       new_children,
-                                       self.metadata, self.arg_passing), remaining_leaves
-            
-
+            new_node = node_factory(self, new_children)
+            return new_node, remaining_leaves
+        
 
 
 

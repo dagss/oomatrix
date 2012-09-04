@@ -98,9 +98,19 @@ def test_compiled_node():
     assert x.children[0] is A_times_B_node
     assert x.leaves() == [A_leaf, B_leaf, B_leaf]
 
-    
-    
-    
+def test_compiled_node_convert_to_task_graph():
+    ctx, (A, a), (B, b) = create_mock_matrices('A B')
+    AplusB = ctx.define(A + B, B)
+    AtimesB = ctx.define(A * B, A)
+    # Create the tree (A * B) + B
+    A_leaf = mock_compiled_node(A)
+    B_leaf = mock_compiled_node(B)
+    A_times_B_node = CompiledNode(AtimesB, 1, [A_leaf, B_leaf], mock_meta(A))
+    root_a = CompiledNode(AplusB, 2, [A_times_B_node, B_leaf], mock_meta(B))
+    leaf_tasks = [mock_task(A, 1), mock_task(B, 2), mock_task(B, 3)]
+    task = root_a.convert_to_task_graph(leaf_tasks)
+    assert (task_to_str(task) == 'T2 = mock_A[cost=1](); T3 = mock_B[cost=2](); '
+            'T1 = multiply_A_B(T2, T3); T4 = mock_B[cost=3](); T0 = add_A_B(T1, T4)')
 
 
 def test_conversion_cache():
