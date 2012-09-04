@@ -7,7 +7,7 @@ from .. import Matrix, compute, explain, symbolic
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import (Computation, computation, conversion, ImpossibleOperationError,
                            FLOP, UGLY, MEMOP)
-from ..compiler import ShortestPathCompiler
+from ..compiler import ShortestPathCompiler, CompiledNode
 from .. import compiler, formatter, metadata, transforms, task, cost_value
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
@@ -68,7 +68,40 @@ def mock_task(kind, cost):
                        lambda *args: cost * FLOP)
     return task.Task(comp, cost * FLOP, [], mock_meta(kind), None)
 
+def mock_compiled_node(kind):
+    return CompiledNode.create_leaf(mock_meta(kind))
+
 mock_cost_map = dict(FLOP=1, INVOCATION=0)
+
+def test_compiled_node():
+    ctx, (A, a), (B, b) = create_mock_matrices('A B')
+    AplusB = ctx.define(A + B, B)
+    AtimesB = ctx.define(A * B, A)
+
+    # Create the tree (A * B) + B; note that B_leaf is used for both B's,
+    # but this shouldn't affect anything!
+    A_leaf = mock_compiled_node(A)
+    B_leaf = mock_compiled_node(B)
+    A_times_B_node = CompiledNode(AtimesB, 1, [A_leaf, B_leaf], mock_meta(A))
+    root_a = CompiledNode(AplusB, 2, [A_times_B_node, B_leaf], mock_meta(B))
+    assert root_a.leaves() == [A_leaf, B_leaf, B_leaf]
+    # Now, create the same tree through substitutions
+    A_plus_B_node = CompiledNode(AplusB, 2, [A_leaf, B_leaf], mock_meta(B))
+    root_b = A_plus_B_node.substitute([A_times_B_node, B_leaf])
+    # Test __eq__
+    assert root_a == root_b and root_a is not root_b
+    # Test __ne__
+    assert not root_a != root_b
+    assert root_a != A_leaf
+    # Make sure we don't infinitely recurse on substitution or getting leaves...
+    x = A_times_B_node.substitute([A_times_B_node, B_leaf])
+    assert x.children[0] is A_times_B_node
+    assert x.leaves() == [A_leaf, B_leaf, B_leaf]
+
+    
+    
+    
+
 
 def test_conversion_cache():
     ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')

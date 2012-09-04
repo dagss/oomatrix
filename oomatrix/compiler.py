@@ -97,6 +97,96 @@ def is_leaf(node):
             (isinstance(node, (symbolic.ConjugateTransposeNode, symbolic.InverseNode)) and
              isinstance(node.children[0], (symbolic.MatrixMetadataLeaf, TaskLeaf))))
 
+
+
+class CompiledNode(object):
+    """
+    Objects of this class make up the final "program tree".
+
+    It is immutable and compares by value (TBD).
+    
+    `children` are other CompiledNode instances whose output should
+    be fed into `computation`.
+    """
+    def __init__(self, computation, weighted_cost, children, metadata, arg_passing=None):
+        self.computation = computation
+        self.weighted_cost = float(weighted_cost)
+        self.children = tuple(children)
+        self.metadata = metadata
+        if arg_passing is None:
+            arg_passing = range(len(children))
+        self.arg_passing = tuple(arg_passing)
+        self.is_leaf = computation is None
+        # total_cost is computed
+        self.total_cost = self.weighted_cost + sum(child.total_cost for child in self.children)
+
+    @staticmethod
+    def create_leaf(metadata):
+        return CompiledNode(None, 0, (), metadata, ())
+
+    def __repr__(self):
+        lines = []
+        self._repr('', lines)
+        return '\n'.join(lines)
+
+    def _repr(self, indent, lines):
+        if self.is_leaf:
+            lines.append(indent + '<leaf cost=%.1f %s>' % (
+                self.weighted_cost, repr(self.metadata)[1:-1]))
+        else:
+            lines.append(indent + '<node:%s cost=%.1f %s;' % (
+                self.computation.name, self.total_cost, repr(self.metadata)[1:-1]))
+            for child in self.children:
+                child._repr(indent + '  ', lines)
+            lines.append(indent + '>')
+
+    def __eq__(self, other):
+        # Note that this definition is recursive, as the comparison of children will
+        # end up doing an element-wise comparison
+        return (self.computation == other.computation and
+                self.weighted_cost == other.weighted_cost and
+                self.metadata == other.metadata and
+                self.children == other.children)
+
+    def __ne__(self, other):
+        return not self == other
+
+    def leaves(self):
+        if self.is_leaf:
+            return [self]
+        else:
+            return sum([child.leaves() for child in self.children], [])
+
+    def substitute(self, new_leaves):
+        """Substitute each leaf node of the tree rooted at `self` with the
+        CompiledNodes given in args, and return the resulting tree.
+        """
+        try:
+            root, remaining = self._substitute(new_leaves)
+            if len(remaining) != 0:
+                raise IndexError()
+        except IndexError:
+            raise ValueError("wrong len(new_leaves)")
+        return root
+
+    def _substitute(self, remaining_leaves):
+        if self.is_leaf:
+            assert remaining_leaves[0].metadata == self.metadata
+            return remaining_leaves[0], remaining_leaves[1:]
+        else:
+            new_children = []
+            for child in self.children:
+                # note: remaining_leaves is updated in each iteration
+                new_child, remaining_leaves = child._substitute(remaining_leaves)
+                new_children.append(new_child)
+            return CompiledNode(self.computation, self.weighted_cost,
+                                       new_children,
+                                       self.metadata, self.arg_passing), remaining_leaves
+            
+
+
+
+
 class NeighbourExpressionGraphGenerator(object):
     """
     Recurses through an expression graph in order to generate its
