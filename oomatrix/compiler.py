@@ -824,11 +824,11 @@ class GreedyAdditionFinder(object):
         self.cost_map = addition_cache.cost_map
         self.nodes_visited = 0
 
-    def lookup_addition_cache(self, tasks):
-        metas = [task.metadata for task in tasks]
+    def lookup_addition_cache(self, compiled_nodes):
+        metas = [node.metadata for node in compiled_nodes]
         # Add the cost of the input tasks to all output costs
-        base_cost = sum([t.get_total_cost().weigh(self.cost_map) for t in tasks])
-        utils.sort_by(tasks, metas)
+        base_cost = sum([node.total_cost for node in compiled_nodes])
+        utils.sort_by(compiled_nodes, metas)
         metas.sort()
         d = self.addition_cache.get_computations(metas)
         # Convert the results of the task to Task TODO Refactor so
@@ -840,42 +840,46 @@ class GreedyAdditionFinder(object):
             if p == (1, 0):
                 lconvs, rconvs = rconvs, lconvs
             # apply conversions
-            converted_tasks = []
-            for task, convs in zip(tasks, [lconvs, rconvs]):
+            converted_nodes = []
+            for cnode, convs in zip(compiled_nodes, [lconvs, rconvs]):
                 for conv in convs:
-                    task = Task(conv, conv.get_cost([task.metadata]), [task],
-                                task.metadata.copy_with_kind(conv.target_kind), None)
-                converted_tasks.append(task)
+                    conv_cost = conv.get_cost([cnode.metadata]).weigh(self.cost_map)
+                    conv_metadata = node.metadata.copy_with_kind(conv.target_kind)
+                    cnode = CompiledNode(conv, conv_cost, [cnode], conv_metadata)
+                converted_nodes.append(node)
             # do the addition
-            converted_metas = [t.metadata for t in converted_tasks]
-            utils.sort_by(converted_tasks, converted_metas)
+            converted_metas = [node.metadata for node in converted_nodes]
+            utils.sort_by(converted_nodes, converted_metas)
             converted_metas.sort()
-            add_task = Task(adder, adder.get_cost(converted_metas), converted_tasks,
-                            metadata.meta_add(converted_metas).copy_with_kind(adder.target_kind),
-                            None)
-            result.append((base_cost + cost, add_task))
-        result.sort()
+            add_cost = adder.get_cost(converted_metas).weigh(self.cost_map)
+            add_metadata = metadata.meta_add(converted_metas).copy_with_kind(adder.target_kind)
+            add_node = CompiledNode(adder, add_cost, converted_nodes, add_metadata)
+            result.append(add_node)
         if len(result) == 0:
-            return (np.inf, None)
+            return None
         else:
+            result.sort()
             return result[0]
 
-    def find_cheapest_addition(self, operand_tasks):
+    def find_cheapest_addition(self, operands):
+        for op in operands:
+            assert isinstance(op, CompiledNode)
         self.nodes_visited += 1
-        n = len(operand_tasks)
+        n = len(operands)
         if n == 1:
-            task, = operand_tasks
-            return (task.get_total_cost().weigh(self.cost_map), task)
+            return operands[0]
         elif n == 2:
-            result = self.lookup_addition_cache(operand_tasks)
+            result = self.lookup_addition_cache(operands)
             return result
         else:
             options = []
-            for left_operands, right_operands in set_of_pairwise_nonempty_splits(operand_tasks):
-                left_cost, left_task = self.find_cheapest_addition(left_operands)
-                right_cost, right_task = self.find_cheapest_addition(right_operands)
-                added_task = self.lookup_addition_cache([left_task, right_task])
-                options.append(added_task)
+            for left_operands, right_operands in set_of_pairwise_nonempty_splits(operands):
+                left_cnode = self.find_cheapest_addition(left_operands)
+                right_cnode = self.find_cheapest_addition(right_operands)
+                if left_cnode is not None and right_cnode is not None:
+                    added_cnode = self.lookup_addition_cache([left_cnode, right_cnode])
+                    options.append(added_cnode)
+                    
                 #for base_cost, ltask, rtask in options:
                 #    post_add_options.extend(self.lookup_addition_cache([ltask, rtask]))
                 # Zip together the two lists combining the costs, then do the sort, then
@@ -895,7 +899,7 @@ class GreedyAdditionFinder(object):
                 options.sort()
                 return options[0]
             else:
-                return np.inf, None
+                return None
 
 
 def generate_direct_computations(node):

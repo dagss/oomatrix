@@ -161,12 +161,12 @@ def test_fill_in_conversions():
 def test_find_cheapest_addition():
     # This used to be the test case for compiler.AdditionFinder, so check
     # git history for that...
-    obj = compiler.CheapestAdditionFinder(compiler.AdditionCache(
+    obj = compiler.GreedyAdditionFinder(compiler.AdditionCache(
         compiler.ConversionCache(mock_cost_map)))
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
     ctx.define(A, B, name='A2B', cost=100)
 
-    matrix_descriptions = [mock_task(A, 2), mock_task(B, 2), mock_task(B, 3)]
+    matrix_descriptions = [mock_compiled_node(A), mock_compiled_node(B), mock_compiled_node(B)]
     options = obj.find_cheapest_addition(matrix_descriptions)
     print
     print options
