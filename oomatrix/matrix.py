@@ -42,12 +42,7 @@ class Matrix(object):
                 if obj.ndim != 2:
                     raise ValueError("array ndim != 2")
                 from .impl import dense
-                if obj.flags.c_contiguous:
-                    r = dense.RowMajor(obj)
-                elif obj.flags.f_contiguous:
-                    r = dense.ColumnMajor(obj)
-                else:
-                    r = dense.Strided(obj)
+                r = dense.Strided(obj)
             e = LeafNode(name, r)
 
         self._expr = e
@@ -215,7 +210,9 @@ class Matrix(object):
         raise NotImplementedError()
 
     def __add__(self, other):
-        if other == 0:
+        if isinstance(other, np.ndarray):
+            other = Matrix(other)
+        elif other == 0:
             return self
         if not isinstance(other, Matrix):
             raise TypeError('Matrix instance needed') # TODO implement conversions
@@ -277,13 +274,13 @@ class Matrix(object):
     # Conversion
     #
     def as_array(self, order=None):
-        from .impl.dense import RowMajor, ColumnMajor, Strided
+        from .impl.dense import Strided
         # TODO: Remove need for this hack
         if (isinstance(self._expr, symbolic.LeafNode) and
-            self._expr.kind in (RowMajor, ColumnMajor, Strided)):
+            self._expr.kind in (Strided,)):
             return self._expr.matrix_impl.array.copy(order)
             
-        computed = self.as_kind([RowMajor, ColumnMajor, Strided]).compute()
+        computed = self.as_kind([Strided]).compute()
         if isinstance(computed._expr, symbolic.ConjugateTransposeNode):
             array = computed._expr.child.matrix_impl.array.T.conjugate()
         else:

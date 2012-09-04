@@ -2,7 +2,7 @@ import numpy as np
 
 from ..kind import MatrixImpl
 from ..computation import computation, conversion, FLOP, MEMOP
-from .dense import SymmetricContiguous, ColumnMajor, RowMajor, Strided
+from .dense import Strided
 
 __all__ = ['Diagonal']
 
@@ -23,14 +23,14 @@ class Diagonal(MatrixImpl):
     def as_dtype(self, dtype):
         return Diagonal(self.array.astype(dtype))
 
-    @conversion(SymmetricContiguous,
+    @conversion(Strided,
                 cost=lambda node: node.ncols * node.nrows * MEMOP)
     def diagonal_to_dense(D):
         n = D.ncols
         i = np.arange(n)
         out = np.zeros((n, n), dtype=D.dtype)
         out[i, i] = D.array
-        return SymmetricContiguous(out)
+        return Strided(out)
 
     def get_element(self, i, j):
         if i != j:
@@ -75,7 +75,7 @@ def diagonal_plus_diagonal(a, b):
 def diagonal_times_diagonal(a, b):
     return Diagonal(a.array * b.array)
 
-for T in [ColumnMajor, RowMajor, Strided]:
+for T in [Strided]:
     @computation(Diagonal + T, T,
                  cost=lambda a, b: a.ncols * FLOP + a.ncols * a.nrows * MEMOP)
     def diagonal_plus_dense(diagonal, dense):
@@ -85,7 +85,7 @@ for T in [ColumnMajor, RowMajor, Strided]:
         return T(array)
 
 # Optimized diagonal-times-dense
-for T in [ColumnMajor, RowMajor, Strided]:
+for T in [Strided]:
     @computation(Diagonal * T, T,
                  cost=lambda a, b: b.ncols * b.nrows * FLOP)
     def diagonal_times_dense(a, b):
@@ -94,7 +94,7 @@ for T in [ColumnMajor, RowMajor, Strided]:
         return T(out)
 
 # Optimized dense-times-diagonal
-for T in [ColumnMajor, RowMajor, Strided]:
+for T in [Strided]:
     @computation(T * Diagonal, T,
                  cost=lambda a, b: a.ncols * a.nrows * FLOP)
     def dense_times_diagonal(a, b):

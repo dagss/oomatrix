@@ -31,30 +31,8 @@ class NumPyWrapper(object):
     def diagonal(self):
         return self.array.diagonal().copy()
 
-class ColumnMajor(MatrixImpl, NumPyWrapper):
-    name = 'column-major'
-
-class RowMajor(MatrixImpl, NumPyWrapper):
-    name = 'row-major'
-
 class Strided(MatrixImpl, NumPyWrapper):
     name = 'strided'
-
-class SymmetricContiguous(MatrixImpl, NumPyWrapper):
-    """
-    Matrices that are symmetric and contiguous, and stored in the full
-    format, are contiguous in both column-major and row-major format.
-    """
-    name = 'symmetric contiguous'
-    prose = ('the symmetrix contiguous', 'a symmetric contiguous')
-
-    @conversion(ColumnMajor, cost=0)
-    def to_column_major(self):
-        return ColumnMajor(self.array)
-
-    @conversion(RowMajor, cost=0)
-    def to_row_major(self):
-        return RowMajor(self.array)
 
 
 
@@ -67,76 +45,49 @@ class SymmetricContiguous(MatrixImpl, NumPyWrapper):
 # thing in each case.
 #
 
-for T in [ColumnMajor, RowMajor, Strided, SymmetricContiguous]:
-
-    @computation(T.i, RowMajor,
-                 cost=lambda self: self.ncols**3 * FLOP)
-    def inverse(self):
-        return RowMajor(np.linalg.inv(self.array))    
+@computation(Strided.i, Strided,
+             cost=lambda self: self.ncols**3 * FLOP)
+def inverse(self):
+    return Strided(np.linalg.inv(self.array))    
     
-    @computation(T + T, RowMajor,
-                 cost=lambda a, b: a.ncols * a.nrows * FLOP)
-    def add(a, b):
-        # Ensure result will be C-contiguous with any NumPy
-        out = np.zeros(a.array.shape, order='C')
-        np.add(a.array, b.array, out)
-        return RowMajor(out)
+@computation(Strided + Strided, Strided,
+             cost=lambda a, b: a.ncols * a.nrows * FLOP)
+def add(a, b):
+    # Ensure result will be C-contiguous with any NumPy
+    out = np.zeros(a.array.shape, order='C')
+    np.add(a.array, b.array, out)
+    return Strided(out)
 
 
-    @computation(T * T, RowMajor, 'numpy.dot',
-                 cost=lambda a, b: a.nrows * b.ncols * a.ncols * FLOP)
-    def multiply(a, b):
-        out = np.dot(a.array, b.array)
-        if not out.flags.c_contiguous:
-            raise NotImplementedError('numpy.dot returned non-C-contiguous array')
-        return RowMajor(out)
-
-    #
-    # Then for the conjugate-transpose versions
-    #
-    @computation(T.h + T, RowMajor,
-                 cost=lambda a, b: a.nrows * a.ncols * FLOP)
-    def add(a, b):
-        a_arr = a.array.T
-        if issubclass(a_arr.dtype.type, np.complex):
-            a_arr = a_arr.conjugate()
-        # Ensure result will be C-contiguous with any NumPy
-        out = np.zeros(a_arr.shape, order='C')
-        np.add(a_arr, b.array, out)
-        return RowMajor(out)
-
-    @computation(T.h * T, RowMajor, '(np.conjugate and) np.dot',
-                 cost=lambda a, b: a.nrows * b.ncols * a.ncols * FLOP)
-    def multiply(a, b):
-        a_arr = a.array.T
-        if issubclass(a_arr.dtype.type, np.complex):
-            a_arr = a_arr.conjugate()
-        out = np.dot(a_arr, b.array)
-        if not out.flags.c_contiguous:
-            raise NotImplementedError('numpy.dot returned non-C-contiguous array')
-        return RowMajor(out)
-
-@computation(ColumnMajor * RowMajor, RowMajor,
+@computation(Strided * Strided, Strided, 'numpy.dot',
              cost=lambda a, b: a.nrows * b.ncols * a.ncols * FLOP)
 def multiply(a, b):
-    return RowMajor(np.dot(a.array, b.array))
+    out = np.dot(a.array, b.array)
+    return Strided(out)
 
-@computation(RowMajor * ColumnMajor, RowMajor,
+@computation(Strided.h + Strided, Strided,
+             cost=lambda a, b: a.nrows * a.ncols * FLOP)
+def add(a, b):
+    a_arr = a.array.T
+    if issubclass(a_arr.dtype.type, np.complex):
+        a_arr = a_arr.conjugate()
+    # Ensure result will be C-contiguous with any NumPy
+    return Strided(a_arr + b.array)
+
+@computation(Strided.h * Strided, Strided, '(np.conjugate and) np.dot',
              cost=lambda a, b: a.nrows * b.ncols * a.ncols * FLOP)
 def multiply(a, b):
-    return RowMajor(np.dot(a.array, b.array))
+    a_arr = a.array.T
+    if issubclass(a_arr.dtype.type, np.complex):
+        a_arr = a_arr.conjugate()
+    out = np.dot(a_arr, b.array)
+    return Strided(out)
 
 #
 # Transpose
 #
-@computation(ColumnMajor.h, ColumnMajor,
+@computation(Strided.h, Strided,
              cost=lambda node: node.ncols * node.nrows * MEMOP)
 def ch_to_c(self):
     assert self.dtype != np.complex128 and self.dtype != np.complex64
-    return ColumnMajor(self.array.T.copy('F'))
-
-@computation(RowMajor.h, RowMajor,
-             cost=lambda node: node.ncols * node.nrows * MEMOP)
-def rh_to_r(self):
-    assert self.dtype != np.complex128 and self.dtype != np.complex64
-    return ColumnMajor(self.array.T.copy('C'))
+    return Strided(self.array.T.copy('F'))
