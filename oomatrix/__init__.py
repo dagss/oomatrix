@@ -1,5 +1,6 @@
 # Re-exports
 from .matrix import Matrix, Id
+from .constructors import *
 
 #mat = Matrix
 
