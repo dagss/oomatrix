@@ -1177,12 +1177,13 @@ class GreedyCompiler(BaseCompiler):
 
     def compile(self, expression):
         meta_tree, args = transforms.metadata_transform(expression)
+        _, index_args = transforms.ImplToMetadataTransform().execute(meta_tree)
         compiled_tree = self.cache.get(meta_tree, None)
         if compiled_tree is None:
             compilation = self.compilation_factory()
             self.cache[meta_tree] = compiled_tree = compilation.compile(meta_tree)
         print args[0].__dict__
-        result = compiled_tree.convert_to_task_graph(args)
+        result = compiled_tree.convert_to_task_graph(index_args)
         return result, args
 
 #default_compiler_instance = ShortestPathCompiler()

@@ -58,6 +58,10 @@ class ImplToMetadataTransform(object):
         new_node.set_leaf_index(None)
         return new_node, [node]
 
+    def visit_metadata_leaf(self, node):
+        # temporary hack to allow using this transform to pull out leaves
+        return node, [node]
+
 class IndexMetadataTransform(object):
     """
     Take a MatrixMetadataLeaf tree and annotates each leaf
