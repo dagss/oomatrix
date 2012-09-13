@@ -1011,7 +1011,13 @@ class GreedyCompilation():
     solution!
 
      - Currently only a single conversion will be considered, not a chain of
-       them in a row (this should be fixed)
+       them in a row (this should be fixed). TODO: Also conversions in multiplications
+       are not present as of this writing.
+
+     - When processing addition and multiplication, all the children are first
+       computed and the cheapest way of computing the child picked, regardless
+       of the resulting matrix kind (hence the "greedy" aspect). However within
+       a single multiplication/addition node, all the options are tried.
        
      - Either the distributive rule is used on all terms, or it is not. I.e.,
        (a + b + c) * x can turn into (a * x + b * x + c * x), but
@@ -1090,33 +1096,49 @@ class GreedyCompilation():
         # be rather tractable though.
         if len(node.children) > 2:
             # Break up expression using associative rule, trying each split position
-            options = []
+            min_cost = np.inf
+            best_cnode = None
             for i in range(1, len(node.children)):
                 left = multiply_if_not_single(node.children[:i])
                 right = multiply_if_not_single(node.children[i:])
-                options.append(self.cached_visit(multiply_if_not_single([left, right])))
-            return self.best_task(options)
+                cnode = self.cached_visit(multiply_if_not_single([left, right]))
+                if cnode is not None and cnode.total_cost < min_cost:
+                    min_cost = cnode.total_cost
+                    best_cnode = cnode
+            return best_cnode
         else:
             left, right = node.children
             options = []
             # Try to apply the distributive rules
-            options.append(self.apply_distributive_rule(left, right, 'left'))
-            options.append(self.apply_distributive_rule(right, left, 'right'))
+            #options.append(self.apply_distributive_rule(left, right, 'left'))
+            #options.append(self.apply_distributive_rule(right, left, 'right'))
             
             # Recurse to compute children
-            left_cost, left_task = self.cached_visit(left)
-            right_cost, right_task = self.cached_visit(right)
-            if left_task is None or right_task is None:
+            left_cnode = self.cached_visit(left)
+            right_cnode = self.cached_visit(right)
+            if left_cnode is None or right_cnode is None:
                 # impossible
-                return (np.inf, None)
-            
-            new_node = multiply_if_not_single([symbolic.TaskLeaf(left_task, []),
-                                               symbolic.TaskLeaf(right_task, [])])
-            tasks = find_cheapest_direct_computation(new_node, self.cost_map)
-            for kind, (cost, tasknode) in tasks.iteritems():
-                options.append((cost, tasknode.as_task()))
-            return self.best_task(options)
+                return None
 
+            left_meta = left_cnode.metadata
+            right_meta = right_cnode.metadata
+            left_kind = left_meta.kind
+            right_kind = right_meta.kind
+            key = (left_kind * right_kind).get_key()
+            computations_by_kind = left_kind.universe.get_computations(key)
+            min_cost = np.inf
+            best_cnode = None
+            for target_kind, computations in computations_by_kind.iteritems():
+                target_meta = metadata.meta_multiply([left_meta, right_meta], target_kind)
+                for computation in computations:
+                    cost = computation.get_cost([left_meta, right_meta]).weigh(self.cost_map)
+                    if cost < min_cost:
+                        min_cost = cost
+                        best_cnode = CompiledNode(computation, cost, [left_cnode, right_cnode],
+                                                  target_meta)
+
+            return best_cnode
+        
     def visit_add(self, node):
         # Recurse to compute cheapest way of computing each operand
         compiled_children = [self.cached_visit(child) for child in node.children]

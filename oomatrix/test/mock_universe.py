@@ -48,7 +48,7 @@ class MockMatricesUniverse:
         self.computation_index = 0
 
     def define(self, match, result_kind, reprtemplate='', name=None, cost=1 * FLOP):
-        if isinstance(cost, int):
+        if isinstance(cost, (int, float)):
             cost *= FLOP
         if name is None:
             name = match_tree_to_name(match)
