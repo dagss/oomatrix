@@ -161,9 +161,7 @@ def test_conversion_cache():
                       D: (0, [])}}
 
 def test_addition_cache():
-    obj = compiler.AdditionFinder(mock_cost_map)
     ctx, (A, a), (B, b), (C, c) = create_mock_matrices('A B C')
-
     BplusB = ctx.adders[B]
     CplusC = ctx.adders[C]
     AplusB = ctx.define(A + B, A, cost=3)

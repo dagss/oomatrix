@@ -186,8 +186,9 @@ class CompiledNode(object):
         def node_factory(node, new_children):
             meta_args = [child.metadata for child in new_children]
             unweighted_cost = node.computation.get_cost(meta_args)
-            return Task(node.computation, unweighted_cost, new_children,
+            task = Task(node.computation, unweighted_cost, new_children,
                         node.metadata, None)
+            return task
         return self.substitute(args, node_factory=node_factory)
             
     def substitute(self, args, shuffle=None, node_factory=None):
@@ -884,9 +885,9 @@ class GreedyAdditionFinder(object):
             for cnode, convs in zip(compiled_nodes, [lconvs, rconvs]):
                 for conv in convs:
                     conv_cost = conv.get_cost([cnode.metadata]).weigh(self.cost_map)
-                    conv_metadata = node.metadata.copy_with_kind(conv.target_kind)
+                    conv_metadata = cnode.metadata.copy_with_kind(conv.target_kind)
                     cnode = CompiledNode(conv, conv_cost, [cnode], conv_metadata)
-                converted_nodes.append(node)
+                converted_nodes.append(cnode)
             # do the addition
             converted_metas = [node.metadata for node in converted_nodes]
             utils.sort_by(converted_nodes, converted_metas)
@@ -1182,8 +1183,8 @@ class GreedyCompiler(BaseCompiler):
         if compiled_tree is None:
             compilation = self.compilation_factory()
             self.cache[meta_tree] = compiled_tree = compilation.compile(meta_tree)
-        print args[0].__dict__
-        result = compiled_tree.convert_to_task_graph(index_args)
+        result = compiled_tree.convert_to_task_graph([x.as_task() for x in index_args])
+        result = symbolic.TaskLeaf(result, [])
         return result, args
 
 #default_compiler_instance = ShortestPathCompiler()
