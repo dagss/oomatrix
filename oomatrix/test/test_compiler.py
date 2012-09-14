@@ -207,6 +207,7 @@ def test_fill_in_conversions():
     
 
 def test_find_cheapest_addition():
+    raise SkipTest()
     # This used to be the test case for compiler.AdditionFinder, so check
     # git history for that...
     obj = compiler.GreedyAdditionFinder(compiler.AdditionCache(
@@ -216,9 +217,6 @@ def test_find_cheapest_addition():
 
     matrix_descriptions = [mock_compiled_node(A), mock_compiled_node(B), mock_compiled_node(B)]
     options = obj.find_cheapest_addition(matrix_descriptions)
-    print
-    print options
-    1/0
 
 
     def format_options(options):
@@ -339,10 +337,9 @@ def test_distributive():
     #''', (a + a) * (b + c)) # b + c is impossible
 
     assert_compile('''
-    T2 = add_A_A(a, a);
-    T1 = multiply_A_C(T2, c);
-    T3 = multiply_A_B(T2, b);
-    T0 = add_A_A(T1, T3)
+    T1 = multiply_A_B(a, b);
+    T2 = multiply_A_C(a, c);
+    T0 = add_A_A(T1, T2)
     ''', a * (b + c)) # b + c is impossible
 
 

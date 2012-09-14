@@ -1062,57 +1062,78 @@ class GreedyCompilation():
         # In the case of (a * b) * c -> a * c + b * c; (a * b) is 'distributor' and
         # c is 'distributee'
         if not isinstance(distributor, symbolic.AddNode):
-            return (np.inf, None)
+            return None
+        add_snode = distributor
 
-        distributee_cost, distributee_task = self.cached_visit(distributee)
-        print distributee, distributee_task
-        if distributee_task is None:
-            return np.inf, None
-        # For each of the possible results, attempt to distribute it on all
-        # terms and look at the resulting cost
-        terms = []
-        for term in distributor.children:
+        # Compute the distributee, and the multiply the result in with the
+        # children of the add_node
+        distributee_cnode = self.cached_visit(distributee)
+        if distributee_cnode is None:
+            return None
+        distributee_sleaf = symbolic.MatrixMetadataLeaf(distributee_cnode.metadata)
+        distributee_sleaf.set_leaf_index(-1)
+
+        # TODO For now, assume the add node only has two terms and no conversions
+        # needed.
+        assert len(add_snode.children) == 2
+
+        compiled_terms = []
+        for term in add_snode.children:
+            # Form symbolic tree using distributee_snode leaf 
             if direction == 'left':
-                new_term = symbolic.multiply([term, symbolic.TaskLeaf(distributee_task, ())])
+                term_snode = symbolic.multiply([term, distributee_sleaf])
             elif direction == 'right':
-                new_term = symbolic.multiply([symbolic.TaskLeaf(distributee_task, ()), term])
-            terms.append(new_term)
-        new_node = symbolic.add(terms)
-        result = self.visit_add(new_node)
-        print
-        print result, new_node
-        return result
-        
+                term_snode = symbolic.multiply([distributee_sleaf, term])
+            # Compile the tree
+            compiled_term = self.cached_visit(term_snode)
+            assert compiled_term.shuffle == ((0,), (1,)) # TODO lift restriction
+            compiled_terms.append(compiled_term)
+
+        # Assemble terms in a sum while reusing the distributee
+        r = self.addition_finder.find_cheapest_addition(compiled_terms)
+        if direction == 'left':
+            rs = r.substitute([None, distributee_cnode, None, distributee_cnode],
+                              shuffle=((0, 1), (2, 1)))
+        else:
+            rs = r.substitute([distributee_cnode, None, distributee_cnode, None],
+                              shuffle=((0, 1), (0, 2)))
+        return rs
 
     def visit_multiply(self, node):
+        def cheapest(cnode_a, cnode_b):
+            if cnode_b is None:
+                return cnode_a
+            elif cnode_a is None:
+                return cnode_b
+            else:
+                return cnode_a if cnode_a.total_cost <= cnode_b.total_cost else cnode_b
+        
         # We parenthize expression and compile each resulting part greedily, at least
         # for now. Considering the entire multiplication expression non-greedily should
         # be rather tractable though.
         if len(node.children) > 2:
             # Break up expression using associative rule, trying each split position
-            min_cost = np.inf
             best_cnode = None
             for i in range(1, len(node.children)):
                 left = multiply_if_not_single(node.children[:i])
                 right = multiply_if_not_single(node.children[i:])
                 cnode = self.cached_visit(multiply_if_not_single([left, right]))
-                if cnode is not None and cnode.total_cost < min_cost:
-                    min_cost = cnode.total_cost
-                    best_cnode = cnode
+                best_cnode = cheapest(best_cnode, cnode)
             return best_cnode
         else:
             left, right = node.children
-            options = []
-            # Try to apply the distributive rules
-            #options.append(self.apply_distributive_rule(left, right, 'left'))
-            #options.append(self.apply_distributive_rule(right, left, 'right'))
-            
+
+            best_cnode = self.apply_distributive_rule(left, right, 'left')
+            best_cnode = cheapest(best_cnode, self.apply_distributive_rule(right, left, 'right'))
+
             # Recurse to compute children
-            left_cnode = self.cached_visit(left)
+            left_cnode = self.cached_visit(left)            
             right_cnode = self.cached_visit(right)
+            
             if left_cnode is None or right_cnode is None:
-                # impossible
-                return None
+                # impossible to compute directly; return whatever came out of
+                # using the distributive rule
+                return best_cnode
 
             left_meta = left_cnode.metadata
             right_meta = right_cnode.metadata
@@ -1120,24 +1141,19 @@ class GreedyCompilation():
             right_kind = right_meta.kind
             key = (left_kind * right_kind).get_key()
             computations_by_kind = left_kind.universe.get_computations(key)
-            min_cost = np.inf
-            best_cnode = None
             for target_kind, computations in computations_by_kind.iteritems():
                 target_meta = metadata.meta_multiply([left_meta, right_meta], target_kind)
                 for computation in computations:
                     cost = computation.get_cost([left_meta, right_meta]).weigh(self.cost_map)
-                    if cost < min_cost:
-                        min_cost = cost
-                        best_cnode = CompiledNode(computation, cost, [left_cnode, right_cnode],
-                                                  target_meta)
-
+                    cnode = CompiledNode(computation, cost, [left_cnode, right_cnode],
+                                         target_meta)
+                    best_cnode = cheapest(best_cnode, cnode)
             return best_cnode
         
     def visit_add(self, node):
         # Recurse to compute cheapest way of computing each operand
         compiled_children = [self.cached_visit(child) for child in node.children]
         # For each operand, temporarily replace 
-        
         
         # For addition, we do consider all possible permutations
         # (we want, e.g., CSC + Diagonal + CSR + Dense to work the right way)
@@ -1153,7 +1169,6 @@ class GreedyCompilation():
 
     def visit_decomposition(self, node):
         child_cost, child_task = self.cached_visit(node.child)
-        print node.decomposition.__dict__
         for new_child in self.process(node.child):
             new_node = symbolic.DecompositionNode(new_child, node.decomposition)
             new_node.task_dependencies = new_child.task_dependencies
