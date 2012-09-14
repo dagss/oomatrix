@@ -102,8 +102,27 @@ def test_compiled_node():
     assert x.leaves() == [A_leaf, B_leaf, B_leaf]
 
 def test_compiled_node_substitute():
-    # TODO Test substitutions together with shuffles
-    raise SkipTest()
+    ctx, (A, a), (B, b), (C, c) = create_mock_matrices('A B C')
+    AplusA = ctx.adders[A]
+    AtimesB = ctx.define(A * B, A)
+    AtimesC = ctx.define(A * C, A)
+    A_leaf, B_leaf, C_leaf = [mock_compiled_node(x) for x in [A, B, C]]
+
+    # Create ((a * c) * b + (a * c) * b) as it would have occured if resulting from
+    # (a * c) * (b + b); i.e. reusing (a * c)
+    A_times_B_node = CompiledNode(AtimesB, 1, [A_leaf, B_leaf], mock_meta(A))
+    A_times_C_node = CompiledNode(AtimesC, 1, [A_leaf, C_leaf], mock_meta(A))
+    root_a = CompiledNode(AplusA, 2, [A_times_B_node, A_times_B_node], mock_meta(A),
+                          shuffle=((0, 1), (0, 2)))
+
+    root_b = root_a.substitute([A_times_C_node, None, None],
+                               shuffle=((0, 1, 2), (0, 1, 3)))
+
+
+    A_times_C_times_B_node = CompiledNode(AtimesB, 1, [A_times_C_node, B_leaf], mock_meta(A))
+    e = CompiledNode(AplusA, 2, [A_times_C_times_B_node, A_times_C_times_B_node],
+                                  mock_meta(A), shuffle=((0, 1, 2), (0, 1, 3)))
+    assert root_b == e
 
 
 def test_compiled_node_convert_to_task_graph():

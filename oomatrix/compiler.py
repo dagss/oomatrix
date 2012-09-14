@@ -118,13 +118,13 @@ class CompiledNode(object):
             if shuffle not in (None, ()):
                 raise ValueError('invalid shuffle for leaf node')
             self.shuffle = ()
-            self.args_consumed_count = 1
+            self.arg_count = 1
         else:
             if shuffle is None:
                 shuffle = []
                 i = 0
                 for child in self.children:
-                    n = 1 if child.is_leaf else child.args_consumed_count
+                    n = 1 if child.is_leaf else child.arg_count
                     shuffle.append(tuple(range(i, i + n)))
                     i += n
                 self.shuffle = tuple(shuffle)
@@ -132,10 +132,10 @@ class CompiledNode(object):
                 self.shuffle = tuple(shuffle)
                 valid_shuffle = len(self.shuffle) == len(self.children)
                 for child, indices in zip(self.children, self.shuffle):
-                    valid_shuffle = valid_shuffle and child.args_consumed_count == len(indices)
+                    valid_shuffle = valid_shuffle and child.arg_count == len(indices)
                 if not valid_shuffle:
                     raise ValueError('Invalid shuffle')
-            self.args_consumed_count = sum(len(x) for x in self.shuffle)
+            self.arg_count = sum(len(x) for x in self.shuffle)
         # total_cost is computed
         self.total_cost = self.weighted_cost + sum(child.total_cost for child in self.children)
 
@@ -204,29 +204,23 @@ class CompiledNode(object):
                 return CompiledNode(node.computation, node.weighted_cost,
                                     converted_children, node.metadata,
                                     _shuffle)
-        try:
-            root, remaining = self._substitute(args, node_factory)
-            if len(remaining) != 0:
-                raise IndexError()
-        except IndexError:
-            raise ValueError("wrong len(new_leaves)")
-        return root
 
-    def _substitute(self, remaining_args, node_factory):
         if self.is_leaf:
-            assert remaining_args[0].metadata == self.metadata
-            return remaining_args[0], remaining_args[1:]
+            # Do the substitution; treating None as "do not replace"
+            assert len(args) == 1
+            r = args[0] or self
+            assert r.metadata == self.metadata
+            return r
         else:
+            # Shuffle arguments and recurse
             new_children = []
-            for child in self.children:
-                # note: remaining_args is updated in each iteration
-                new_child, remaining_args = child._substitute(remaining_args, node_factory)
+            for child, child_shuffle in zip(self.children, self.shuffle):
+                child_args = [args[i] for i in child_shuffle]
+                new_child = child.substitute(child_args, None, node_factory)
                 new_children.append(new_child)
             new_node = node_factory(self, new_children)
-            return new_node, remaining_args
-        
-
-
+            return new_node
+            
 
 class NeighbourExpressionGraphGenerator(object):
     """
