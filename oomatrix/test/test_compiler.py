@@ -298,7 +298,14 @@ def test_multiply():
     assert_compile('T1 = multiply_A_B(a, b); T0 = multiply_A_B(T1, b)',
                    a * b * c)
 
-def test_multiply_conjugation():
+def test_multiply_transpose():
+    ctx, (A, a) = create_mock_matrices('A')
+    ctx.define(A.h * A, A)
+    ctx.define(A * A.h, A)
+    assert_compile('T0 = multiply_Ah_A(a, a)', a.h * a)
+    assert_compile('T0 = multiply_A_Ah(a, a)', a * a.h)
+
+def test_multiply_transpose_expression():
     # check that the conjugate is attempted
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 

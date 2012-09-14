@@ -1127,8 +1127,18 @@ class GreedyCompilation():
             best_cnode = cheapest(best_cnode, self.apply_distributive_rule(right, left, 'right'))
 
             # Recurse to compute children
-            left_cnode = self.cached_visit(left)            
-            right_cnode = self.cached_visit(right)
+            # TODO: Handle conjugate_transpose in the kind rather than here
+            def visit_with_transpose(node):
+                if isinstance(node, symbolic.ConjugateTransposeNode):
+                    key_transform = lambda x: x.h                        
+                    node = node.child
+                else:
+                    key_transform = lambda x: x
+                cnode = self.cached_visit(node)
+                return cnode, key_transform
+                    
+            left_cnode, left_key_transform = visit_with_transpose(left)            
+            right_cnode, right_key_transform = visit_with_transpose(right)
             
             if left_cnode is None or right_cnode is None:
                 # impossible to compute directly; return whatever came out of
@@ -1139,7 +1149,7 @@ class GreedyCompilation():
             right_meta = right_cnode.metadata
             left_kind = left_meta.kind
             right_kind = right_meta.kind
-            key = (left_kind * right_kind).get_key()
+            key = (left_key_transform(left_kind) * right_key_transform(right_kind)).get_key()
             computations_by_kind = left_kind.universe.get_computations(key)
             for target_kind, computations in computations_by_kind.iteritems():
                 target_meta = metadata.meta_multiply([left_meta, right_meta], target_kind)
