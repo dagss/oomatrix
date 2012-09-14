@@ -25,20 +25,6 @@ class Factor(Decomposition):
     factor_count = 1
 
     @staticmethod
-    def create_computation(kind):
-        # todo: dispatch on kind
-        class DecompositionComputation:
-            name='some-factoring-decomposition'
-            @staticmethod
-            def compute(matrix_impl):
-                return matrix_impl.factor()
-            @staticmethod
-            def cost(matrix_meta):
-                return zero_cost # TODO
-
-        return DecompositionComputation
-
-    @staticmethod
     def get_name(kind):
         return '%s.%s' % (kind.__name__, kind.factor.__name__)
 

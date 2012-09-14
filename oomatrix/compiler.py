@@ -63,7 +63,7 @@ do_trace = bool(int(os.environ.get("T", '0')))
 # TODO: Computers should be reentrant/thread-safe, since they can
 # be assigned to a global configuration variable.
 
-from . import formatter, symbolic, cost_value, transforms, utils, metadata
+from . import formatter, symbolic, cost_value, transforms, utils, metadata, decompositions
 from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
@@ -1168,11 +1168,14 @@ class GreedyCompilation():
         return 0, node.as_task()
 
     def visit_decomposition(self, node):
-        child_cost, child_task = self.cached_visit(node.child)
-        for new_child in self.process(node.child):
-            new_node = symbolic.DecompositionNode(new_child, node.decomposition)
-            new_node.task_dependencies = new_child.task_dependencies
-            yield new_node
+        # TODO: For now assume that decomposition is exactly "kind.f -> kind"
+        # which returns a single matrix with the exact same metadata...
+        assert node.decomposition is decompositions.Factor
+        compiled_child = self.cached_visit(node.child)
+        kind = compiled_child.metadata.kind
+        computation, = kind.universe.get_computations(kind.f.get_key())[kind]
+        cost = computation.get_cost([compiled_child.metadata]).weigh(self.cost_map)
+        return CompiledNode(computation, cost, [compiled_child], compiled_child.metadata)
     
 
 def find_cost(computation, meta_args):

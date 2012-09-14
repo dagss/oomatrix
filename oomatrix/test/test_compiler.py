@@ -386,7 +386,12 @@ def test_transpose():
     ctx.define(A * A, A)
     assert_compile('T1 = Bh(b); T0 = multiply_A_A(T1, a)', b.h * a)
 
-def test_factor():
+def test_factor_simple():
+    ctx, (A, a) = create_mock_matrices('A')
+    ctx.define(A.f, A)
+    assert_compile('T0 = Af(a)', a.f)
+
+def test_factor_full():
     ctx = MockMatricesUniverse()
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
