@@ -1129,16 +1129,17 @@ class GreedyCompilation():
             # Recurse to compute children
             # TODO: Handle conjugate_transpose in the kind rather than here
             def visit_with_transpose(node):
-                if isinstance(node, symbolic.ConjugateTransposeNode):
-                    key_transform = lambda x: x.h                        
-                    node = node.child
-                else:
-                    key_transform = lambda x: x
+                transpose = isinstance(node, symbolic.ConjugateTransposeNode)
+                if transpose:
+                    node, = node.children
                 cnode = self.cached_visit(node)
-                return cnode, key_transform
+                return cnode, transpose
+
+            def maybe_transpose(x, transpose):
+                return x.h if transpose else x                
                     
-            left_cnode, left_key_transform = visit_with_transpose(left)            
-            right_cnode, right_key_transform = visit_with_transpose(right)
+            left_cnode, left_is_transposed = visit_with_transpose(left)            
+            right_cnode, right_is_transposed = visit_with_transpose(right)
             
             if left_cnode is None or right_cnode is None:
                 # impossible to compute directly; return whatever came out of
@@ -1149,10 +1150,14 @@ class GreedyCompilation():
             right_meta = right_cnode.metadata
             left_kind = left_meta.kind
             right_kind = right_meta.kind
-            key = (left_key_transform(left_kind) * right_key_transform(right_kind)).get_key()
+            metas = [m.transpose() if transpose else m
+                     for m, transpose in [(left_meta, left_is_transposed),
+                                          (right_meta, right_is_transposed)]]
+            key = (maybe_transpose(left_kind, left_is_transposed) *
+                   maybe_transpose(right_kind, right_is_transposed)).get_key()
             computations_by_kind = left_kind.universe.get_computations(key)
             for target_kind, computations in computations_by_kind.iteritems():
-                target_meta = metadata.meta_multiply([left_meta, right_meta], target_kind)
+                target_meta = metadata.meta_multiply(metas, target_kind)
                 for computation in computations:
                     cost = computation.get_cost([left_meta, right_meta]).weigh(self.cost_map)
                     cnode = CompiledNode(computation, cost, [left_cnode, right_cnode],

@@ -43,6 +43,9 @@ class MatrixMetadata(object):
     def __hash__(self):
         return hash(self.as_tuple())
 
+    def transpose(self):
+        return MatrixMetadata(self.kind, self.cols_shape, self.rows_shape, self.dtype)
+
 def meta_add(children):
     first = children[0]
     for child in children[1:]:

@@ -302,6 +302,7 @@ def test_multiply_transpose():
     ctx, (A, a) = create_mock_matrices('A')
     ctx.define(A.h * A, A)
     ctx.define(A * A.h, A)
+    # TODO: test that metadata is transposed
     assert_compile('T0 = multiply_Ah_A(a, a)', a.h * a)
     assert_compile('T0 = multiply_A_Ah(a, a)', a * a.h)
 
