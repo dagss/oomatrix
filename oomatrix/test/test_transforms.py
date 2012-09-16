@@ -40,13 +40,13 @@ c2.ncols = 10
 
 def test_metadata_transform_sorted_by_kind():
     tree, args = transforms.metadata_transform(add(c1, b, a))
-    assert [ao, bo, co1] == args
+    assert [a, b, c1] == args
     assert [0, 1, 2] == [x.leaf_index for x in tree.children]
 
 def test_metadata_transform_sorted_by_shape():
     # sorted by kind
     tree, args = transforms.metadata_transform(add(c2, c1))
-    assert [co1, co2] == args
+    assert [c1, c2] == args
     assert [0, 1] == [x.leaf_index for x in tree.children]
 
 def test_kind_key_transform():
@@ -62,7 +62,7 @@ def test_kind_key_transform():
 
     a = symbolic.LeafNode('a', A())
     b = symbolic.LeafNode('b', B())
-    key = process(mul(add(I(H(b)), b, a), a))
+    key, universe = process(mul(add(I(H(b)), b, a), a))
     # note that the + is sorted
     eq_(('*',
          ('+', A, B, ('h', ('i', B))),
@@ -72,7 +72,7 @@ def test_kind_key_transform():
     old_sort = A._sort_id
     try:
         A._sort_id = 3
-        key = process(mul(add(I(H(b)), b, a), a))
+        key, universe = process(mul(add(I(H(b)), b, a), a))
         eq_(('*',
              ('+', B, A, ('h', ('i', B))),
              A), key)
