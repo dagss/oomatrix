@@ -65,7 +65,8 @@ class ImplToMetadataTransform(object):
 class IndexMetadataTransform(object):
     """
     Take a MatrixMetadataLeaf tree and annotates each leaf
-    with a global leaf index in-place
+    with a global leaf index in-place. Also adds the count of children
+    leaves to each node.
     """
     def execute(self, node):
         self.leaf_index = 0
@@ -73,20 +74,25 @@ class IndexMetadataTransform(object):
         return node
 
     def recurse_multi_child(self, node):
+        leaf_count = 0
         for child in node.children:
-            child.accept_visitor(self, child)
+            leaf_count += child.accept_visitor(self, child)
+        node.leaf_count = leaf_count
+        return leaf_count
 
     def recurse_single_child(self, node):
         child, = node.children
-        child.accept_visitor(self, child)
-
+        return child.accept_visitor(self, child)
+    
     visit_add = visit_multiply = recurse_multi_child
     visit_conjugate_transpose = visit_inverse = recurse_single_child
     visit_decomposition = recurse_single_child
 
     def visit_metadata_leaf(self, node):
         node.set_leaf_index(self.leaf_index)
+        node.leaf_count = 1
         self.leaf_index += 1
+        return 1
 
 def metadata_transform(tree):
     tree, args_list = ImplToMetadataTransform().execute(tree)

@@ -42,12 +42,14 @@ def test_metadata_transform_sorted_by_kind():
     tree, args = transforms.metadata_transform(add(c1, b, a))
     assert [a, b, c1] == args
     assert [0, 1, 2] == [x.leaf_index for x in tree.children]
+    assert tree.leaf_count == 3
 
 def test_metadata_transform_sorted_by_shape():
     # sorted by kind
     tree, args = transforms.metadata_transform(add(c2, c1))
     assert [c1, c2] == args
     assert [0, 1] == [x.leaf_index for x in tree.children]
+    assert tree.leaf_count == 2
 
 def test_kind_key_transform():
     def process(tree):
