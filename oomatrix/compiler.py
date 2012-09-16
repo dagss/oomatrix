@@ -993,6 +993,14 @@ def reduce_best_tasks(tasks_lst):
     return result
     
 
+def cheapest_cnode(cnode_a, cnode_b):
+    if cnode_b is None:
+        return cnode_a
+    elif cnode_a is None:
+        return cnode_b
+    else:
+        return cnode_a if cnode_a.total_cost <= cnode_b.total_cost else cnode_b
+
 class GreedyCompilation():
     """
     During tree traversal, each node returns
@@ -1099,15 +1107,7 @@ class GreedyCompilation():
                               shuffle=((0, 1), (0, 2)))
         return rs
 
-    def visit_multiply(self, node):
-        def cheapest(cnode_a, cnode_b):
-            if cnode_b is None:
-                return cnode_a
-            elif cnode_a is None:
-                return cnode_b
-            else:
-                return cnode_a if cnode_a.total_cost <= cnode_b.total_cost else cnode_b
-        
+    def visit_multiply(self, node):        
         # We parenthize expression and compile each resulting part greedily, at least
         # for now. Considering the entire multiplication expression non-greedily should
         # be rather tractable though.
@@ -1118,26 +1118,23 @@ class GreedyCompilation():
                 left = multiply_if_not_single(node.children[:i])
                 right = multiply_if_not_single(node.children[i:])
                 cnode = self.cached_visit(multiply_if_not_single([left, right]))
-                best_cnode = cheapest(best_cnode, cnode)
+                best_cnode = cheapest_cnode(best_cnode, cnode)
             return best_cnode
         else:
             left, right = node.children
 
+            # Try to apply distributive rule
             best_cnode = self.apply_distributive_rule(left, right, 'left')
-            best_cnode = cheapest(best_cnode, self.apply_distributive_rule(right, left, 'right'))
+            best_cnode = cheapest_cnode(best_cnode, self.apply_distributive_rule(right, left, 'right'))
 
-            # Recurse to compute children
-            # TODO: Handle conjugate_transpose in the kind rather than here
+            # Compute children; ignoring any ConjugateTransposeNode's (i.e. computing their
+            # children)
             def visit_with_transpose(node):
                 transpose = isinstance(node, symbolic.ConjugateTransposeNode)
                 if transpose:
                     node, = node.children
                 cnode = self.cached_visit(node)
                 return cnode, transpose
-
-            def maybe_transpose(x, transpose):
-                return x.h if transpose else x                
-                    
             left_cnode, left_is_transposed = visit_with_transpose(left)            
             right_cnode, right_is_transposed = visit_with_transpose(right)
             
@@ -1146,24 +1143,56 @@ class GreedyCompilation():
                 # using the distributive rule
                 return best_cnode
 
-            left_meta = left_cnode.metadata
-            right_meta = right_cnode.metadata
-            left_kind = left_meta.kind
-            right_kind = right_meta.kind
-            metas = [m.transpose() if transpose else m
-                     for m, transpose in [(left_meta, left_is_transposed),
-                                          (right_meta, right_is_transposed)]]
-            key = (maybe_transpose(left_kind, left_is_transposed) *
-                   maybe_transpose(right_kind, right_is_transposed)).get_key()
-            computations_by_kind = left_kind.universe.get_computations(key)
-            for target_kind, computations in computations_by_kind.iteritems():
-                target_meta = metadata.meta_multiply(metas, target_kind)
-                for computation in computations:
-                    cost = computation.get_cost([left_meta, right_meta]).weigh(self.cost_map)
-                    cnode = CompiledNode(computation, cost, [left_cnode, right_cnode],
-                                         target_meta)
-                    best_cnode = cheapest(best_cnode, cnode)
+            # When operands are transposed, we can either convert A.h -> A, or
+            # try rules of the kind A.h * A. For now, be greedy in taking the
+            # cheapest A.h -> A operation we can find, but try both A.h * A as
+            # well as A.h->B & B * A. (TODO, fix this, this is not the place to
+            # be cheap as there's no explosion).
+
+            def find_transpose_computation(cnode):
+                return self.find_best_direct_computation(
+                    cnode.metadata.kind.h.get_key(), [cnode], [cnode.metadata], cnode.metadata)
+
+            def maybe_transpose_kind(x, transpose):
+                return x.h if transpose else x
+
+            def maybe_transpose_meta(x, transpose):
+                return x.transpose() if transpose else x
+            
+            left_options = [
+                (left_cnode, left_is_transposed),
+                (find_transpose_computation(left_cnode), False)]
+            right_options = [
+                (right_cnode, right_is_transposed),
+                (find_transpose_computation(right_cnode), False)]
+
+            for left_cnode, left_is_transposed in left_options:
+                for right_cnode, right_is_transposed in right_options:
+                    if left_cnode is None or right_cnode is None:
+                        continue
+                    
+                    left_meta = maybe_transpose_meta(left_cnode.metadata, left_is_transposed)
+                    right_meta = maybe_transpose_meta(right_cnode.metadata, right_is_transposed)
+                    metas = [left_meta, right_meta]
+                    key = (maybe_transpose_kind(left_meta.kind, left_is_transposed) *
+                           maybe_transpose_kind(right_meta.kind, right_is_transposed)).get_key()
+                    cnode = self.find_best_direct_computation(key, [left_cnode, right_cnode], metas,
+                                                              metadata.meta_multiply(metas))
+                    best_cnode = cheapest_cnode(best_cnode, cnode)
+
             return best_cnode
+
+
+    def find_best_direct_computation(self, key, child_cnodes, metas, target_meta):
+        best_cnode = None
+        computations_by_kind = metas[0].kind.universe.get_computations(key)
+        for target_kind, computations in computations_by_kind.iteritems():
+            typed_target_meta = target_meta.copy_with_kind(target_kind)
+            for computation in computations:
+                cost = computation.get_cost(metas).weigh(self.cost_map)
+                cnode = CompiledNode(computation, cost, child_cnodes, typed_target_meta)
+                best_cnode = cheapest_cnode(best_cnode, cnode)
+        return best_cnode
         
     def visit_add(self, node):
         # Recurse to compute cheapest way of computing each operand

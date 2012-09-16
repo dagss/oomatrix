@@ -298,6 +298,12 @@ def test_multiply():
     assert_compile('T1 = multiply_A_B(a, b); T0 = multiply_A_B(T1, b)',
                    a * b * c)
 
+def test_multiply_convert_transpose():
+    ctx, (A, a) = create_mock_matrices('A')
+    ctx.define(A * A, A)
+    ctx.define(A.h, A)
+    assert_compile('T1 = Ah(a); T0 = multiply_A_A(T1, a)', a.h * a)
+
 def test_multiply_transpose():
     ctx, (A, a) = create_mock_matrices('A')
     ctx.define(A.h * A, A)
