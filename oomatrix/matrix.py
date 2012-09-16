@@ -102,7 +102,7 @@ class Matrix(object):
         task, is_transpose = compiler.compile(self._expr)
         return task, is_transpose
 
-    def compute(self, compiler=None):
+    def compute(self, compiler=None, name=None):
         from .task import Scheduler, DefaultExecutor
 
         task_tree, args = self.compile(compiler=compiler)
@@ -115,7 +115,7 @@ class Matrix(object):
         expr = symbolic.LeafNode(None, matrix_impl)
         if is_transpose:
             expr = symbolic.conjugate_transpose(expr)
-        result = Matrix(expr)
+        result = Matrix(expr, name=name)
         return result
 
     def explain(self, compiler=None):
