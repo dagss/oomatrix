@@ -1225,7 +1225,8 @@ class GreedyCompilation():
 
             def find_transpose_computation(cnode):
                 return self.find_best_direct_computation(
-                    cnode.metadata.kind.h.get_key(), [cnode], [cnode.metadata], cnode.metadata)
+                    cnode.metadata.kind.h.get_key(), [cnode], [cnode.metadata],
+                    cnode.metadata.transpose())
 
             def maybe_transpose_kind(x, transpose):
                 return x.h if transpose else x
