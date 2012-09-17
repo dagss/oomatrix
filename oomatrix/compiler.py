@@ -150,6 +150,8 @@ class CompiledNode(object):
     def __eq__(self, other):
         # Note that this definition is recursive, as the comparison of children will
         # end up doing an element-wise comparison
+        if type(other) is not CompiledNode:
+            return False
         return (self.computation == other.computation and
                 self.weighted_cost == other.weighted_cost and
                 self.metadata == other.metadata and
