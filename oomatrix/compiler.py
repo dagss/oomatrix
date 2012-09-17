@@ -1272,8 +1272,8 @@ class GreedyCompilation():
     def visit_add(self, node):
         # Recurse to compute cheapest way of computing each operand
         compiled_children = [self.cached_visit(child) for child in node.children]
-        # For each operand, temporarily replace 
-        
+        if None in compiled_children:
+            return None
         # For addition, we do consider all possible permutations
         # (we want, e.g., CSC + Diagonal + CSR + Dense to work the right way)
         result = self.addition_finder.find_cheapest_addition(compiled_children)
