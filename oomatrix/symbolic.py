@@ -176,6 +176,8 @@ class ArithmeticNode(ExpressionNode):
         self.ncols = self.children[-1].ncols
         self.dtype = self.children[0].dtype # TODO combine better
         self.universe = self.children[0].universe
+        if all(hasattr(child, 'leaf_count') for child in children):
+            self.leaf_count = sum(child.leaf_count for child in children)
 
 class AddNode(ArithmeticNode):
     symbol = '+'
@@ -403,6 +405,8 @@ class MatrixMetadataLeaf(ExpressionNode):
     # Expression node for matrix metadata in a tree
     kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
     precedence = 1000 # TODO
+    leaf_count = 1
+    leaf_index = -1
     
     def __init__(self, metadata):
         self.metadata = metadata

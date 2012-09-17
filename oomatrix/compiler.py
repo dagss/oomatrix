@@ -108,7 +108,10 @@ class CompiledNode(object):
     `children` are other CompiledNode instances whose output should
     be fed into `computation`.
     """
-    def __init__(self, computation, weighted_cost, children, metadata, shuffle=None):
+    def __init__(self, computation, weighted_cost, children, metadata, shuffle=None,
+                 flat_shuffle=None):
+        if shuffle is not None and flat_shuffle is not None:
+            raise ValueError('either shuffle or flat_shuffle must be given')
         self.computation = computation
         self.weighted_cost = float(weighted_cost)
         self.children = tuple(children)
@@ -121,11 +124,15 @@ class CompiledNode(object):
             self.arg_count = 1
         else:
             if shuffle is None:
+                if flat_shuffle is None:
+                    flat_shuffle = range(sum(child.arg_count for child in children))
+                elif not all(isinstance(i, int) for i in flat_shuffle):
+                    raise ValueError('invalid flat_shuffle')
                 shuffle = []
                 i = 0
                 for child in self.children:
-                    n = 1 if child.is_leaf else child.arg_count
-                    shuffle.append(tuple(range(i, i + n)))
+                    n = child.arg_count
+                    shuffle.append(tuple(flat_shuffle[i:i + n]))
                     i += n
                 self.shuffle = tuple(shuffle)
             else:
@@ -135,9 +142,29 @@ class CompiledNode(object):
                     valid_shuffle = valid_shuffle and child.arg_count == len(indices)
                 if not valid_shuffle:
                     raise ValueError('Invalid shuffle')
-            self.arg_count = sum(len(x) for x in self.shuffle)
+            flat_shuffle = sum(self.shuffle, ())
+            self.arg_count = max(flat_shuffle) + 1
         # total_cost is computed
         self.total_cost = self.weighted_cost + sum(child.total_cost for child in self.children)
+
+    def __eq__(self, other):
+        # Note that this definition is recursive, as the comparison of children will
+        # end up doing an element-wise comparison
+        return (self.computation == other.computation and
+                self.weighted_cost == other.weighted_cost and
+                self.metadata == other.metadata and
+                self.children == other.children and
+                self.shuffle == other.shuffle)
+
+    def __hash__(self):
+        return hash((id(self.computation),
+                     self.weighted_cost,
+                     self.metadata,
+                     self.children,
+                     self.shuffle))
+
+    def __ne__(self, other):
+        return not self == other
 
     @staticmethod
     def create_leaf(metadata):
@@ -162,18 +189,6 @@ class CompiledNode(object):
                 child._repr(indent + '  ', lines)
             lines.append(indent + '>')
 
-    def __eq__(self, other):
-        # Note that this definition is recursive, as the comparison of children will
-        # end up doing an element-wise comparison
-        return (self.computation == other.computation and
-                self.weighted_cost == other.weighted_cost and
-                self.metadata == other.metadata and
-                self.children == other.children and
-                self.shuffle == other.shuffle)
-
-    def __ne__(self, other):
-        return not self == other
-
     def leaves(self):
         if self.is_leaf:
             return [self]
@@ -181,33 +196,49 @@ class CompiledNode(object):
             return sum([child.leaves() for child in self.children], [])
 
     def convert_to_task_graph(self, args):
-        d = {} # { (cnode, (argument_index, ...)) : task }
-        argument_indices = range(len(args))
+        # Do a substitution, but use a "cache" dictionary `d` in the
+        # node factory so that tasks doing exactly the same thing
+        # results in the same object (by id()).
+        d = {}
         def node_factory(node, new_children):
-            meta_args = [child.metadata for child in new_children]
-            unweighted_cost = node.computation.get_cost(meta_args)
-            task = Task(node.computation, unweighted_cost, new_children,
-                        node.metadata, None)
+            new_children = tuple(new_children)
+            task = d.get((node, new_children), None)
+            if task is None:
+                meta_args = [child.metadata for child in new_children]
+                unweighted_cost = node.computation.get_cost(meta_args)
+                task = Task(node.computation, unweighted_cost, new_children,
+                            node.metadata, None)
+                d[(node, new_children)] = task
             return task
-        return self.substitute(args, node_factory=node_factory)
-            
-    def substitute(self, args, shuffle=None, node_factory=None):
+        result = self.substitute(args, node_factory=node_factory)
+        return result
+
+    def substitute(self, args, shuffle=None, flat_shuffle=None, node_factory=None):
         """Substitute each leaf node of the tree rooted at `self` with the
         CompiledNodes given in args, and return the resulting tree.
+
+        args can either be a list with `self.arg_count` elements (None meaning
+        "do not replace"), or a dict mapping argument indices to replacement leaves.
 
         Optionally also converts the interior nodes in the tree by using a supplied
         node factory for the interior nodes.
         """
+        if isinstance(args, dict):
+            args, args_dict = [None] * self.arg_count, args
+            for i, arg in args_dict.iteritems():
+                args[i] = arg
+        
         if node_factory is None:
             def node_factory(node, converted_children):
-                _shuffle = shuffle if node is self else None
                 return CompiledNode(node.computation, node.weighted_cost,
                                     converted_children, node.metadata,
-                                    _shuffle)
+                                    shuffle if node is self else None,
+                                    flat_shuffle if node is self else None)
 
+        return self._substitute(args, node_factory)
+
+    def _substitute(self, args, node_factory):
         if self.is_leaf:
-            # Do the substitution; treating None as "do not replace"
-            assert len(args) == 1
             r = args[0] or self
             assert r.metadata == self.metadata
             return r
@@ -215,12 +246,32 @@ class CompiledNode(object):
             # Shuffle arguments and recurse
             new_children = []
             for child, child_shuffle in zip(self.children, self.shuffle):
-                child_args = [args[i] for i in child_shuffle]
-                new_child = child.substitute(child_args, None, node_factory)
+                new_args = [args[i] for i in child_shuffle]
+                new_child = child._substitute(new_args, node_factory)
                 new_children.append(new_child)
             new_node = node_factory(self, new_children)
             return new_node
             
+    def substitute_linked(self, indices, arg):
+        return  self._substitute_linked(0, indices, arg)
+
+    def _substitute_linked(self, offset, indices, arg):
+        if self.is_leaf:
+            r = arg if offset in indices else self
+            assert r.metadata == self.metadata
+            return r
+        else:
+            new_children = []
+            for child, child_shuffle in zip(self.children, self.shuffle):
+                new_child = child._substitute_linked(offset, indices, arg)
+                new_children.append(new_child)
+                offset += child.arg_count # note: of the old child
+            new_node = CompiledNode(self.computation, self.weighted_cost, new_children,
+                                    self.metadata)
+            return new_node
+            
+            
+
 
 class NeighbourExpressionGraphGenerator(object):
     """
@@ -897,6 +948,7 @@ class GreedyAdditionFinder(object):
             return result[0]
 
     def find_cheapest_addition(self, operands):
+        print 'TODO addition shuffle'
         for op in operands:
             assert isinstance(op, CompiledNode)
         self.nodes_visited += 1
@@ -1055,6 +1107,8 @@ class GreedyCompilation():
         else:
             result = node.accept_visitor(self, node)
             self.cache[node] = result
+        if result is not None:
+            assert result.arg_count == node.leaf_count
         return result
 
     def best_task(self, options):
@@ -1073,39 +1127,57 @@ class GreedyCompilation():
             return None
         add_snode = distributor
 
+        # Find out which leaves/arguments belong to distributee, for use in constructing shuffle
+        start_of_distributee_args = 0 if direction == 'right' else distributor.leaf_count
+        distributee_arg_indices = tuple(range(start_of_distributee_args,
+                                              start_of_distributee_args + distributee.leaf_count))
+        
         # Compute the distributee, and the multiply the result in with the
         # children of the add_node
         distributee_cnode = self.cached_visit(distributee)
         if distributee_cnode is None:
             return None
         distributee_sleaf = symbolic.MatrixMetadataLeaf(distributee_cnode.metadata)
-        distributee_sleaf.set_leaf_index(-1)
-
-        # TODO For now, assume the add node only has two terms and no conversions
-        # needed.
-        assert len(add_snode.children) == 2
 
         compiled_terms = []
+        shuffle = []
+        substitution_indices = []
+        arg_start = 0 if direction == 'left' else distributee.leaf_count
+        subst_index = 0 if direction == 'right' else distributor.leaf_count
+
+        new_term_leaf_counts = [term.leaf_count + 1 for term in add_snode.children]
+        if direction == 'right':
+            substitution_indices = list(utils.cumsum([0] + new_term_leaf_counts[:-1]))
+        else:
+            substitution_indices = [i - 1 for i in utils.cumsum(new_term_leaf_counts)]
+
         for term in add_snode.children:
+            arg_stop = arg_start + term.leaf_count
+            term_arg_indices = tuple(range(arg_start, arg_stop))
             # Form symbolic tree using distributee_snode leaf 
             if direction == 'left':
                 term_snode = symbolic.multiply([term, distributee_sleaf])
+                shuffle.extend(term_arg_indices + distributee_arg_indices)
             elif direction == 'right':
                 term_snode = symbolic.multiply([distributee_sleaf, term])
+                shuffle.extend(distributee_arg_indices + term_arg_indices)
             # Compile the tree
             compiled_term = self.cached_visit(term_snode)
-            assert compiled_term.shuffle == ((0,), (1,)) # TODO lift restriction
+            if compiled_term is None:
+                # Couldn't distribute
+                return None
             compiled_terms.append(compiled_term)
+            arg_start = arg_stop
 
-        # Assemble terms in a sum while reusing the distributee
-        r = self.addition_finder.find_cheapest_addition(compiled_terms)
-        if direction == 'left':
-            rs = r.substitute([None, distributee_cnode, None, distributee_cnode],
-                              shuffle=((0, 1), (2, 1)))
-        else:
-            rs = r.substitute([distributee_cnode, None, distributee_cnode, None],
-                              shuffle=((0, 1), (0, 2)))
-        return rs
+        # Find the addition operation for adding together the compiled terms
+        new_add_snode = symbolic.add([symbolic.MatrixMetadataLeaf(term_cnode.metadata)
+                                      for term_cnode in compiled_terms])
+        new_add_cnode = self.cached_visit(new_add_snode)
+        new_add_cnode = new_add_cnode.substitute(compiled_terms)
+
+        r = new_add_cnode.substitute(dict((i, distributee_cnode) for i in substitution_indices),
+                                     flat_shuffle=shuffle)
+        return r
 
     def visit_multiply(self, node):        
         # We parenthize expression and compile each resulting part greedily, at least

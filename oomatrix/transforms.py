@@ -20,7 +20,7 @@ class ImplToMetadataTransform(object):
             tree, args = child.accept_visitor(self, child)
             child_trees.append(tree)
             child_arg_lists.append(args)
-        return child_trees, child_arg_lists        
+        return child_trees, child_arg_lists
 
     def visit_add(self, node):
         child_trees, child_arg_lists = self.process_children(node)
@@ -28,27 +28,34 @@ class ImplToMetadataTransform(object):
         permutation = utils.argsort(child_trees)
         child_trees = [child_trees[i] for i in permutation]
         child_arg_lists = [child_arg_lists[i] for i in permutation]
+        flattened_args = sum(child_arg_lists, [])
         new_node = symbolic.add(child_trees)
-        return new_node, sum(child_arg_lists, [])
+        new_node.leaf_count = len(flattened_args)
+        return new_node, flattened_args
 
     def visit_multiply(self, node):
         child_trees, child_arg_lists = self.process_children(node)
         new_node = symbolic.multiply(child_trees)
-        return new_node, sum(child_arg_lists, [])
+        flattened_args = sum(child_arg_lists, [])
+        new_node.leaf_count = len(flattened_args)
+        return new_node, flattened_args
 
     def visit_conjugate_transpose(self, node):
         tree, args = node.child.accept_visitor(self, node.child)
         new_node = symbolic.conjugate_transpose(tree)
+        new_node.leaf_count = len(args)
         return new_node, args
 
     def visit_inverse(self, node):
         tree, args = node.child.accept_visitor(self, node.child)
         new_node = symbolic.inverse(tree)
+        new_node.leaf_count = len(args)
         return new_node, args
 
     def visit_decomposition(self, node):
         tree, args = node.child.accept_visitor(self, node.child)
         new_node = symbolic.DecompositionNode(tree, node.decomposition)
+        new_node.leaf_count = len(args)
         return new_node, args
 
     def visit_leaf(self, node):
@@ -56,10 +63,12 @@ class ImplToMetadataTransform(object):
                                        node.dtype)
         new_node = symbolic.MatrixMetadataLeaf(meta)
         new_node.set_leaf_index(None)
+        new_node.leaf_count = 1
         return new_node, [node]
 
     def visit_metadata_leaf(self, node):
         # temporary hack to allow using this transform to pull out leaves
+        node.leaf_count = 1
         return node, [node]
 
 class IndexMetadataTransform(object):

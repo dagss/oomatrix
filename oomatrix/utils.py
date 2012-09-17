@@ -12,3 +12,8 @@ def sort_by(items, keys, reverse=False):
     zipped.sort(reverse=reverse)
     return [second for first, second in zipped]
 
+def cumsum(it):
+    total = 0
+    for x in it:
+        total += x
+        yield total

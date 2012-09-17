@@ -115,14 +115,47 @@ def test_compiled_node_substitute():
     root_a = CompiledNode(AplusA, 2, [A_times_B_node, A_times_B_node], mock_meta(A),
                           shuffle=((0, 1), (0, 2)))
 
-    root_b = root_a.substitute([A_times_C_node, None, None],
-                               shuffle=((0, 1, 2), (0, 1, 3)))
+    print root_a
+    print
+    root_b = root_a.substitute({0: A_times_C_node, 2: A_times_C_node})
+#                               shuffle=((0, 1, 2), (0, 1, 3)))
+    print root_b
+    1/0
 
 
     A_times_C_times_B_node = CompiledNode(AtimesB, 1, [A_times_C_node, B_leaf], mock_meta(A))
     e = CompiledNode(AplusA, 2, [A_times_C_times_B_node, A_times_C_times_B_node],
                                   mock_meta(A), shuffle=((0, 1, 2), (0, 1, 3)))
     assert root_b == e
+
+
+def test_compiled_node_substitute_linked():
+    ctx, (A, a), (B, b), (C, c) = create_mock_matrices('A B C')
+    AplusA = ctx.adders[A]
+    AtimesB = ctx.define(A * B, A)
+    AtimesC = ctx.define(A * C, A)
+    A_leaf, B_leaf, C_leaf = [mock_compiled_node(x) for x in [A, B, C]]
+
+    # Create ((a * c) * b + (a * c) * b) as it would have occured if resulting from
+    # (a * c) * (b + b); i.e. reusing (a * c)
+    A_times_B_node = CompiledNode(AtimesB, 1, [A_leaf, B_leaf], mock_meta(A))
+    A_times_C_node = CompiledNode(AtimesC, 1, [A_leaf, C_leaf], mock_meta(A))
+    root_a = CompiledNode(AplusA, 2, [A_times_B_node, A_times_B_node], mock_meta(A),
+                          shuffle=((0, 1), (0, 2)))
+
+    print root_a
+    print
+    root_b = root_a.substitute_linked((0, 2), A_times_C_node)
+    print root_b
+    1/0
+
+
+    A_times_C_times_B_node = CompiledNode(AtimesB, 1, [A_times_C_node, B_leaf], mock_meta(A))
+    e = CompiledNode(AplusA, 2, [A_times_C_times_B_node, A_times_C_times_B_node],
+                                  mock_meta(A), shuffle=((0, 1, 2), (0, 1, 3)))
+    assert root_b == e
+
+
 
 
 def test_compiled_node_convert_to_task_graph():
@@ -335,26 +368,49 @@ def test_caching():
     assert task0 is task1
     assert len(compiler_obj.cache) == 1
 
-def test_distributive():
-    ctx = MockMatricesUniverse()
-    A, a, au, auh = ctx.new_matrix('A') 
-    B, b, bu, buh = ctx.new_matrix('B')
-    C, c, cu, cuh = ctx.new_matrix('C')
+def test_distributive_right():
+    ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')
     ctx.define(A * B, A)
     ctx.define(A * C, A)
-    #TODO:
-    #assert_compile('''
-    #T2 = add_A_A(a, a);
-    #T1 = multiply_A_C(T2, c);
-    #T3 = multiply_A_B(T2, b);
-    #T0 = add_A_A(T1, T3)
-    #''', (a + a) * (b + c)) # b + c is impossible
+    ctx.define(B * D, B)
+    ctx.define(C * D, C)
 
+    # Right-distribute
     assert_compile('''
     T1 = multiply_A_B(a, b);
     T2 = multiply_A_C(a, c);
     T0 = add_A_A(T1, T2)
     ''', a * (b + c)) # b + c is impossible
+
+    assert_compile('''
+    T1 = multiply_A_B(a, b);
+    T4 = multiply_B_D(b, d);
+    T3 = multiply_A_B(a, T4);
+    T6 = multiply_C_D(c, d);
+    T5 = multiply_A_C(a, T6);
+    T2 = add_A_A(T3, T5);
+    T0 = add_A_A(T1, T2)
+    ''', a * (b * d + b + c * d))
+
+    assert_compile('''
+    T2 = multiply_A_B(a, b);
+    T1 = multiply_A_B(T2, b);
+    T3 = multiply_A_C(T2, c);
+    T0 = add_A_A(T1, T3)
+    ''', a * b * (b + c))
+
+def test_distributive_left():
+    ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')
+    ctx.define(A * C, A)
+    ctx.define(B * C, A)
+    ctx.define(C * D, C)
+    assert_compile('''
+    T2 = multiply_C_D(c, d);
+    T1 = multiply_A_C(a, T2);
+    T3 = multiply_B_C(b, T2);
+    T0 = add_A_A(T1, T3)
+    ''', (a + b) * c * d)
+    
 
 
 
