@@ -1125,7 +1125,11 @@ class GreedyCompilation():
     def apply_distributive_rule(self, distributor, distributee, direction):
         # In the case of (a * b) * c -> a * c + b * c; (a * b) is 'distributor' and
         # c is 'distributee'
+
         if not isinstance(distributor, symbolic.AddNode):
+            return None
+        if isinstance(distributee, symbolic.ConjugateTransposeNode):
+            print 'ugly, ughly hack #432'
             return None
         add_snode = distributor
 
@@ -1236,10 +1240,10 @@ class GreedyCompilation():
             
             left_options = [
                 (left_cnode, left_is_transposed),
-                (find_transpose_computation(left_cnode), False)]
+                (find_transpose_computation(left_cnode), not left_is_transposed)]
             right_options = [
                 (right_cnode, right_is_transposed),
-                (find_transpose_computation(right_cnode), False)]
+                (find_transpose_computation(right_cnode), not right_is_transposed)]
 
             for left_cnode, left_is_transposed in left_options:
                 for right_cnode, right_is_transposed in right_options:
