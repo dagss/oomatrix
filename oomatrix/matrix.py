@@ -4,7 +4,7 @@ from StringIO import StringIO
 from . import symbolic, decompositions
 from .kind import MatrixImpl
 from .symbolic import ExpressionNode, LeafNode
-from .formatter import default_formatter_factory, Explainer
+from .formatter import default_formatter_factory
 
 __all__ = ['Matrix']
 
