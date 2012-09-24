@@ -43,73 +43,46 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
     # P = inv(M)
     r = b - compute_array(A * x0, compiler=compiler)
 
-    residual = ndnorm(r, axis=0, ord=norm_order)
-    max_residual = np.max(residual)
-    min_residual = np.min(residual)
-    if logger is not None:
-        logger.info('Initial residuals between %e and %e',
-                    min_residual, max_residual)
-
     d = compute_array(preconditioner * r, compiler=compiler).copy('F')
     delta_0 = delta_new = np.sum(r * d, axis=0)
+    delta_stop = eps**2 * delta_0
 
-    info['max_residuals'] = max_residuals = [max_residual]
-    info['min_residuals'] = min_residuals = [min_residual]
+    if logger is not None:
+        logger.info('Initial residual %e, stopping at %e', np.sqrt(delta_0), np.sqrt(delta_stop))
+
+    info['residuals'] = residuals = [delta_0]
     info['error'] = None
-
-    eps *= residual
-
-    if np.all(residual < eps):
-        info['iterations'] = 0
-        return (x0, info)
 
     x = x0
     for k in xrange(maxit):
+        logger.info('Iteration %d: Residual %e (terminating at %e)', k,
+                    np.sqrt(delta_new), np.sqrt(delta_stop))
+        if delta_new < delta_stop:
+            info['iterations'] = k
+            return (x, info)            
+        
         q = compute_array(A * d, compiler=compiler)
-        dAd = np.sum(d * q, axis=0)
-        if not np.all(np.isfinite(dAd)):
+        dAd = np.sum(d * q)
+        if not np.isfinite(dAd):
             raise AssertionError("conjugate_gradients: A * d yielded inf values")
-        if np.any(dAd == 0):
+        if dAd == 0:
             raise AssertionError("conjugate_gradients: A is singular")
         alpha = delta_new / dAd
-        x += alpha[None, :] * d
-        r -= alpha[None, :] * q
-        #if k > 0 and k % 50 == 0:
-        #    r_est = r
-        #    r = b - compute_array(A * x)
-        #    logger.info('Recomputing residual')
-        #    #logger.info('Recomputing residual, relative error in estimate: %e',
-        #    #            np.linalg.norm(r - r_est) / np.linalg.norm(r))
-        #    del r_est
-
-        residual = ndnorm(r, axis=0, ord=norm_order)
-        max_residual = np.max(residual)
-        min_residual = np.min(residual)
-        if logger is not None:
-            logger.info('Iteration %d: Residual %e (terminating '
-                        'at %e)', k+1, max_residual, eps)
-        max_residuals.append(max_residual)
-        min_residuals.append(min_residual)
-        
-        if np.all(residual < eps):
-            # Before terminating, make sure to recompute the residual
-            # exactly, to avoid terminating too early due to numerical errors
+        x += alpha * d
+        r -= alpha * q
+        if k > 0 and k % 50 == 0:
             r_est = r
-            r = b - compute_array(A * x, compiler=compiler)
-            #logger.info('Recomputing residual, relative error in estimate: %e',
-            #            np.linalg.norm(r - r_est) / np.linalg.norm(r))
-            residuals = ndnorm(r, axis=0, ord=norm_order)
-            if np.all(residuals < eps):
-                info['iterations'] = k + 1
-                return (x, info)
-            else:
-                logger.info('Avoided early termination due to recomputing residual')
-                
+            r = b - compute_array(A * x)
+            logger.info('Recomputing residual, relative error in estimate: %e',
+                        np.linalg.norm(r - r_est) / np.linalg.norm(r))
+
         s = compute_array(preconditioner * r, compiler=compiler)
         delta_old = delta_new
         delta_new = np.sum(r * s, axis=0)
         beta = delta_new / delta_old
-        d = (s + beta * d).copy('F')
+        d = s + beta * d
+
+        residuals.append(delta_new)
 
     err = ConvergenceError("Did not converge in %d iterations" % maxit)
     if raise_error:
