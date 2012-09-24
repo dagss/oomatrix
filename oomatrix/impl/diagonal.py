@@ -93,6 +93,13 @@ for T in [Strided]:
         np.multiply(a.array[:, None], b.array, out)
         return T(out)
 
+    @computation(Diagonal.h * T, T,
+                 cost=lambda a, b: b.ncols * b.nrows * FLOP)
+    def diagonal_h_times_Dense(a, b):
+        out = np.empty_like(b.array)
+        np.multiply(a.array[:, None], b.array, out)
+        return T(out)        
+
 # Optimized dense-times-diagonal
 for T in [Strided]:
     @computation(T * Diagonal, T,
