@@ -1283,6 +1283,10 @@ class GreedyCompilation():
         result = self.addition_finder.find_cheapest_addition(compiled_children)
         return result
 
+    def visit_conjugate_transpose(self, node):
+        print node
+        1/0
+
     def visit_metadata_leaf(self, node):
         return CompiledNode.create_leaf(node.metadata)
             
@@ -1344,7 +1348,7 @@ class GreedyCompiler(BaseCompiler):
 
     def compile(self, expression):
         compiled_tree, args, index_args = self._compile(expression)
-        return compiled_tree
+        return compiled_tree, args
 
     def compile_as_task(self, expression):
         compiled_tree, args, index_args = self._compile(expression)

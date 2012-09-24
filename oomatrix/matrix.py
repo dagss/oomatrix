@@ -99,8 +99,8 @@ class Matrix(object):
     def compile(self, compiler=None): 
         if compiler is None:
             from .compiler import default_compiler_instance as compiler
-        task, is_transpose = compiler.compile(self._expr)
-        return task, is_transpose
+        task, args = compiler.compile_as_task(self._expr)
+        return task, args
 
     def compute(self, compiler=None, name=None):
         from .task import Scheduler, DefaultExecutor
@@ -119,23 +119,14 @@ class Matrix(object):
         return result
 
     def explain(self, compiler=None):
-        from .task import Scheduler
-        from .formatter import ExplainingExecutor, BasicExpressionFormatter
+        from .scheduler import BasicScheduler
 
-        task_tree, args = self.compile(compiler=compiler)
-        is_transpose = isinstance(task_tree, symbolic.ConjugateTransposeNode)
-        if is_transpose:
-            task_tree, = task_tree.children
-        task = task_tree.as_task()
-        stream = StringIO()
-        name_to_matrices = {}
-        expression_formatter = BasicExpressionFormatter(name_to_matrices)
-        stream.write(expression_formatter.format(self._expr))
-        stream.write('\n')
-        executor = ExplainingExecutor(stream, expression_formatter)
-        Scheduler(task, executor).execute()
+        if compiler is None:
+            from .compiler import default_compiler_instance as compiler
 
-        return stream.getvalue()
+        compiled_tree, args = compiler.compile(self._expr)
+        program = BasicScheduler().schedule(compiled_tree, args)
+        return repr(program)
 
     def __getitem__(self, index):
         if self.is_expression():

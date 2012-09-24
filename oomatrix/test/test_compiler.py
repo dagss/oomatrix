@@ -11,7 +11,7 @@ from ..compiler import ShortestPathCompiler, CompiledNode
 from .. import compiler, formatter, metadata, transforms, task, cost_value
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
-                            create_mock_matrices, task_node_to_str, task_to_str)
+                            create_mock_matrices, task_node_to_str, task_to_str, mock_meta)
 
 import time
 
@@ -57,9 +57,6 @@ def assert_compile(expected_task_graph, matrix):
 #
 # Test the addition compilation utilities
 #
-def mock_meta(kind):
-    return metadata.MatrixMetadata(kind, (3,), (3,), np.double)
-
 def mock_arg(kind):
     return task.Argument(0, mock_meta(kind))
 
