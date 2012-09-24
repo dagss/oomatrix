@@ -112,10 +112,10 @@ class Matrix(object):
         task = task_tree.as_task()
         matrix_impl_args = [arg.matrix_impl for arg in args]
         matrix_impl = Scheduler(task, DefaultExecutor(matrix_impl_args)).execute()
-        expr = symbolic.LeafNode(None, matrix_impl)
+        expr = symbolic.LeafNode(name, matrix_impl)
         if is_transpose:
             expr = symbolic.conjugate_transpose(expr)
-        result = Matrix(expr, name=name)
+        result = Matrix(expr)
         return result
 
     def explain(self, compiler=None):
