@@ -1303,7 +1303,13 @@ class GreedyCompilation():
         computation, = kind.universe.get_computations(kind.f.get_key())[kind]
         cost = computation.get_cost([compiled_child.metadata]).weigh(self.cost_map)
         return CompiledNode(computation, cost, [compiled_child], compiled_child.metadata)
-    
+
+    def visit_inverse(self, node):
+        compiled_child = self.cached_visit(node.child)
+        kind = compiled_child.metadata.kind
+        computation, = kind.universe.get_computations(kind.i.get_key())[kind]
+        cost = computation.get_cost([compiled_child.metadata]).weigh(self.cost_map)
+        return CompiledNode(computation, cost, [compiled_child], compiled_child.metadata)
 
 def find_cost(computation, meta_args):
     assert all(isinstance(x, MatrixMetadata) for x in meta_args)
