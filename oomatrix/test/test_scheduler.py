@@ -28,13 +28,13 @@ def test_basic():
     assert repr(s.schedule(root, [a, a, a, a])) == dedent('''\
         <oomatrix.Program:[
           T0 = adder(a, a) # cost=1.0
-          T1 = multiplier(T0, T0) # cost=1.0
+          $result = multiplier(T0, T0) # cost=1.0
         ]>''')
     assert repr(s.schedule(root, [a, a, a, a2])) == dedent('''\
         <oomatrix.Program:[
           T0 = adder(a, a) # cost=1.0
           T1 = adder(a, a_1) # cost=1.0
-          T2 = multiplier(T0, T1) # cost=1.0
+          $result = multiplier(T0, T1) # cost=1.0
         ]>''')
     
     

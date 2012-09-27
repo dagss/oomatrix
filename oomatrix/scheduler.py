@@ -14,6 +14,10 @@ class ComputeStatement(object):
             result_name, self.computation.name,
             ', '.join(arg_names), self.cost)
 
+    def __repr__(self):
+        return '<oomatrix.ComputeStatement %s %s %s>' % (repr(self.result), self.computation,
+                                                         self.args)
+
 class Program(object):
     """
     Mainly a list of ComputeStatement that we provide a nicer repr for.
@@ -24,34 +28,28 @@ class Program(object):
         self.name_to_matrix = dict((name, m) for m, name in matrix_names.iteritems())
 
     def get_matrix_name(self, matrix):
-        result = self.matrix_to_name.get(matrix, None)
-        if result is None:
-            result = self.matrix_to_name[matrix] = self.invent_matrix_name(matrix)
-            self.name_to_matrix[result] = matrix
-        return result
-
-    def invent_matrix_name(self, matrix):
         if isinstance(matrix, str):
-            # Temporaries identified by string -- TBD, hacky? 
-            return matrix
-        elif matrix.name is not None:
-            prefix = name = matrix.name
-            i = 1
-            while True:
-                existing_matrix = self.name_to_matrix.get(name, None)
-                if existing_matrix is None or matrix is existing_matrix:
-                    break
-                # Another matrix previously encountered shares the same name!,
-                # so add suffix
-                name = '%s_%d' % (prefix, i)
-                i += 1
-            return name
+            return matrix # temporary
         else:
-            1/0
-
+            # input argument
+            try:
+                return self.matrix_to_name[matrix]
+            except IndexError:
+                raise RuntimeError('matrix name unknown to Program')
 
     def __repr__(self):
         return '<oomatrix.Program:[\n  %s\n]>' % '\n  '.join(x.format(self) for x in self.statements)
+
+    def execute(self):
+        variables = dict(self.name_to_matrix)
+        for stat in self.statements:
+            fetched_args = [variables[key] for key in stat.args]
+            variables[stat.result] = stat.computation.compute(fetched_args)
+            #print stat.result, stat.computation.name, fetched_args
+        #print '==========='
+        #print
+        result = variables['$result']
+        return result
 
 class BasicScheduler(object):
     def __init__(self):
@@ -76,9 +74,13 @@ class BasicScheduler(object):
         # Resolve matrix names so that they are unique
         matrix_to_name = {}
         name_to_matrix = {}
-        cleaned_args = []
+        arg_names = []
+        unnamed_input_count = 0
         for arg in args:
             name, matrix_impl = self._parse_arg(arg)
+            if name is None:
+                name = 'input_%d' % unnamed_input_count
+                unnamed_input_count += 1
             prefix = name
             i = 1
             while True:
@@ -91,18 +93,19 @@ class BasicScheduler(object):
                 i += 1
             matrix_to_name[matrix_impl] = name
             name_to_matrix[name] = matrix_impl
-            cleaned_args.append(matrix_impl)
-        return cleaned_args, matrix_to_name
+            arg_names.append(name)
+        return arg_names, matrix_to_name
         
     def schedule(self, cnode, args):
         program = []
         pool = {}
         names = {}
-        cleaned_args, matrix_to_name = self._parse_args(args)        
-        ret_var = self._schedule(cnode, tuple(cleaned_args), program, pool)
+        arg_names, matrix_to_name = self._parse_args(args)        
+        ret_var = self._schedule(cnode, tuple(arg_names), program, pool, '$result')
+        assert ret_var == '$result'
         return Program(program, matrix_to_name)
 
-    def _schedule(self, cnode, args, program, pool):
+    def _schedule(self, cnode, args, program, pool, result_variable):
         result = pool.get((cnode, args), None)
         if result is not None:
             return result
@@ -115,13 +118,13 @@ class BasicScheduler(object):
         child_results = []
         for child, shuffle in zip(cnode.children, cnode.shuffle):
             child_args = tuple(args[i] for i in shuffle)
-            child_result = self._schedule(child, child_args, program, pool)
+            child_result = self._schedule(child, child_args, program, pool, None)
             child_results.append(child_result)
 
-        result_name = 'T%d' % len(program)
-        statement = ComputeStatement(result_name, cnode.computation, child_results,
+        result_variable = 'T%d' % len(program) if result_variable is None else result_variable
+        statement = ComputeStatement(result_variable, cnode.computation, child_results,
                                      cnode.weighted_cost)
         program.append(statement)
-        pool[(cnode, args)] = result_name
-        return result_name
+        pool[(cnode, args)] = result_variable
+        return result_variable
         
