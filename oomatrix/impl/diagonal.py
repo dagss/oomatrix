@@ -23,14 +23,14 @@ class Diagonal(MatrixImpl):
     def as_dtype(self, dtype):
         return Diagonal(self.array.astype(dtype))
 
-    @conversion(Strided,
-                cost=lambda node: node.ncols * node.nrows * MEMOP)
-    def diagonal_to_dense(D):
-        n = D.ncols
-        i = np.arange(n)
-        out = np.zeros((n, n), dtype=D.dtype)
-        out[i, i] = D.array
-        return Strided(out)
+    ## @conversion(Strided,
+    ##             cost=lambda node: node.ncols * node.nrows * MEMOP)
+    ## def diagonal_to_dense(D):
+    ##     n = D.ncols
+    ##     i = np.arange(n)
+    ##     out = np.zeros((n, n), dtype=D.dtype)
+    ##     out[i, i] = D.array
+    ##     return Strided(out)
 
     def get_element(self, i, j):
         if i != j:
@@ -75,14 +75,14 @@ def diagonal_plus_diagonal(a, b):
 def diagonal_times_diagonal(a, b):
     return Diagonal(a.array * b.array)
 
-for T in [Strided]:
-    @computation(Diagonal + T, T,
-                 cost=lambda a, b: a.ncols * FLOP + a.ncols * a.nrows * MEMOP)
-    def diagonal_plus_dense(diagonal, dense):
-        array = dense.array.copy('F' if T is ColumnMajor else 'C')
-        i = np.arange(array.shape[0])
-        array[i, i] = diagonal.array
-        return T(array)
+## for T in [Strided]:
+##     @computation(Diagonal + T, T,
+##                  cost=lambda a, b: a.ncols * FLOP + a.ncols * a.nrows * MEMOP)
+##     def diagonal_plus_dense(diagonal, dense):
+##         array = dense.array.copy('F' if T is ColumnMajor else 'C')
+##         i = np.arange(array.shape[0])
+##         array[i, i] = diagonal.array
+##         return T(array)
 
 # Optimized diagonal-times-dense
 for T in [Strided]:
@@ -97,7 +97,7 @@ for T in [Strided]:
                  cost=lambda a, b: b.ncols * b.nrows * FLOP)
     def diagonal_h_times_Dense(a, b):
         out = np.empty_like(b.array)
-        np.multiply(a.array[:, None], b.array, out)
+        np.multiply(a.array[:, None].conjugate(), b.array, out)
         return T(out)        
 
 # Optimized dense-times-diagonal
