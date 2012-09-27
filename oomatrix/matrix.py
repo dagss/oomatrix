@@ -96,27 +96,26 @@ class Matrix(object):
             lines.append('[%s]' % s)
         return '\n'.join(lines)
 
-    def compile(self, compiler=None): 
+    def compile(self, compiler=None):
+        raise NotImplementedError()
         if compiler is None:
             from .compiler import default_compiler_instance as compiler
         task, args = compiler.compile_as_task(self._expr)
         return task, args
 
     def compute(self, compiler=None, name=None):
-        from .task import Scheduler, DefaultExecutor
+        if isinstance(self._expr, symbolic.LeafNode):
+            return self
 
-        task_tree, args = self.compile(compiler=compiler)
-        is_transpose = isinstance(task_tree, symbolic.ConjugateTransposeNode)
-        if is_transpose:
-            task_tree, = task_tree.children
-        task = task_tree.as_task()
-        matrix_impl_args = [arg.matrix_impl for arg in args]
-        matrix_impl = Scheduler(task, DefaultExecutor(matrix_impl_args)).execute()
-        expr = symbolic.LeafNode(name, matrix_impl)
-        if is_transpose:
-            expr = symbolic.conjugate_transpose(expr)
-        result = Matrix(expr)
-        return result
+        from .scheduler import BasicScheduler
+        if compiler is None:
+            from .compiler import default_compiler_instance as compiler
+        
+        compiled_tree, args = compiler.compile(self._expr)
+        program = BasicScheduler().schedule(compiled_tree, args)
+        result = program.execute()
+        result_matrix = Matrix(result, name=name)
+        return result_matrix
 
     def explain(self, compiler=None):
         from .scheduler import BasicScheduler
@@ -222,8 +221,10 @@ class Matrix(object):
             # TODO implement some conversion framework for registering vector types
             raise TypeError('Type not recognized: %s' % type(other))
         if self.ncols != other.nrows:
-            raise ValueError('Matrices do not conform: ...-by-%d times %d-by-...' % (
-                self.ncols, other.nrows))
+            self_name = "'%s'" % self._expr.name if self._expr.name else '<?>'
+            other_name = "'%s'" % self._expr.name if self._expr.name else '<?>'
+            raise ValueError('Matrices %s and %s do not conform: ...-by-%d times %d-by-...' % (
+                self_name, other_name, self.ncols, other.nrows))
         return Matrix(symbolic.multiply([self._expr, other._expr]))
 
     def __rmul__(self, other):
