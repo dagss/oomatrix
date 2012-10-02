@@ -222,7 +222,7 @@ class Matrix(object):
             raise TypeError('Type not recognized: %s' % type(other))
         if self.ncols != other.nrows:
             self_name = "'%s'" % self._expr.name if self._expr.name else '<?>'
-            other_name = "'%s'" % self._expr.name if self._expr.name else '<?>'
+            other_name = "'%s'" % other._expr.name if other._expr.name else '<?>'
             raise ValueError('Matrices %s and %s do not conform: ...-by-%d times %d-by-...' % (
                 self_name, other_name, self.ncols, other.nrows))
         return Matrix(symbolic.multiply([self._expr, other._expr]))
