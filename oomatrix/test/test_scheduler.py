@@ -36,5 +36,14 @@ def test_basic():
           T1 = adder(a, a_1) # cost=1.0
           $result = multiplier(T0, T1) # cost=1.0
         ]>''')
-    
-    
+
+def test_unnamed_arg():
+    anonymous = matrix.Matrix(A(4, 3, 3), name=None)
+    leaf = mock_leaf()
+    add_cnode = mock_compiled_node("adder", [leaf, leaf])
+    s = scheduler.BasicScheduler()
+    got = s.schedule(add_cnode, [anonymous, anonymous])
+    assert repr(got) == dedent('''\
+        <oomatrix.Program:[
+          $result = adder(input_0, input_0) # cost=1.0
+        ]>''')    

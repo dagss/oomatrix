@@ -78,21 +78,24 @@ class BasicScheduler(object):
         unnamed_input_count = 0
         for arg in args:
             name, matrix_impl = self._parse_arg(arg)
-            if name is None:
-                name = 'input_%d' % unnamed_input_count
-                unnamed_input_count += 1
-            prefix = name
-            i = 1
-            while True:
-                existing_matrix = name_to_matrix.get(name, None)
-                if existing_matrix is None or matrix_impl is existing_matrix:
-                    break
-                # Another matrix previously encountered shares the same name!,
-                # so add suffix
-                name = '%s_%d' % (prefix, i)
-                i += 1
-            matrix_to_name[matrix_impl] = name
-            name_to_matrix[name] = matrix_impl
+            if matrix_impl in matrix_to_name:
+                name = matrix_to_name[matrix_impl]
+            else:
+                if name is None:
+                    name = 'input_%d' % unnamed_input_count
+                    unnamed_input_count += 1
+                prefix = name
+                i = 1
+                while True:
+                    existing_matrix = name_to_matrix.get(name, None)
+                    if existing_matrix is None or matrix_impl is existing_matrix:
+                        break
+                    # Another matrix previously encountered shares the same name!,
+                    # so add suffix
+                    name = '%s_%d' % (prefix, i)
+                    i += 1
+                matrix_to_name[matrix_impl] = name
+                name_to_matrix[name] = matrix_impl
             arg_names.append(name)
         return arg_names, matrix_to_name
         
