@@ -20,17 +20,20 @@ def zero_matrix(n):
 
 def block_diagonal_matrix(matrices):
     matrices = list(matrices)
-    i = 0
-    n = sum(M.ncols for M in matrices)
+    i = j = 0
+    n = sum(M.nrows for M in matrices)
+    m = sum(M.ncols for M in matrices)
     R = 0 # result matrix
     for idx, M in enumerate(matrices):
-        assert M.ncols == M.nrows
-        # Make projection P so that P.h * M * P puts M on the right place
+        # Make projection P, Pp so that P.h * M * Pp puts M on the right place
         # on the diagonal of R
-        P = Matrix(RangeSelection(M.nrows, n, (0, M.nrows), (i, i + M.ncols)),
+        Pp = Matrix(RangeSelection(M.ncols, m, (0, M.ncols), (i, i + M.ncols)),
+                    'Pp%d' % idx)
+        P = Matrix(RangeSelection(M.nrows, n, (0, M.nrows), (j, j + M.nrows)),
                    'P%d' % idx)
-        R += P.h * M * P
+        R += P.h * M * Pp
         i += M.ncols
+        j += M.nrows
     return R
 
 def stack_matrices_horizontally(matrices):
