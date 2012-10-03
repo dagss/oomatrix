@@ -51,3 +51,30 @@ def stack_matrices_horizontally(matrices):
         i += M.ncols
     return R
 
+def block_matrix(matrices):
+    n = sum(M.nrows for M in matrices[:, 0])
+    m = sum(M.ncols for M in matrices[0, :])
+
+    i = 0
+    P_list = []
+    for im, M in enumerate(matrices[:, 0]):
+        P_list.append(Matrix(RangeSelection(M.nrows, n, (0, M.nrows), (i, i + M.nrows)),
+                             'P_%d' % im))
+        i += M.nrows
+
+    i = 0
+    Pp_list = []
+    for im, M in enumerate(matrices[0, :]):
+        Pp_list.append(Matrix(RangeSelection(M.ncols, m, (0, M.ncols), (i, i + M.ncols)),
+                              'Pp_%d' % im))
+        i += M.ncols
+
+    
+    R = 0 # result matrix
+    for im in range(matrices.shape[0]):
+        for jm in range(matrices.shape[1]):
+            # Make projection P, Pp so that P.h * M * Pp puts M on the right place
+            # on the diagonal of R
+            R += P_list[im].h * matrices[im, jm] * Pp_list[jm]
+    return R
+    

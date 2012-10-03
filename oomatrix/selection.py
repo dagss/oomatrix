@@ -15,6 +15,8 @@ class RangeSelection(Selection):
         cols_start, cols_stop = self.cols_range = cols_range
         if rows_stop - rows_start != cols_stop - cols_start:
             raise ValueError()
+        if rows_stop > self.nrows or cols_stop > self.ncols:
+            raise ValueError()
 
     def get_element(self, i, j):
         return (1 if (self.rows_range[0] <= i < self.rows_range[1] and
