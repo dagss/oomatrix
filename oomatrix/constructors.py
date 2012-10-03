@@ -6,6 +6,9 @@ from .selection import RangeSelection
 # Misc factories. Many of these should be implemented as separate types
 # rather than using diagonal matrices
 
+def as_matrix(array, name=None):
+    return Matrix(array, name=name)
+
 def diagonal_matrix(array, name=None):
     return Matrix(array, name=name, diagonal=True)
 
