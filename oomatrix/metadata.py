@@ -1,6 +1,7 @@
 from functools import total_ordering
 import numpy as np
-
+import hashlib
+import struct
 
 @total_ordering
 class MatrixMetadata(object):
@@ -13,6 +14,19 @@ class MatrixMetadata(object):
         self.dtype = dtype
         self.nrows = np.prod(rows_shape)
         self.ncols = np.prod(cols_shape)
+        self._make_hash()
+
+    def _make_hash(self):
+        pack = struct.pack
+        h = hashlib.sha512()
+        h.update(pack('Q', id(self.kind)))
+        h.update(str(self.rows_shape))
+        h.update(str(self.cols_shape))
+        h.update(str(self.dtype))
+        self._shash = h.digest()
+
+    def secure_hash(self):
+        return self._shash
 
     def __repr__(self):
         return '<meta: %s %r-by-%r %s>' % (self.kind,

@@ -57,6 +57,8 @@ import os
 import sys
 import numpy as np
 from itertools import izip, chain, combinations, permutations
+import hashlib
+import struct
 
 do_trace = bool(int(os.environ.get("T", '0')))
 
@@ -103,10 +105,13 @@ class CompiledNode(object):
     """
     Objects of this class make up the final "program tree".
 
-    It is immutable and compares by value (TBD).
+    It is immutable and compares by value.
     
     `children` are other CompiledNode instances whose output should
     be fed into `computation`.
+
+    For comparison and hashing, we use a sha512 and trust that it is
+    going to be unique.
     """
     def __init__(self, computation, weighted_cost, children, metadata, shuffle=None,
                  flat_shuffle=None):
@@ -146,24 +151,32 @@ class CompiledNode(object):
             self.arg_count = max(flat_shuffle) + 1
         # total_cost is computed
         self.total_cost = self.weighted_cost + sum(child.total_cost for child in self.children)
+        self._make_hash()
+
+    def secure_hash(self):
+        return self._shash
+
+    def _make_hash(self):
+        h = hashlib.sha512()
+        h.update(struct.pack('Qd', id(self.computation), self.weighted_cost))
+        h.update(str(self.shuffle))
+        h.update(self.metadata.secure_hash())
+        # Finally add hashes of children
+        h.update(struct.pack('Q', len(self.children)))
+        for child in self.children:
+           h.update(child._shash)
+        self._shash = h.digest()
 
     def __eq__(self, other):
         # Note that this definition is recursive, as the comparison of children will
         # end up doing an element-wise comparison
         if type(other) is not CompiledNode:
             return False
-        return (self.computation == other.computation and
-                self.weighted_cost == other.weighted_cost and
-                self.metadata == other.metadata and
-                self.children == other.children and
-                self.shuffle == other.shuffle)
+        else:
+            return self._shash == other._shash
 
     def __hash__(self):
-        return hash((id(self.computation),
-                     self.weighted_cost,
-                     self.metadata,
-                     self.children,
-                     self.shuffle))
+        return hash(self._shash)
 
     def __ne__(self, other):
         return not self == other
