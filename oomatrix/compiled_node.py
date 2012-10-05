@@ -2,6 +2,7 @@ from __future__ import division
 
 import hashlib
 import struct
+from . import utils
 
 class CompiledNode(object):
     """
@@ -175,21 +176,45 @@ class CompiledNode(object):
             new_node = node_factory(self, new_shuffle, new_children)
             return new_node
             
-    def substitute_linked(self, indices, arg):
-        return  self._substitute_linked(0, indices, arg)
+    def substitute_linked(self, substitute_at, substitution_cnode,
+                          substitution_indices, nonsubstitution_indices=None):
+        substitution_indices = tuple(substitution_indices)
+        assert len(substitution_indices) == substitution_cnode.arg_count
+        new_arg_count = self.arg_count - len(substitute_at) + substitution_cnode.arg_count
+        if nonsubstitution_indices is None:
+            nonsubstitution_indices = utils.complement_range(substitution_indices, new_arg_count)
+        index_remapping = [None] * self.arg_count
+        j = 0
+        for i in range(self.arg_count):
+            if i in substitute_at:
+                index_remapping[i] = substitution_indices
+            else:
+                index_remapping[i] = (nonsubstitution_indices[j],)
+                j += 1
+                
+        return self._substitute_linked(substitute_at, substitution_cnode, index_remapping)
 
-    def _substitute_linked(self, offset, indices, arg):
+    def _substitute_linked(self, indices, substitute_at, substitute_cnode, index_remapping):
         if self.is_leaf:
-            r = arg if offset in indices else self
-            assert r.metadata == self.metadata
-            return r
+            if substitute_at
+            index, = indices
+            if index in substitute_at:
+                return substitute_cnode
+            else:
+                return self
         else:
             new_children = []
-            for child, child_shuffle in zip(self.children, self.shuffle):
-                new_child = child._substitute_linked(offset, indices, arg)
+            new_shuffle = []
+            for child, shuf_part in zip(self.children, self.shuffle):
+                new_indices = [indices[i] for i in shuf_part]
+                new_child = child._substitute_linked(new_indices, substitute_at, substitute_cnode,
+                                                     substitution_indices, index_remapping)
                 new_children.append(new_child)
-                offset += child.arg_count # note: of the old child
+
+                new_shuf_part = tuple(sum((index_remapping[i] for i in new_indices), ()))
+                new_shuffle.append(new_shuf_part)
+                
             new_node = CompiledNode(self.computation, self.weighted_cost, new_children,
-                                    self.metadata)
+                                    self.metadata, shuffle=new_shuffle)
             return new_node
 

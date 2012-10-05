@@ -11,7 +11,7 @@ from ..compiled_node import CompiledNode
 from .. import compiler, formatter, metadata, transforms, task, cost_value
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
-                            create_mock_matrices, task_node_to_str, task_to_str, mock_meta)
+                            create_mock_matrices, mock_meta)
 
 import time
 
@@ -68,9 +68,8 @@ def test_compiled_node_substitute():
     # (a * c) * (b + b); i.e. reusing (a * c)
     A_times_B_node = CompiledNode(AtimesB, 1, [A_leaf, B_leaf], mock_meta(A))
     A_times_C_node = CompiledNode(AtimesC, 1, [A_leaf, C_leaf], mock_meta(A))
-    root_a = CompiledNode(AplusA, 2, [A_times_B_node, A_times_B_node], mock_meta(A),
-                          shuffle=((0, 1), (0, 2)))
-    root_b = root_a.substitute({0: A_times_C_node})
+    root_a = CompiledNode(AplusA, 2, [A_times_B_node, A_times_B_node], mock_meta(A))
+    root_b = root_a.substitute_linked([0, 2], A_times_C_node, [0, 1])
     A_times_C_times_B_node = CompiledNode(AtimesB, 1, [A_times_C_node, B_leaf], mock_meta(A))
     e = CompiledNode(AplusA, 2, [A_times_C_times_B_node, A_times_C_times_B_node],
                                   mock_meta(A), shuffle=((0, 1, 2), (0, 1, 3)))

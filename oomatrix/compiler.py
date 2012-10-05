@@ -531,15 +531,18 @@ class GreedyCompilation():
 
         compiled_terms = []
         shuffle = []
-        substitution_indices = []
+        substitute_at = []
         arg_start = 0 if direction == 'left' else distributee.leaf_count
         subst_index = 0 if direction == 'right' else distributor.leaf_count
 
         new_term_leaf_counts = [term.leaf_count + 1 for term in add_snode.children]
         if direction == 'right':
-            substitution_indices = list(utils.cumsum([0] + new_term_leaf_counts[:-1]))
+            substitute_at = list(utils.cumsum([0] + new_term_leaf_counts[:-1]))
+            substitution_indices = range(distributee.leaf_count)
         else:
-            substitution_indices = [i - 1 for i in utils.cumsum(new_term_leaf_counts)]
+            substitute_at = [i - 1 for i in utils.cumsum(new_term_leaf_counts)]
+            substitution_indices = range(distributor.leaf_count,
+                                         distributor.leaf_count + distributee.leaf_count)
 
         for term in add_snode.children:
             arg_stop = arg_start + term.leaf_count
@@ -560,13 +563,30 @@ class GreedyCompilation():
             arg_start = arg_stop
 
         # Find the addition operation for adding together the compiled terms
+        
         new_add_snode = symbolic.add([symbolic.MatrixMetadataLeaf(term_cnode.metadata)
                                       for term_cnode in compiled_terms])
         new_add_cnode = self.cached_visit(new_add_snode)
-        new_add_cnode = new_add_cnode.substitute(compiled_terms)
 
-        r = new_add_cnode.substitute(dict((i, distributee_cnode) for i in substitution_indices),
-                                     flat_shuffle=shuffle)
+        print
+        print '====='
+
+        print 'new_add_cnode step 1', new_add_cnode
+        print 'compiled_terms', compiled_terms
+        new_add_cnode = new_add_cnode.substitute(compiled_terms)
+        print 'new_add_cnode step 2', new_add_cnode
+
+        #print distributor
+        #print distributee_cnode
+        #print 'new_add_cnode ', new_add_cnode
+        print '@', substitute_at
+        print 'I', substitution_indices
+        #print 'shuffle',shuffle
+
+        substitution = dict((i, distributee_cnode) for i in substitute_at)
+        print 'substitution', substitution, shuffle
+        r = new_add_cnode.substitute_linked(substitute_at, distributee_cnode, substitution_indices)
+        print 'new_add_cnode step 3', r
         return r
 
     def visit_multiply(self, node):        
@@ -664,7 +684,11 @@ class GreedyCompilation():
             return None
         # For addition, we do consider all possible permutations
         # (we want, e.g., CSC + Diagonal + CSR + Dense to work the right way)
+        #print
+        #print '===='
+        #print node
         result = self.addition_finder.find_cheapest_addition(compiled_children)
+        #print result
         return result
 
     def visit_conjugate_transpose(self, node):

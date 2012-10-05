@@ -17,3 +17,8 @@ def cumsum(it):
     for x in it:
         total += x
         yield total
+
+def complement_range(items, n):
+    return [i for i in range(n) if i not in items]
+            
+

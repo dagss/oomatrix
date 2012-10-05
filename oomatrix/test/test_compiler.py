@@ -173,6 +173,8 @@ def test_add():
     assert_compile('T0 = add_A_B(a, b)', a + b)
     assert_compile(['T1 = add_B_B(b, b); T0 = add_A_B(a, T1)',
                     'T1 = add_A_B(a, b); T0 = add_A_B(T1, b)'], a + b + b)
+    assert_compile(['T2 = add_A_A(a, a); T1 = add_A_A(a, T2); T0 = add_A_A(a, T1)'], a + a + a + a)
+
 
 def test_add_conversion():
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
@@ -275,7 +277,18 @@ def test_distributive_left():
     T3 = multiply_B_C(b, T2);
     T0 = add_A_A(T1, T3)
     ''', (a + b) * c * d)
+
+def test_distributive_nested():
+    ctx, (A, a), (B, b) = create_mock_matrices('A B')
+    ctx.define(A * B, B)
+    a0, a1, a2, a3, a4, a5, a6, a7 = [Matrix(A(i, 3, 3), name='a%d' % i) for i in range(8)]
     
+    # This one produced a problem with shuffles
+    assert_compile('T1 = multiply_A_B(a0, b); T4 = multiply_A_B(a4, b); '
+                   'T3 = multiply_A_B(a3, T4); T6 = multiply_A_B(a2, T4); '
+                   'T5 = multiply_A_B(a1, T6); T2 = add_B_B(T3, T5); '
+                   'T0 = add_B_B(T1, T2)', (a0 + (a1 * a2 + a3) * a4) * b)
+
 
 
 
