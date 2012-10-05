@@ -120,24 +120,6 @@ class CompiledNode(object):
         else:
             return sum([child.leaves() for child in self.children], [])
 
-    def convert_to_task_graph(self, args):
-        # Do a substitution, but use a "cache" dictionary `d` in the
-        # node factory so that tasks doing exactly the same thing
-        # results in the same object (by id()).
-        d = {}
-        def node_factory(node, new_children):
-            new_children = tuple(new_children)
-            task = d.get((node, new_children), None)
-            if task is None:
-                meta_args = [child.metadata for child in new_children]
-                unweighted_cost = node.computation.get_cost(meta_args)
-                task = Task(node.computation, unweighted_cost, new_children,
-                            node.metadata, None)
-                d[(node, new_children)] = task
-            return task
-        result = self.substitute(args, node_factory=node_factory)
-        return result
-
     def substitute(self, substitutions, shuffle=None, flat_shuffle=None, node_factory=None):
         """Substitute each leaf node of the tree rooted at `self` with the
         CompiledNodes given in substitutions, and return the resulting tree.

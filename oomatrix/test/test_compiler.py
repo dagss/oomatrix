@@ -10,7 +10,7 @@ from ..computation import (Computation, computation, conversion, ImpossibleOpera
 from .. import compiler, formatter, metadata, transforms, task, cost_value
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
-                            create_mock_matrices, task_node_to_str, task_to_str, mock_meta)
+                            create_mock_matrices, cnode_to_str, mock_meta)
 
 import time
 
@@ -457,5 +457,5 @@ def benchmark_distributive():
     t = time.clock()
     print 'Time taken %s, stats %s' % (t - t0, c.stats)
     print 'Cost:', tree.as_task().get_total_cost()
-    print 'Solution:\n   ', task_node_to_str(tree, args, sep='\n    ')
+    print 'Solution:\n   ', cnode_to_str(tree, args, sep='\n    ')
 

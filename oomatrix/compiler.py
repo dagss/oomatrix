@@ -731,11 +731,5 @@ class GreedyCompiler(BaseCompiler):
         compiled_tree, args, index_args = self._compile(expression)
         return compiled_tree, args
 
-    def compile_as_task(self, expression):
-        compiled_tree, args, index_args = self._compile(expression)
-        result = compiled_tree.convert_to_task_graph([x.as_task() for x in index_args])
-        result = symbolic.TaskLeaf(result, [])
-        return result, args
-
 default_compiler_instance = GreedyCompiler()
 

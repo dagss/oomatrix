@@ -4,7 +4,7 @@ import numpy as np
 from ..cost_value import FLOP
 from ..kind import MatrixImpl, MatrixKind
 from ..computation import computation, conversion
-from .. import formatter, Matrix, symbolic, compiler, kind, metadata
+from .. import formatter, Matrix, symbolic, compiler, kind, metadata, scheduler
 from ..task import Task, Argument
 from ..symbolic import MatrixMetadataLeaf
 
@@ -120,46 +120,38 @@ def create_mock_matrices(matrix_names, addition_costs=None):
 def remove_blanks(x):
     return re.sub('\s', '', x)
 
-def serialize_task(lines, task, args, task_names):
-    if isinstance(task, Argument):
-        leaf_matrix = args[task.argument_index]
-        return leaf_matrix.name
-    elif task in task_names:
-        return task_names[task]
+def serialize_cnode(lines, cnode, args, task_names):
+    if cnode.is_leaf:
+        assert len(args) == 1
+        return args[0].name
+    elif (cnode, args) in task_names:
+        return task_names[cnode, args]
     else:
-        # must 'compute' task
+        arg_names = []
         task_name = 'T%d' % len(task_names)
-        task_names[task] = task_name
-        arg_names = [serialize_task(lines, arg, args, task_names)
-                     for arg in task.args]
-        expr_str = '%s(%s)' % (task.computation.name, ', '.join(arg_names))
+        task_names[cnode, args] = task_name
+        for child, shuf in zip(cnode.children, cnode.shuffle):
+            child_args = tuple(args[i] for i in shuf)
+            r = serialize_cnode(lines, child, child_args, task_names)
+            arg_names.append(r)
+        expr_str = '%s(%s)' % (cnode.computation.name, ', '.join(arg_names))
         lines.append('%s = %s' % (task_name, expr_str))
         return task_name
 
 def check_compilation(compiler_obj, expected_task_graphs, matrix):
-    tree, args = compiler_obj.compile_as_task(matrix._expr)
-    task_str = task_node_to_str(tree, args)
+    tree, args = compiler_obj.compile(matrix._expr)
+    args = tuple(args)
+    task_str = cnode_to_str(tree, args)
     if isinstance(expected_task_graphs, str):
         expected_task_graphs = [expected_task_graphs]
     expected_task_graphs = [remove_blanks(x) for x in expected_task_graphs]
     assert remove_blanks(task_str) in expected_task_graphs
 
-def task_node_to_str(tree, args, sep='; '):
-    is_transposed = isinstance(tree, symbolic.ConjugateTransposeNode)
-    if is_transposed:
-        tree, = tree.children
-    assert isinstance(tree, symbolic.TaskLeaf)
-    task = tree.task
-    task_str = task_to_str(task, args, sep)
-    if is_transposed:
-        task_str = 'transposed: %s' % task_str
-    return task_str
-
-def task_to_str(task, args=None, sep='; '):
+def cnode_to_str(tree, args, sep='; '):
     task_lines = []
-    serialize_task(task_lines, task, args, {})
-    task_str = sep.join(task_lines)
-    return task_str
+    serialize_cnode(task_lines, tree, args, {})
+    s = sep.join(task_lines)
+    return s
 
 def mock_meta(kind):
     return metadata.MatrixMetadata(kind, (3,), (3,), np.double)
