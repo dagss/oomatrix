@@ -6,12 +6,26 @@ dense matrix multiply may be
 
 """
 
+import hashlib
+import struct
+
 class CostValue(object):
     # invariant: entries does never contain items that are exactly 0;
     # an empty entries means a (unitless) zero value
     
     def __init__(self, **entries):
         self.entries = entries
+        self._shash = None
+
+    def secure_hash(self):
+        if self._shash is None:
+            h = hashlib.sha512()
+            h.update(struct.pack('Q', len(self.entries)))
+            for unit, value in sorted(self.entries.items()):
+                h.update(unit)
+                h.update(struct.pack('d', float(value)))
+            self._shash = h.digest()
+        return self._shash
 
     def __eq__(self, other):
         if not isinstance(other, CostValue):
@@ -85,7 +99,7 @@ class CostValue(object):
             return '0'
         lst = list(self.entries.items())
         lst.sort()
-        s = ' + '.join(['%.2e %s' % (value, unit) for unit, value in lst])
+        s = ' + '.join(['%.0e %s' % (value, unit) for unit, value in lst])
         return s
         
 FLOP = CostValue(FLOP=1)

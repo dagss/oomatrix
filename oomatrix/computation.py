@@ -1,7 +1,7 @@
 import types
 
 from .cost_value import CostValue, FLOP, MEM, MEMOP, UGLY, INVOCATION, zero_cost
-from . import utils
+from . import utils, kind, metadata
 
 class ImpossibleOperationError(NotImplementedError):
     pass
@@ -54,6 +54,7 @@ class Computation(object):
     def __init__(self, callable, match_expression, target_kind,
                  name=None, cost_callable=None):
         permutation = FindFlattenedPermutationTransform().transform(match_expression)
+        self.arg_count = len(permutation)
         self.call_permutation = utils.invert_permutation(permutation)        
         self.callable = callable
         self.match_expression = match_expression

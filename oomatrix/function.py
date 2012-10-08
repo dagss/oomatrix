@@ -22,37 +22,68 @@ class Function(object):
     Functions are immutable and compare by value; for comparison and
     hashing, we use a sha512 and trust that it is going to be unique.
 
+    TODO: Figure out relationship between Computation and Function (likely
+    fuse them; main difference is that Computation specifies kind while Function
+    specifies metadata). For now, there's the create_from_computation constructor
+    to wrap a Computation in a Function.
+
     The cost is the total cost of the expression and all sub-expressions
     as a scalar (i.e., weighted).
     """
 
-    def __init__(self, cost, metadata, expression):
-        self.cost = cost
-        self.metadata = metadata
+    def __init__(self, *expression):
         self.expression = expression
-        if isinstance(expression, int):
-            raise TypeError('invalid expression')
         args_encountered = set()
-        self._validate_expression(expression, args_encountered)
+        calls_encountered = set()
+        self.result_metadata = expression[0].result_metadata
+        self.cost = self._process_expression(
+            expression, args_encountered, calls_encountered)
         self.arg_count = max(args_encountered) + 1
         if sorted(list(args_encountered)) != range(self.arg_count):
-            raise ValueError('argument integers has holes')
+            raise ValueError('argument integer range has holes')
+        
         self._make_hash()
 
-    def _validate_expression(self, e, args_encountered):
+    @staticmethod
+    def create_from_computation(comp, args_metadata, result_metadata):
+        # Alternate constructor, no overlap with __init__ and does not
+        # call _process_expression
+        self = Function.__new__(Function)
+        self.expression = (comp,) + tuple(range(comp.arg_count))
+        #self.args_metadata = tuple(args_metadata)
+        self.arg_count = len(args_metadata)
+        self.result_metadata = result_metadata
+        self.cost = comp.get_cost(args_metadata)
+        self._make_hash()
+        return self
+
+    def _process_expression(self, e, args_encountered, calls_encountered):
+        # Walk through expression to a) compute cost, b) validate it.
+        # Any call that is repeated (same function, same arguments) only
+        # counts once towards computing cost. Of course, there's no guarantee
+        # that there's not further duplicate work to eliminate if one inlined
+        # the called functions... this is not dealt with currently.
         if isinstance(e, int):
             args_encountered.add(e)
+            return 0
         else:
-            call = e[0]
-            if not isinstance(call, (Function, computation.Computation)):
+            call, args = e[0], e[1:]
+            if not isinstance(call, Function):
                 raise TypeError('invalid expression')
-            for arg in e[1:]:
-                self._validate_expression(arg, args_encountered)
+            cost = call.cost
+            # Recurse to 'evaluate' arguments
+            for arg in args:
+                arg_cost = self._process_expression(arg, args_encountered, calls_encountered)
+                cost += arg_cost
+            return cost
 
     def _make_hash(self):
         h = hashlib.sha512()
-        h.update(struct.pack('d', self.cost))
-        h.update(self.metadata.secure_hash())
+        h.update(self.cost.secure_hash())
+        #h.update(struct.pack('Q', len(self.args_metadata)))
+        h.update(self.result_metadata.secure_hash())
+        #for x in self.args_metadata:
+        #    h.update(x.secure_hash())
         self._hash_expression(h, self.expression)
         self._shash = h.digest()
 
@@ -88,3 +119,62 @@ class Function(object):
 
     def __ne__(self, other):
         return not self == other
+
+    def __str__(self):
+        return '<Function:%s %s\n>' % (self.cost,
+                                       FunctionFormatter().format(self))
+
+    def __repr__(self):
+        return '<Function:%s %s>' % (self.cost,
+                                       FunctionFormatter().format_expression(self))
+
+
+class FunctionFormatter:
+    def format(self, func):
+        self.lines = []
+        self.function_names = {}
+        self.visited_functions = set()
+        self.process(func, is_root=True)
+        return '\n'.join(self.lines)
+
+    def format_expression(self, func):
+        self.function_names = {}
+        return self._format_expression(func.expression)[1]        
+
+    def process(self, func, is_root):
+        new_functions, expr_repr = self._format_expression(func.expression)
+        if is_root:
+            self.lines.append(expr_repr)
+            self.lines.append('  where:')
+        else:
+            self.lines.append('    %s := %s' % (self.function_names[func], expr_repr))
+        for called_func in new_functions:
+            # may have been visited by earlier sibling; check
+            if called_func not in self.visited_functions:
+                self.visited_functions.add(called_func)
+                self.process(called_func, False)                
+
+    def _format_expression(self, e):
+        new_functions = []
+        call, args = e[0], e[1:]
+        if isinstance(call, Function):
+            name = self.function_names.get(call, None)
+            if name is None:
+                self.function_names[call] = name = 'f%d' % len(self.function_names)
+                new_functions.append(call)
+        elif isinstance(call, computation.Computation):
+            name = call.name
+
+        arg_strs = []
+        for arg in args:
+            if isinstance(arg, int):
+                arg_strs.append('$%d' % arg)
+            else:
+                got_new_functions, arg_s = self._format_expression(arg)
+                arg_strs.append(arg_s)
+                new_functions.extend(got_new_functions)
+        expression_str = '(%s %s)' % (name, ' '.join(arg_strs))
+        return new_functions, expression_str
+
+
+

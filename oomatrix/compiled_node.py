@@ -196,7 +196,6 @@ class CompiledNode(object):
 
     def _substitute_linked(self, indices, substitute_at, substitute_cnode, index_remapping):
         if self.is_leaf:
-            if substitute_at
             index, = indices
             if index in substitute_at:
                 return substitute_cnode

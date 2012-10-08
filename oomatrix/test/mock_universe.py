@@ -3,7 +3,7 @@ import numpy as np
 
 from ..cost_value import FLOP
 from ..kind import MatrixImpl, MatrixKind
-from ..computation import computation, conversion
+from ..computation import computation, conversion, Computation
 from .. import formatter, Matrix, symbolic, compiler, kind, metadata, scheduler
 from ..task import Task, Argument
 from ..symbolic import MatrixMetadataLeaf
@@ -156,3 +156,6 @@ def cnode_to_str(tree, args, sep='; '):
 def mock_meta(kind):
     return metadata.MatrixMetadata(kind, (3,), (3,), np.double)
 
+def mock_computation(kind, cost=1):
+    return Computation(None, kind, kind, 'mock_%s[cost=%s]' % (kind.name, cost),
+                       lambda *args: cost * FLOP)
