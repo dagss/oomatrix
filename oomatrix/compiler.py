@@ -437,14 +437,6 @@ def reduce_best_tasks(tasks_lst):
     return result
     
 
-def cheapest_cnode(cnode_a, cnode_b):
-    if cnode_b is None:
-        return cnode_a
-    elif cnode_a is None:
-        return cnode_b
-    else:
-        return cnode_a if cnode_a.total_cost <= cnode_b.total_cost else cnode_b
-
 class GreedyCompilation():
     """
     During tree traversal, each node returns
@@ -482,6 +474,16 @@ class GreedyCompilation():
         self.conversion_cache = ConversionCache(self.cost_map)
         self.addition_cache = AdditionCache(self.conversion_cache)
         self.addition_finder = GreedyAdditionFinder(self.addition_cache)
+
+    def cheapest_cnode(self, cnode_a, cnode_b):
+        if cnode_b is None:
+            return cnode_a
+        elif cnode_a is None:
+            return cnode_b
+        else:
+            return (cnode_a
+                    if cnode_a.cost.weigh(self.cost_map) <= cnode_b.cost.weigh(self.cost_map)
+                    else cnode_b)
     
     def compile(self, root):
         self.minimum_possible_cost = 0
@@ -606,14 +608,14 @@ class GreedyCompilation():
                 left = multiply_if_not_single(node.children[:i])
                 right = multiply_if_not_single(node.children[i:])
                 cnode = self.cached_visit(multiply_if_not_single([left, right]))
-                best_cnode = cheapest_cnode(best_cnode, cnode)
+                best_cnode = self.cheapest_cnode(best_cnode, cnode)
             return best_cnode
         else:
             left, right = node.children
 
             # Try to apply distributive rule
             best_cnode = self.apply_distributive_rule(left, right, 'left')
-            best_cnode = cheapest_cnode(best_cnode, self.apply_distributive_rule(right, left, 'right'))
+            best_cnode = self.cheapest_cnode(best_cnode, self.apply_distributive_rule(right, left, 'right'))
 
             # Compute children; ignoring any ConjugateTransposeNode's (i.e. computing their
             # children)
@@ -639,8 +641,8 @@ class GreedyCompilation():
 
             def find_transpose_computation(cnode):
                 return self.find_best_direct_computation(
-                    cnode.metadata.kind.h.get_key(), [cnode], [cnode.metadata],
-                    cnode.metadata.transpose())
+                    cnode.result_metadata.kind.h.get_key(), [cnode], [cnode.result_metadata],
+                    cnode.result_metadata.transpose())
 
             def maybe_transpose_kind(x, transpose):
                 return x.h if transpose else x
@@ -660,15 +662,14 @@ class GreedyCompilation():
                     if left_cnode is None or right_cnode is None:
                         continue
                     
-                    left_meta = maybe_transpose_meta(left_cnode.metadata, left_is_transposed)
-                    right_meta = maybe_transpose_meta(right_cnode.metadata, right_is_transposed)
+                    left_meta = maybe_transpose_meta(left_cnode.result_metadata, left_is_transposed)
+                    right_meta = maybe_transpose_meta(right_cnode.result_metadata, right_is_transposed)
                     metas = [left_meta, right_meta]
                     key = (maybe_transpose_kind(left_meta.kind, left_is_transposed) *
                            maybe_transpose_kind(right_meta.kind, right_is_transposed)).get_key()
                     cnode = self.find_best_direct_computation(key, [left_cnode, right_cnode], metas,
                                                               metadata.meta_multiply(metas))
-                    best_cnode = cheapest_cnode(best_cnode, cnode)
-
+                    best_cnode = self.cheapest_cnode(best_cnode, cnode)
             return best_cnode
 
 
@@ -678,9 +679,15 @@ class GreedyCompilation():
         for target_kind, computations in computations_by_kind.iteritems():
             typed_target_meta = target_meta.copy_with_kind(target_kind)
             for computation in computations:
-                cost = computation.get_cost(metas).weigh(self.cost_map)
-                cnode = CompiledNode(computation, cost, child_cnodes, typed_target_meta)
-                best_cnode = cheapest_cnode(best_cnode, cnode)
+                comp_as_func = Function.create_from_computation(computation, metas,
+                                                                typed_target_meta)
+                nargs = 0
+                expr = [comp_as_func]
+                for func in child_cnodes:
+                    expr.append((func,) + tuple(range(nargs, nargs + func.arg_count)))
+                    nargs += func.arg_count
+                cnode = Function(tuple(expr))
+                best_cnode = self.cheapest_cnode(best_cnode, cnode)
         return best_cnode
         
     def visit_add(self, node):

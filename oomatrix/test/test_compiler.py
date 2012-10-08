@@ -170,11 +170,10 @@ def test_add():
     A, a, au, auh = ctx.new_matrix('A') 
     B, b, bu, buh = ctx.new_matrix('B')
     ctx.define(A + B, A)
-    assert_compile('T0 = add_A_B(a, b)', a + b)
+    assert_compile('T0 = add_A_B(a, b)', a + b)    
     assert_compile(['T1 = add_B_B(b, b); T0 = add_A_B(a, T1)',
                     'T1 = add_A_B(a, b); T0 = add_A_B(T1, b)'], a + b + b)
     assert_compile(['T1 = add_A_A(a, a); T2 = add_A_A(a, T1); T0 = add_A_A(a, T2)'], a + a + a + a)
-
 
 def test_add_conversion():
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
@@ -193,9 +192,9 @@ def test_multiply():
     assert_compile('T1 = multiply_A_B(a, b); T0 = multiply_A_B(T1, b)', a * b * b)
     ctx.define(B * B, B, cost=0.1)
     assert_compile('T1 = multiply_B_B(b, b); T0 = multiply_A_B(a, T1)', a * b * b)
-    C, c, cu, cuh = ctx.new_matrix('B')
+    C, c, cu, cuh = ctx.new_matrix('C')
     ctx.define(A * C, A)
-    assert_compile('T1 = multiply_A_B(a, b); T0 = multiply_A_B(T1, b)',
+    assert_compile('T1 = multiply_A_B(a, b); T0 = multiply_A_C(T1, c)',
                    a * b * c)
 
 def test_multiply_convert_transpose():
