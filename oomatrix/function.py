@@ -3,7 +3,7 @@ from __future__ import division
 import hashlib
 import struct
 from . import utils, computation
-
+from .cost_value import zero_cost
 
 class Function(object):
     """
@@ -31,13 +31,14 @@ class Function(object):
     as a scalar (i.e., weighted).
     """
 
-    def __init__(self, *expression):
-        self.expression = expression
+    def __init__(self, expression):
+        self.is_identity = False
         args_encountered = set()
         calls_encountered = set()
         self.result_metadata = expression[0].result_metadata
-        self.cost = self._process_expression(
+        self.cost, expression = self._process_expression(
             expression, args_encountered, calls_encountered)
+        self.expression = expression
         self.arg_count = max(args_encountered) + 1
         if sorted(list(args_encountered)) != range(self.arg_count):
             raise ValueError('argument integer range has holes')
@@ -49,11 +50,23 @@ class Function(object):
         # Alternate constructor, no overlap with __init__ and does not
         # call _process_expression
         self = Function.__new__(Function)
+        self.is_identity = False
         self.expression = (comp,) + tuple(range(comp.arg_count))
         #self.args_metadata = tuple(args_metadata)
         self.arg_count = len(args_metadata)
         self.result_metadata = result_metadata
         self.cost = comp.get_cost(args_metadata)
+        self._make_hash()
+        return self
+
+    @staticmethod
+    def create_identity(metadata):
+        self = Function.__new__(Function)
+        self.is_identity = True
+        self.result_metadata = metadata
+        self.arg_count = 1
+        self.expression = (0,)
+        self.cost = zero_cost
         self._make_hash()
         return self
 
@@ -63,19 +76,30 @@ class Function(object):
         # counts once towards computing cost. Of course, there's no guarantee
         # that there's not further duplicate work to eliminate if one inlined
         # the called functions... this is not dealt with currently.
+        #
+        # Also removes all identities
+        #
+        # Returns cost, transformed_tuple
         if isinstance(e, int):
             args_encountered.add(e)
-            return 0
+            return zero_cost, e
         else:
             call, args = e[0], e[1:]
             if not isinstance(call, Function):
                 raise TypeError('invalid expression')
             cost = call.cost
-            # Recurse to 'evaluate' arguments
+            # Recurse on arguments, eliminating identities along the way
+            new_expr = [call]
             for arg in args:
-                arg_cost = self._process_expression(arg, args_encountered, calls_encountered)
+                arg_cost, processed = self._process_expression(arg, args_encountered,
+                                                               calls_encountered)
+                new_expr.append(processed)
                 cost += arg_cost
-            return cost
+            if call.is_identity:
+                assert len(args) == 1
+                return cost, processed
+            else:
+                return cost, tuple(new_expr)
 
     def _make_hash(self):
         h = hashlib.sha512()
@@ -121,21 +145,24 @@ class Function(object):
         return not self == other
 
     def __str__(self):
-        return '<Function:%s %s\n>' % (self.cost,
-                                       FunctionFormatter().format(self))
+        return '<Function:%s:%s %s\n>' % (self.cost, self.result_metadata.kind.name,
+                                          FunctionFormatter().format(self))
 
     def __repr__(self):
-        return '<Function:%s %s>' % (self.cost,
-                                       FunctionFormatter().format_expression(self))
+        return '<Function:%s:%s %s>' % (self.cost, self.result_metadata.kind.name,
+                                        FunctionFormatter().format_expression(self))
 
 
 class FunctionFormatter:
     def format(self, func):
-        self.lines = []
-        self.function_names = {}
-        self.visited_functions = set()
-        self.process(func, is_root=True)
-        return '\n'.join(self.lines)
+        if func.expression == (0,):
+            return '(0,)'
+        else:
+            self.lines = []
+            self.function_names = {}
+            self.visited_functions = set()
+            self.process(func, is_root=True)
+            return '\n'.join(self.lines)
 
     def format_expression(self, func):
         self.function_names = {}
@@ -155,6 +182,8 @@ class FunctionFormatter:
                 self.process(called_func, False)                
 
     def _format_expression(self, e):
+        if e == (0,):
+            return [], '(0,)'
         new_functions = []
         call, args = e[0], e[1:]
         if isinstance(call, Function):
@@ -164,6 +193,8 @@ class FunctionFormatter:
                 new_functions.append(call)
         elif isinstance(call, computation.Computation):
             name = call.name
+        else:
+            raise AssertionError('`call` is of type %s' % type(call))
 
         arg_strs = []
         for arg in args:

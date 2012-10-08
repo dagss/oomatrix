@@ -21,3 +21,14 @@ def test_hashing():
     #y = Function(x, (h1, 2), (x, 3), (h2, 0), (j, 1))
     #print
     #print y
+
+def test_remove_identity():
+    ctx, (A, a) = mock.create_mock_matrices('A')
+    meta_A = mock.mock_meta(A)
+    f = Function.create_from_computation(mock.mock_computation(A), [meta_A, meta_A], meta_A)
+    i = Function.create_identity(meta_A)
+
+    a = Function((f, 0, 1))
+    b = Function((f, (i, 0), (i, (i, (i, 1)))))
+    assert a == b
+

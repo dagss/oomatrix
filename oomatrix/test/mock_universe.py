@@ -7,6 +7,7 @@ from ..computation import computation, conversion, Computation
 from .. import formatter, Matrix, symbolic, compiler, kind, metadata, scheduler
 from ..task import Task, Argument
 from ..symbolic import MatrixMetadataLeaf
+from ..scheduler import BasicScheduler
 
 class MockKind(MatrixImpl):
     def __init__(self, value, nrows, ncols):
@@ -36,7 +37,7 @@ def match_tree_to_name(node, parens_used=False):
     else:
         raise AssertionError('Please provide a computation name manually')
         
-
+mock_cost_map = dict(FLOP=1, INVOCATION=0)
 
 class MockMatricesUniverse:
     def __init__(self):
@@ -120,38 +121,38 @@ def create_mock_matrices(matrix_names, addition_costs=None):
 def remove_blanks(x):
     return re.sub('\s', '', x)
 
-def serialize_cnode(lines, cnode, args, task_names):
-    if cnode.is_leaf:
-        assert len(args) == 1
-        return args[0].name
-    elif (cnode, args) in task_names:
-        return task_names[cnode, args]
-    else:
-        arg_names = []
-        task_name = 'T%d' % len(task_names)
-        task_names[cnode, args] = task_name
-        for child, shuf in zip(cnode.children, cnode.shuffle):
-            child_args = tuple(args[i] for i in shuf)
-            r = serialize_cnode(lines, child, child_args, task_names)
-            arg_names.append(r)
-        expr_str = '%s(%s)' % (cnode.computation.name, ', '.join(arg_names))
-        lines.append('%s = %s' % (task_name, expr_str))
-        return task_name
+class CheckScheduler(BasicScheduler):
+    # For historical reasons, change variable names used in generated Programs
+    # when used for checking
+    def __init__(self):
+        BasicScheduler.__init__(self)
+        self._numvars = 1
+        
+    def _get_result_varname(self):
+        return 'T0'
+
+    def _get_temporary_varname(self):
+        r = 'T%d' % self._numvars
+        self._numvars += 1
+        return r
+
+def serialize_program(program, sep='; '):
+    lines = []
+    for stat in program.statements:
+        lines.append('%s = %s(%s)' % (stat.result, stat.computation.name,
+                                      ', '.join(stat.args)))
+    return sep.join(lines)
 
 def check_compilation(compiler_obj, expected_task_graphs, matrix):
     tree, args = compiler_obj.compile(matrix._expr)
     args = tuple(args)
-    task_str = cnode_to_str(tree, args)
+
+    program = CheckScheduler().schedule(tree, args)
+    task_str = serialize_program(program)
     if isinstance(expected_task_graphs, str):
         expected_task_graphs = [expected_task_graphs]
     expected_task_graphs = [remove_blanks(x) for x in expected_task_graphs]
     assert remove_blanks(task_str) in expected_task_graphs
-
-def cnode_to_str(tree, args, sep='; '):
-    task_lines = []
-    serialize_cnode(task_lines, tree, args, {})
-    s = sep.join(task_lines)
-    return s
 
 def mock_meta(kind):
     return metadata.MatrixMetadata(kind, (3,), (3,), np.double)

@@ -75,6 +75,7 @@ from .metadata import MatrixMetadata
 from .cost_value import FLOP, INVOCATION
 from .heap import Heap
 from .compiled_node import CompiledNode
+from .function import Function
 
 def powerset(iterable):
     "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
@@ -297,9 +298,8 @@ class GreedyAdditionFinder(object):
         self.nodes_visited = 0
 
     def lookup_addition_cache(self, compiled_nodes):
-        metas = [node.metadata for node in compiled_nodes]
+        metas = [node.result_metadata for node in compiled_nodes]
         # Add the cost of the input tasks to all output costs
-        base_cost = sum([node.total_cost for node in compiled_nodes])
         utils.sort_by(compiled_nodes, metas)
         metas.sort()
         d = self.addition_cache.get_computations(metas)
@@ -315,17 +315,23 @@ class GreedyAdditionFinder(object):
             converted_nodes = []
             for cnode, convs in zip(compiled_nodes, [lconvs, rconvs]):
                 for conv in convs:
-                    conv_cost = conv.get_cost([cnode.metadata]).weigh(self.cost_map)
                     conv_metadata = cnode.metadata.copy_with_kind(conv.target_kind)
-                    cnode = CompiledNode(conv, conv_cost, [cnode], conv_metadata)
+                    conv_func = Function.create_from_computation(conv, [cnode.metadata],
+                                                                 conv_metadata)
+                    cnode = Function((conv_func, (cnode, 0)))
                 converted_nodes.append(cnode)
             # do the addition
-            converted_metas = [node.metadata for node in converted_nodes]
+            converted_metas = [node.result_metadata for node in converted_nodes]
             utils.sort_by(converted_nodes, converted_metas)
             converted_metas.sort()
-            add_cost = adder.get_cost(converted_metas).weigh(self.cost_map)
             add_metadata = metadata.meta_add(converted_metas).copy_with_kind(adder.target_kind)
-            add_node = CompiledNode(adder, add_cost, converted_nodes, add_metadata)
+            add_func = Function.create_from_computation(adder, converted_metas, add_metadata)
+            nargs = 0
+            expr = [add_func]
+            for func in converted_nodes:
+                expr.append((func,) + tuple(range(nargs, nargs + func.arg_count)))
+                nargs += func.arg_count
+            add_node = Function(tuple(expr))
             result.append(add_node)
         if len(result) == 0:
             return None
@@ -336,7 +342,7 @@ class GreedyAdditionFinder(object):
     def find_cheapest_addition(self, operands):
         print 'TODO addition shuffle'
         for op in operands:
-            assert isinstance(op, CompiledNode)
+            assert isinstance(op, Function)
         self.nodes_visited += 1
         n = len(operands)
         if n == 1:
@@ -696,7 +702,7 @@ class GreedyCompilation():
         1/0
 
     def visit_metadata_leaf(self, node):
-        return CompiledNode.create_leaf(node.metadata)
+        return Function.create_identity(node.metadata)
             
     def visit_task_leaf(self, node):
         1/0

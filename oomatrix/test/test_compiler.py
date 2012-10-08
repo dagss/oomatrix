@@ -10,7 +10,7 @@ from ..computation import (Computation, computation, conversion, ImpossibleOpera
 from .. import compiler, formatter, metadata, transforms, task, cost_value
 
 from .mock_universe import (MockKind, MockMatricesUniverse, check_compilation,
-                            create_mock_matrices, cnode_to_str, mock_meta)
+                            create_mock_matrices, mock_meta)
 
 import time
 
@@ -173,7 +173,7 @@ def test_add():
     assert_compile('T0 = add_A_B(a, b)', a + b)
     assert_compile(['T1 = add_B_B(b, b); T0 = add_A_B(a, T1)',
                     'T1 = add_A_B(a, b); T0 = add_A_B(T1, b)'], a + b + b)
-    assert_compile(['T2 = add_A_A(a, a); T1 = add_A_A(a, T2); T0 = add_A_A(a, T1)'], a + a + a + a)
+    assert_compile(['T1 = add_A_A(a, a); T2 = add_A_A(a, T1); T0 = add_A_A(a, T2)'], a + a + a + a)
 
 
 def test_add_conversion():
@@ -470,5 +470,5 @@ def benchmark_distributive():
     t = time.clock()
     print 'Time taken %s, stats %s' % (t - t0, c.stats)
     print 'Cost:', tree.as_task().get_total_cost()
-    print 'Solution:\n   ', cnode_to_str(tree, args, sep='\n    ')
+    #print 'Solution:\n   ', cnode_to_str(tree, args, sep='\n    ')
 

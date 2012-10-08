@@ -99,13 +99,20 @@ class BasicScheduler(object):
                 name_to_matrix[name] = matrix_impl
             arg_names.append(name)
         return arg_names, matrix_to_name
-        
+
+    def _get_temporary_varname(self):
+        return 'T%d' % len(self.program)
+
+    def _get_result_varname(self):
+        return '$result'        
+    
     def schedule(self, cnode, args):
         self.program = []
         self.pool = {}
         arg_names, matrix_to_name = self._parse_args(args)
-        ret_var = self._interpret_function(cnode, tuple(arg_names), '$result')
-        assert ret_var == '$result'
+        ret_varname = self._get_result_varname()
+        ret_var = self._interpret_function(cnode, tuple(arg_names), ret_varname)
+        assert ret_var == ret_varname
         return Program(self.program, matrix_to_name)
 
     def _interpret_function(self, func, args, result_variable):
@@ -113,8 +120,8 @@ class BasicScheduler(object):
         if isinstance(call, Computation):
             result = self.pool.get((func, args), None)
             if result is None:
-                result_variable = ('T%d' % len(self.program) if result_variable is None
-                                   else result_variable)
+                if result_variable is None:
+                    result_variable = self._get_temporary_varname()
                 call_args = tuple(args[i] for i in arg_exprs)
                 statement = ComputeStatement(result_variable, call, call_args, func.cost)
                 self.program.append(statement)
