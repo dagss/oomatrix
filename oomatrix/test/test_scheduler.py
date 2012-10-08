@@ -1,49 +1,54 @@
 from .common import *
 from .mock_universe import mock_meta, create_mock_matrices
 
-from ..compiler import CompiledNode
+from ..cost_value import FLOP
+from ..function import Function
 
-from .. import scheduler, matrix
+from .. import scheduler, matrix, computation
 
-class MockComputation(object):
-    def __init__(self, name):
+class MockComputation(computation.Computation):
+    def __init__(self, name, arg_count):
         self.name = name
+        self.arg_count = arg_count
+
+    def get_cost(self, metas):
+        return 1 * FLOP
 
 ctx, (A, a) = create_mock_matrices('A')
 
-def mock_compiled_node(computation_name, children=(), shuffle=None, flat_shuffle=None):
-    return CompiledNode(MockComputation(computation_name), 1.0, children, mock_meta(A),
-                        shuffle=shuffle, flat_shuffle=flat_shuffle)
-
-def mock_leaf():
-    return CompiledNode.create_leaf(mock_meta(A))
+def mock_function(computation_name, child_count):
+    A_meta = mock_meta(A)
+    return Function.create_from_computation(
+        MockComputation(computation_name, child_count), [A_meta] * child_count, A_meta)
 
 def test_basic():
     a2 = matrix.Matrix(A(4, 3, 3), name='a')
 
-    leaf = mock_leaf()
-    add_cnode = mock_compiled_node("adder", [leaf, leaf])
-    root = mock_compiled_node("multiplier", [add_cnode, add_cnode])
+    f_add = mock_function("adder", 2)
+    f_multiply = mock_function("multiplier", 2)
+
+    func = Function((f_multiply, (f_add, 0, 1), (f_add, 2, 3)))
+    
     s = scheduler.BasicScheduler()
-    assert repr(s.schedule(root, [a, a, a, a])) == dedent('''\
+    prog = s.schedule(func, [a, a, a, a])
+    assert repr(prog) == dedent('''\
         <oomatrix.Program:[
-          T0 = adder(a, a) # cost=1.0
-          $result = multiplier(T0, T0) # cost=1.0
+          T0 = adder(a, a) # cost=1e+00 FLOP
+          $result = multiplier(T0, T0) # cost=1e+00 FLOP
         ]>''')
-    assert repr(s.schedule(root, [a, a, a, a2])) == dedent('''\
+    assert repr(s.schedule(func, [a, a, a, a2])) == dedent('''\
         <oomatrix.Program:[
-          T0 = adder(a, a) # cost=1.0
-          T1 = adder(a, a_1) # cost=1.0
-          $result = multiplier(T0, T1) # cost=1.0
+          T0 = adder(a, a) # cost=1e+00 FLOP
+          T1 = adder(a, a_1) # cost=1e+00 FLOP
+          $result = multiplier(T0, T1) # cost=1e+00 FLOP
         ]>''')
 
 def test_unnamed_arg():
     anonymous = matrix.Matrix(A(4, 3, 3), name=None)
-    leaf = mock_leaf()
-    add_cnode = mock_compiled_node("adder", [leaf, leaf])
+    f_add = mock_function("adder", 2)
     s = scheduler.BasicScheduler()
-    got = s.schedule(add_cnode, [anonymous, anonymous])
+    got = s.schedule(f_add, [anonymous, anonymous])
     assert repr(got) == dedent('''\
         <oomatrix.Program:[
-          $result = adder(input_0, input_0) # cost=1.0
+          $result = adder(input_0, input_0) # cost=1e+00 FLOP
         ]>''')    

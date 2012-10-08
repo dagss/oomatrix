@@ -1,4 +1,7 @@
 from . import matrix, symbolic, kind
+from .function import Function
+from .computation import Computation
+
 
 class ComputeStatement(object):
     def __init__(self, result, computation, args, cost):
@@ -55,7 +58,6 @@ class BasicScheduler(object):
     def __init__(self):
         pass
 
-
     def _parse_arg(self, arg):
         if isinstance(arg, matrix.Matrix):
             if isinstance(arg._expr, symbolic.LeafNode):
@@ -68,7 +70,6 @@ class BasicScheduler(object):
             return arg.name, arg.matrix_impl
         else:
             raise TypeError("unknown argument type")
-            
 
     def _parse_args(self, args):
         # Resolve matrix names so that they are unique
@@ -100,14 +101,37 @@ class BasicScheduler(object):
         return arg_names, matrix_to_name
         
     def schedule(self, cnode, args):
-        program = []
-        pool = {}
-        names = {}
-        arg_names, matrix_to_name = self._parse_args(args)        
-        ret_var = self._schedule(cnode, tuple(arg_names), program, pool, '$result')
+        self.program = []
+        self.pool = {}
+        arg_names, matrix_to_name = self._parse_args(args)
+        ret_var = self._interpret_function(cnode, tuple(arg_names), '$result')
         assert ret_var == '$result'
-        return Program(program, matrix_to_name)
+        return Program(self.program, matrix_to_name)
 
+    def _interpret_function(self, func, args, result_variable):
+        call, arg_exprs = func.expression[0], func.expression[1:]        
+        if isinstance(call, Computation):
+            result = self.pool.get((func, args), None)
+            if result is None:
+                result_variable = ('T%d' % len(self.program) if result_variable is None
+                                   else result_variable)
+                call_args = tuple(args[i] for i in arg_exprs)
+                statement = ComputeStatement(result_variable, call, call_args, func.cost)
+                self.program.append(statement)
+                self.pool[(func, args)] = result = result_variable
+            return result
+        else:
+            return self._interpret_expression(func.expression, args, result_variable)
+
+    def _interpret_expression(self, e, function_args, result_variable):
+        if isinstance(e, int):
+            return function_args[e]
+        else:            
+            call, arg_exprs = e[0], e[1:]        
+            call_args = tuple(self._interpret_expression(arg_expr, function_args, None)
+                              for arg_expr in arg_exprs)
+            return self._interpret_function(call, call_args, result_variable)
+            
     def _schedule(self, cnode, args, program, pool, result_variable):
         result = pool.get((cnode, args), None)
         if result is not None:
