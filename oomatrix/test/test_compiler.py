@@ -355,8 +355,8 @@ def test_factor_full():
     assert_compile('T0 = Bf(b)', b.f)
     assert_compile('T1 = add_B_B(b, b); T0 = Bf(T1)', (b + b).f)
     assert_compile('T1 = Bf(b); T0 = multiply_B_A(T1, a)', b.f * a)
-    assert_compile('T2 = Bf(b); T1 = Bi(T2); T0 = multiply_B_A(T1, a)', b.f.i * a)
-    assert_compile('T2 = Bi(b); T1 = Bf(T2); T0 = multiply_B_A(T1, a)', b.i.f * a)
+    assert_compile('T1 = Bf(b); T2 = Bi(T1); T0 = multiply_B_A(T2, a)', b.f.i * a)
+    assert_compile('T1 = Bi(b); T2 = Bf(T1); T0 = multiply_B_A(T2, a)', b.i.f * a)
 
 def test_inverse():
     ctx = MockMatricesUniverse()
@@ -367,8 +367,8 @@ def test_inverse():
     ctx.define(B.h, B)
     assert_compile('T0 = Bi(b)', b.i)
     assert_compile('T1 = Bi(b); T0 = multiply_B_A(T1, a)', b.i * a)
-    assert_compile('T2 = Bi(b); T1 = Bh(T2); T0 = multiply_B_A(T1, a)', b.i.h * a)
-    assert_compile('T2 = Bi(b); T1 = Bh(T2); T0 = multiply_B_A(T1, a)', b.h.i * a)
+    assert_compile('T1 = Bi(b); T2 = Bh(T1); T0 = multiply_B_A(T2, a)', b.i.h * a)
+    assert_compile('T1 = Bi(b); T2 = Bh(T1); T0 = multiply_B_A(T2, a)', b.h.i * a)
 
 def test_impossible():        
     ctx = MockMatricesUniverse()

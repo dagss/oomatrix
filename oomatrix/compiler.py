@@ -700,22 +700,27 @@ class GreedyCompilation():
         1/0
         return 0, node.as_task()
 
+    def handle_unary(self, node, key_func):
+        compiled_child = self.cached_visit(node.child)
+        meta = compiled_child.result_metadata
+        kind = meta.kind
+        key = key_func(kind)
+        computation, = kind.universe.get_computations(key)[kind]
+        comp_as_func = Function.create_from_computation(computation, [meta], meta)
+        return Function((comp_as_func, (compiled_child,) + tuple(range(node.leaf_count))))        
+
     def visit_decomposition(self, node):
         # TODO: For now assume that decomposition is exactly "kind.f -> kind"
         # which returns a single matrix with the exact same metadata...
         assert node.decomposition is decompositions.Factor
-        compiled_child = self.cached_visit(node.child)
-        kind = compiled_child.metadata.kind
-        computation, = kind.universe.get_computations(kind.f.get_key())[kind]
-        cost = computation.get_cost([compiled_child.metadata]).weigh(self.cost_map)
-        return CompiledNode(computation, cost, [compiled_child], compiled_child.metadata)
+        def key_func(kind):
+            return kind.f.get_key()
+        return self.handle_unary(node, key_func)
 
     def visit_inverse(self, node):
-        compiled_child = self.cached_visit(node.child)
-        kind = compiled_child.metadata.kind
-        computation, = kind.universe.get_computations(kind.i.get_key())[kind]
-        cost = computation.get_cost([compiled_child.metadata]).weigh(self.cost_map)
-        return CompiledNode(computation, cost, [compiled_child], compiled_child.metadata)
+        def key_func(kind):
+            return kind.i.get_key()
+        return self.handle_unary(node, key_func)
 
 def find_cost(computation, meta_args):
     assert all(isinstance(x, MatrixMetadata) for x in meta_args)
