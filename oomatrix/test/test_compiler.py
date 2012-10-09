@@ -250,46 +250,52 @@ def test_distributive_right():
 
     assert_compile('''
     T1 = multiply_A_B(a, b);
-    T4 = multiply_B_D(b, d);
-    T3 = multiply_A_B(a, T4);
-    T6 = multiply_C_D(c, d);
-    T5 = multiply_A_C(a, T6);
-    T2 = add_A_A(T3, T5);
-    T0 = add_A_A(T1, T2)
+    T2 = multiply_B_D(b, d);
+    T3 = multiply_A_B(a, T2);
+    T4 = multiply_C_D(c, d);
+    T5 = multiply_A_C(a, T4);
+    T6 = add_A_A(T3, T5);
+    T0 = add_A_A(T1, T6)
     ''', a * (b * d + b + c * d))
 
+
     assert_compile('''
-    T2 = multiply_A_B(a, b);
-    T1 = multiply_A_B(T2, b);
-    T3 = multiply_A_C(T2, c);
-    T0 = add_A_A(T1, T3)
+    T1 = multiply_A_B(a, b);
+    T2 = multiply_A_B(T1, b);
+    T3 = multiply_A_C(T1, c);
+    T0 = add_A_A(T2, T3)
     ''', a * b * (b + c))
 
 def test_distributive_left():
     ctx, (A, a), (B, b), (C, c), (D, d) = create_mock_matrices('A B C D')
+    ctx.define(A * A, A)
     ctx.define(A * C, A)
     ctx.define(B * C, A)
     ctx.define(C * D, C)
     assert_compile('''
-    T2 = multiply_C_D(c, d);
-    T1 = multiply_A_C(a, T2);
-    T3 = multiply_B_C(b, T2);
-    T0 = add_A_A(T1, T3)
-    ''', (a + b) * c * d)
+    T1 = multiply_C_D(c, d);
+    T2 = multiply_B_C(b, T1);
+    T3 = multiply_A_C(a, T1);
+    T4 = multiply_A_A(a, T3);
+    T0 = add_A_A(T2, T4)
+    ''', (a * a + b) * c * d)
 
 def test_distributive_nested():
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
     ctx.define(A * B, B)
     a0, a1, a2, a3, a4, a5, a6, a7 = [Matrix(A(i, 3, 3), name='a%d' % i) for i in range(8)]
     
-    # This one produced a problem with shuffles
-    assert_compile('T1 = multiply_A_B(a0, b); T4 = multiply_A_B(a4, b); '
-                   'T3 = multiply_A_B(a3, T4); T6 = multiply_A_B(a2, T4); '
-                   'T5 = multiply_A_B(a1, T6); T2 = add_B_B(T3, T5); '
-                   'T0 = add_B_B(T1, T2)', (a0 + (a1 * a2 + a3) * a4) * b)
-
-
-
+    # This one produced a problem with shuffles before moving from shuffle-based
+    # CompileNode to the lambda-based Function
+    assert_compile('''
+    T1 = multiply_A_B(a0, b);
+    T2 = multiply_A_B(a4, b);
+    T3 = multiply_A_B(a3, T2);
+    T4 = multiply_A_B(a2, T2);
+    T5 = multiply_A_B(a1, T4);
+    T6 = add_B_B(T3, T5);
+    T0 = add_B_B(T1, T6)
+    ''', (a0 + (a1 * a2 + a3) * a4) * b)
 
 def test_multi_distributive():
     ctx = MockMatricesUniverse()

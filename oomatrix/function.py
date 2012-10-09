@@ -145,12 +145,12 @@ class Function(object):
         return not self == other
 
     def __str__(self):
-        return '<Function:%s:%s %s\n>' % (self.cost, self.result_metadata.kind.name,
-                                          FunctionFormatter().format(self))
+        return '<Function:%s %s\n>' % (self.result_metadata.kind.name,
+                                       FunctionFormatter().format(self))
 
     def __repr__(self):
-        return '<Function:%s:%s %s>' % (self.cost, self.result_metadata.kind.name,
-                                        FunctionFormatter().format_expression(self))
+        return '<Function:%s %s>' % (self.result_metadata.kind.name,
+                                     FunctionFormatter().format_expression(self))
 
 
 class FunctionFormatter:
@@ -189,7 +189,7 @@ class FunctionFormatter:
         if isinstance(call, Function):
             name = self.function_names.get(call, None)
             if name is None:
-                self.function_names[call] = name = 'f%d' % len(self.function_names)
+                self.function_names[call] = name = self._next_function_name()
                 new_functions.append(call)
         elif isinstance(call, computation.Computation):
             name = call.name
@@ -199,7 +199,7 @@ class FunctionFormatter:
         arg_strs = []
         for arg in args:
             if isinstance(arg, int):
-                arg_strs.append('$%d' % arg)
+                arg_strs.append('%d' % arg)
             else:
                 got_new_functions, arg_s = self._format_expression(arg)
                 arg_strs.append(arg_s)
@@ -207,5 +207,15 @@ class FunctionFormatter:
         expression_str = '(%s %s)' % (name, ' '.join(arg_strs))
         return new_functions, expression_str
 
-
+    def _next_function_name(self):
+        i = len(self.function_names)
+        alphabet = 'abcdefghijklmnopqrstuvwxyz'
+        n = len(alphabet)
+        result = ''
+        while True:
+            result = alphabet[i % n] + result
+            i //= n
+            if i == 0:
+                break
+        return result
 

@@ -326,13 +326,17 @@ class GreedyAdditionFinder(object):
             converted_metas.sort()
             add_metadata = metadata.meta_add(converted_metas).copy_with_kind(adder.target_kind)
             add_func = Function.create_from_computation(adder, converted_metas, add_metadata)
-            nargs = 0
-            expr = [add_func]
-            for func in converted_nodes:
-                expr.append((func,) + tuple(range(nargs, nargs + func.arg_count)))
-                nargs += func.arg_count
-            add_node = Function(tuple(expr))
-            result.append(add_node)
+            if all(x.is_identity for x in converted_nodes):
+                result.append(add_func)
+            else:
+                # Construct function that calls conversions and then does addition
+                nargs = 0
+                expr = [add_func]
+                for func in converted_nodes:
+                    expr.append((func,) + tuple(range(nargs, nargs + func.arg_count)))
+                    nargs += func.arg_count
+                    add_node = Function(tuple(expr))
+                result.append(add_node)
         if len(result) == 0:
             return None
         else:
@@ -514,88 +518,62 @@ class GreedyCompilation():
                 best_cost = cost
         return (best_cost, best_task)        
 
-    def apply_distributive_rule(self, distributor, distributee, direction):
-        # In the case of (a * b) * c -> a * c + b * c; (a * b) is 'distributor' and
-        # c is 'distributee'
-
-        if not isinstance(distributor, symbolic.AddNode):
+    def apply_distributive_rule(self, distor, distee, direction):
+        """
+        In the case of (a * b) * c -> a * c + b * c; (a * b) is 'distributor' (distor) and
+        c is 'distributee' (distee) and direction == 'left'
+        """
+        if not isinstance(distor, symbolic.AddNode):
             return None
-        if isinstance(distributee, symbolic.ConjugateTransposeNode):
-            print 'ugly, ughly hack #432'
-            return None
-        add_snode = distributor
-
-        # Find out which leaves/arguments belong to distributee, for use in constructing shuffle
-        start_of_distributee_args = 0 if direction == 'right' else distributor.leaf_count
-        distributee_arg_indices = tuple(range(start_of_distributee_args,
-                                              start_of_distributee_args + distributee.leaf_count))
         
-        # Compute the distributee, and the multiply the result in with the
-        # children of the add_node
-        distributee_cnode = self.cached_visit(distributee)
-        if distributee_cnode is None:
+        if isinstance(distee, symbolic.ConjugateTransposeNode):
+            print 'ugly, ughly hack compiler.py'
             return None
-        distributee_sleaf = symbolic.MatrixMetadataLeaf(distributee_cnode.metadata)
 
-        compiled_terms = []
-        shuffle = []
-        substitute_at = []
-        arg_start = 0 if direction == 'left' else distributee.leaf_count
-        subst_index = 0 if direction == 'right' else distributor.leaf_count
+        # Compute the distee
+        distee_cnode = self.cached_visit(distee)
+        if distee_cnode is None:
+            return None
+        distee_sleaf = symbolic.MatrixMetadataLeaf(distee_cnode.result_metadata)
 
-        new_term_leaf_counts = [term.leaf_count + 1 for term in add_snode.children]
-        if direction == 'right':
-            substitute_at = list(utils.cumsum([0] + new_term_leaf_counts[:-1]))
-            substitution_indices = range(distributee.leaf_count)
+        # Compute the multiplication terms needed for the distribution
+        mul_exprs = []
+        metas = []
+
+        if direction == 'left':
+            distee_args = tuple(range(distor.leaf_count, distor.leaf_count + distee.leaf_count))
+            iarg = 0 # start of term args
         else:
-            substitute_at = [i - 1 for i in utils.cumsum(new_term_leaf_counts)]
-            substitution_indices = range(distributor.leaf_count,
-                                         distributor.leaf_count + distributee.leaf_count)
+            distee_args = tuple(range(distee.leaf_count))
+            iarg = distee.leaf_count
 
-        for term in add_snode.children:
-            arg_stop = arg_start + term.leaf_count
-            term_arg_indices = tuple(range(arg_start, arg_stop))
-            # Form symbolic tree using distributee_snode leaf 
+        for term in distor.children:
+            term_args = tuple(range(iarg, iarg + term.leaf_count))
+            iarg += term.leaf_count
+            # Compile "term * distee" for each term
             if direction == 'left':
-                term_snode = symbolic.multiply([term, distributee_sleaf])
-                shuffle.extend(term_arg_indices + distributee_arg_indices)
+                term_snode = symbolic.multiply([term, distee_sleaf])
             elif direction == 'right':
-                term_snode = symbolic.multiply([distributee_sleaf, term])
-                shuffle.extend(distributee_arg_indices + term_arg_indices)
-            # Compile the tree
-            compiled_term = self.cached_visit(term_snode)
-            if compiled_term is None:
+                term_snode = symbolic.multiply([distee_sleaf, term])
+            term_cnode = self.cached_visit(term_snode)
+            if term_cnode is None:
                 # Couldn't distribute
                 return None
-            compiled_terms.append(compiled_term)
-            arg_start = arg_stop
+            # Create function calling term_cnode with the right arguments
+            if direction == 'left':
+                expr = (term_cnode,) + term_args + ((distee_cnode,) + distee_args,)
+            else:
+                expr = (term_cnode,) + ((distee_cnode,) + distee_args,) + term_args
+            mul_exprs.append(expr)
+            metas.append(term_cnode.result_metadata)
 
-        # Find the addition operation for adding together the compiled terms
-        
-        new_add_snode = symbolic.add([symbolic.MatrixMetadataLeaf(term_cnode.metadata)
-                                      for term_cnode in compiled_terms])
-        new_add_cnode = self.cached_visit(new_add_snode)
+        # Find the addition operation for adding together the compiled terms        
+        add_snode = symbolic.add([symbolic.MatrixMetadataLeaf(meta) for meta in metas])
+        add_cnode = self.cached_visit(add_snode)
 
-        print
-        print '====='
-
-        print 'new_add_cnode step 1', new_add_cnode
-        print 'compiled_terms', compiled_terms
-        new_add_cnode = new_add_cnode.substitute(compiled_terms)
-        print 'new_add_cnode step 2', new_add_cnode
-
-        #print distributor
-        #print distributee_cnode
-        #print 'new_add_cnode ', new_add_cnode
-        print '@', substitute_at
-        print 'I', substitution_indices
-        #print 'shuffle',shuffle
-
-        substitution = dict((i, distributee_cnode) for i in substitute_at)
-        print 'substitution', substitution, shuffle
-        r = new_add_cnode.substitute_linked(substitute_at, distributee_cnode, substitution_indices)
-        print 'new_add_cnode step 3', r
-        return r
+        # Finally, assemble together the Function doing the distribution
+        result = Function((add_cnode,) + tuple(mul_exprs))
+        return result
 
     def visit_multiply(self, node):        
         # We parenthize expression and compile each resulting part greedily, at least
@@ -674,6 +652,7 @@ class GreedyCompilation():
 
 
     def find_best_direct_computation(self, key, child_cnodes, metas, target_meta):
+        all_children_identity = all(x.is_identity for x in child_cnodes)
         best_cnode = None
         computations_by_kind = metas[0].kind.universe.get_computations(key)
         for target_kind, computations in computations_by_kind.iteritems():
@@ -681,12 +660,18 @@ class GreedyCompilation():
             for computation in computations:
                 comp_as_func = Function.create_from_computation(computation, metas,
                                                                 typed_target_meta)
-                nargs = 0
-                expr = [comp_as_func]
-                for func in child_cnodes:
-                    expr.append((func,) + tuple(range(nargs, nargs + func.arg_count)))
-                    nargs += func.arg_count
-                cnode = Function(tuple(expr))
+                if all_children_identity:
+                    # just to make things prettier when debugging
+                    cnode = comp_as_func
+                else:
+                    # construct function that computes children and then does the given
+                    # computation
+                    nargs = 0
+                    expr = [comp_as_func]
+                    for func in child_cnodes:
+                        expr.append((func,) + tuple(range(nargs, nargs + func.arg_count)))
+                        nargs += func.arg_count
+                    cnode = Function(tuple(expr))
                 best_cnode = self.cheapest_cnode(best_cnode, cnode)
         return best_cnode
         
