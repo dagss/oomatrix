@@ -13,9 +13,9 @@ class ComputeStatement(object):
     def format(self, program):
         result_name = program.get_matrix_name(self.result)
         arg_names = [program.get_matrix_name(arg) for arg in self.args]
-        return '%s = %s(%s) # cost=%s' % (
+        return '%s = %s(%s)' % (
             result_name, self.computation.name,
-            ', '.join(arg_names), self.cost)
+            ', '.join(arg_names))
 
     def __repr__(self):
         return '<oomatrix.ComputeStatement %s %s %s>' % (repr(self.result), self.computation,
