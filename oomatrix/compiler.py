@@ -344,7 +344,40 @@ class GreedyAdditionFinder(object):
             return result[0]
 
     def find_cheapest_addition(self, operands):
-        print 'TODO addition shuffle'
+        self.nodes_visited += 1
+
+        # As a heuristic, start with processing operands with the same
+        # kind and assume within-kind addition exists and is
+        # cheapest. This will destroy operand ordering, so keep track
+        # of the index each operand had (since we should in the end
+        # return a function with arguments corresponding to operands).
+
+        kind_buckets = {}
+        for idx, op in enumerate(operands):
+            kind = op.result_metadata.kind
+            bucket = kind_buckets.get(kind, None)
+            if bucket is None:
+                kind_buckets[kind] = bucket = []
+            bucket.append((idx, op))
+
+        new_operands = []
+        for kind, bucket in kind_buckets.iteritems():
+            # Just add together bucket left-to-right
+            idx, cur_op = bucket[0]
+            cur_args = (idx,)
+            if len(bucket) > 1:
+                for right_idx, right_op in bucket[1:]:
+                    cur_op = self.lookup_addition_cache([cur_op, right_op])
+                    if cur_op is None:
+                        return None
+                    cur_args += (right_idx,)
+            new_operands.append((cur_args, cur_op))
+
+        if len(new_operands) == 1:
+            return new_operands[0][1]
+        else:
+            raise NotImplementedError('Addition across kinds temporarily turned off...')
+
         for op in operands:
             assert isinstance(op, Function)
         self.nodes_visited += 1
@@ -680,13 +713,7 @@ class GreedyCompilation():
         compiled_children = [self.cached_visit(child) for child in node.children]
         if None in compiled_children:
             return None
-        # For addition, we do consider all possible permutations
-        # (we want, e.g., CSC + Diagonal + CSR + Dense to work the right way)
-        #print
-        #print '===='
-        #print node
         result = self.addition_finder.find_cheapest_addition(compiled_children)
-        #print result
         return result
 
     def visit_conjugate_transpose(self, node):

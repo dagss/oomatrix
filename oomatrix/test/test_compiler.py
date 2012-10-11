@@ -173,7 +173,7 @@ def test_add():
     assert_compile('T0 = add_A_B(a, b)', a + b)    
     assert_compile(['T1 = add_B_B(b, b); T0 = add_A_B(a, T1)',
                     'T1 = add_A_B(a, b); T0 = add_A_B(T1, b)'], a + b + b)
-    assert_compile(['T1 = add_A_A(a, a); T2 = add_A_A(a, T1); T0 = add_A_A(a, T2)'], a + a + a + a)
+    assert_compile(['T1 = add_A_A(a, a); T2 = add_A_A(T1, a); T0 = add_A_A(T2, a)'], a + a + a + a)
 
 def test_add_conversion():
     ctx, (A, a), (B, b) = create_mock_matrices('A B')
