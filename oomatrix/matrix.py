@@ -19,6 +19,8 @@ class Matrix(object):
     __array_priority__ = 10000
     
     def __init__(self, obj, name=None, diagonal=False, result_type=None):
+        if name is not None and not isinstance(name, (str, unicode)):
+            raise TypeError('matrix name must be a string')
         if isinstance(obj, ExpressionNode):
             if (name, diagonal) != (None, False):
                 raise TypeError("cannot provide options when passing an ExpressionNode")
