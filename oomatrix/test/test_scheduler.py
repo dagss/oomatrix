@@ -33,14 +33,14 @@ def test_basic():
     prog = s.schedule(func, [a, a, a, a])
     assert repr(prog) == dedent('''\
         <oomatrix.Program:[
-          T0 = adder(a, a) # cost=1e+00 FLOP
-          $result = multiplier(T0, T0) # cost=1e+00 FLOP
+          T0 = adder(a, a)
+          $result = multiplier(T0, T0)
         ]>''')
     assert repr(s.schedule(func, [a, a, a, a2])) == dedent('''\
         <oomatrix.Program:[
-          T0 = adder(a, a) # cost=1e+00 FLOP
-          T1 = adder(a, a_1) # cost=1e+00 FLOP
-          $result = multiplier(T0, T1) # cost=1e+00 FLOP
+          T0 = adder(a, a)
+          T1 = adder(a, a_1)
+          $result = multiplier(T0, T1)
         ]>''')
 
 def test_unnamed_arg():
@@ -50,5 +50,5 @@ def test_unnamed_arg():
     got = s.schedule(f_add, [anonymous, anonymous])
     assert repr(got) == dedent('''\
         <oomatrix.Program:[
-          $result = adder(input_0, input_0) # cost=1e+00 FLOP
+          $result = adder(input_0, input_0)
         ]>''')    
