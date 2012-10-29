@@ -138,27 +138,4 @@ class BasicScheduler(object):
             call_args = tuple(self._interpret_expression(arg_expr, function_args, None)
                               for arg_expr in arg_exprs)
             return self._interpret_function(call, call_args, result_variable)
-            
-    def _schedule(self, cnode, args, program, pool, result_variable):
-        result = pool.get((cnode, args), None)
-        if result is not None:
-            return result
-
-        if cnode.is_leaf:
-            return args[0]
-
-        # First make sure all the children have been scheduled and get the
-        # variable/matrix_impl their result will be stored in
-        child_results = []
-        for child, shuffle in zip(cnode.children, cnode.shuffle):
-            child_args = tuple(args[i] for i in shuffle)
-            child_result = self._schedule(child, child_args, program, pool, None)
-            child_results.append(child_result)
-
-        result_variable = 'T%d' % len(program) if result_variable is None else result_variable
-        statement = ComputeStatement(result_variable, cnode.computation, child_results,
-                                     cnode.weighted_cost)
-        program.append(statement)
-        pool[(cnode, args)] = result_variable
-        return result_variable
-        
+    
