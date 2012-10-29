@@ -34,13 +34,19 @@ def test_basic():
     assert repr(prog) == dedent('''\
         <oomatrix.Program:[
           T0 = adder(a, a)
+          del a
           $result = multiplier(T0, T0)
+          del T0
         ]>''')
     assert repr(s.schedule(func, [a, a, a, a2])) == dedent('''\
         <oomatrix.Program:[
           T0 = adder(a, a)
           T1 = adder(a, a_1)
+          del a
+          del a_1
           $result = multiplier(T0, T1)
+          del T0
+          del T1
         ]>''')
 
 def test_unnamed_arg():
@@ -51,4 +57,5 @@ def test_unnamed_arg():
     assert repr(got) == dedent('''\
         <oomatrix.Program:[
           $result = adder(input_0, input_0)
+          del input_0
         ]>''')    

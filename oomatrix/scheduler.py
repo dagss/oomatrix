@@ -21,6 +21,13 @@ class ComputeStatement(object):
         return '<oomatrix.ComputeStatement %s %s %s>' % (repr(self.result), self.computation,
                                                          self.args)
 
+class DeleteStatement(object):
+    def __init__(self, var):
+        self.var = var
+
+    def format(self, program):
+        return 'del %s' % program.get_matrix_name(self.var)
+
 class Program(object):
     """
     Mainly a list of ComputeStatement that we provide a nicer repr for.
@@ -46,11 +53,11 @@ class Program(object):
     def execute(self):
         variables = dict(self.name_to_matrix)
         for stat in self.statements:
-            fetched_args = [variables[key] for key in stat.args]
-            variables[stat.result] = stat.computation.compute(fetched_args)
-            #print stat.result, stat.computation.name, fetched_args
-        #print '==========='
-        #print
+            if type(stat) is ComputeStatement:
+                fetched_args = [variables[key] for key in stat.args]
+                variables[stat.result] = stat.computation.compute(fetched_args)
+            elif type(stat) is DeleteStatement:
+                del variables[stat.var]
         result = variables['$result']
         return result
 
@@ -107,13 +114,25 @@ class BasicScheduler(object):
         return '$result'        
     
     def schedule(self, cnode, args):
-        self.program = []
+        # First construct the basic program (linearize it)
+        program = self._interpret(cnode, args)
+        # Then delete temporary results at the point they're not needed
+        program = delete_temporaries(program)
+        return program
+    #
+    # Interpreter/linearization
+    #   
+
+    def _interpret(self, cnode, args):
+        self.program = program = []
         self.pool = {}
         arg_names, matrix_to_name = self._parse_args(args)
         ret_varname = self._get_result_varname()
         ret_var = self._interpret_function(cnode, tuple(arg_names), ret_varname)
         assert ret_var == ret_varname
-        return Program(self.program, matrix_to_name)
+        del self.program
+        del self.pool
+        return Program(program, matrix_to_name)
 
     def _interpret_function(self, func, args, result_variable):
         call, arg_exprs = func.expression[0], func.expression[1:]        
@@ -139,3 +158,15 @@ class BasicScheduler(object):
                               for arg_expr in arg_exprs)
             return self._interpret_function(call, call_args, result_variable)
     
+def delete_temporaries(program):
+    n = len(program.statements)
+    new_stats_reverse = []
+    deleted = set()
+    for i in range(n - 1, -1, -1):
+        for arg in program.statements[i].args[::-1]:
+            if arg not in deleted:
+                deleted.add(arg)
+                new_stats_reverse.append(DeleteStatement(arg))
+        new_stats_reverse.append(program.statements[i])
+    new_stats = new_stats_reverse[::-1]
+    return Program(new_stats, program.matrix_to_name)
