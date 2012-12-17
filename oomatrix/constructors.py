@@ -36,22 +36,36 @@ def block_diagonal_matrix(matrices):
         j += M.nrows
     return R
 
+def stack_matrices_vertically(matrices):
+    matrices = list(matrices)
+    i = 0
+    nrows = sum(M.nrows for M in matrices)
+    R = 0 # result matrix
+    for idx, M in enumerate(matrices):
+        # Make projection P so that P * M puts M on the right place;
+        # R = [M1 M2 M3]^t = P1 * M1 + P2 * M2 + P3 * M3
+        P = Matrix(RangeSelection(nrows, M.nrows, (i, i + M.nrows), (0, M.nrows)),
+                   'P%d' % idx)
+        R += P * M
+        i += M.nrows
+    return R
+
 def stack_matrices_horizontally(matrices):
     matrices = list(matrices)
     i = 0
-    n = sum(M.ncols for M in matrices)
+    ncols = sum(M.ncols for M in matrices)
     R = 0 # result matrix
     for idx, M in enumerate(matrices):
-        assert M.ncols == M.nrows
         # Make projection P so that M * P puts M on the right place;
         # R = [M1 M2 M3] = M1 * P1 + M1 * P2 + M3 * P3
-        P = Matrix(RangeSelection(M.nrows, n, (0, M.nrows), (i, i + M.ncols)),
+        P = Matrix(RangeSelection(M.ncols, ncols, (0, M.ncols), (i, i + M.ncols)),
                    'P%d' % idx)
         R += M * P
         i += M.ncols
     return R
 
 def block_matrix(matrices):
+    matrices = np.asarray(matrices, dtype=object)
     n = sum(M.nrows for M in matrices[:, 0])
     m = sum(M.ncols for M in matrices[0, :])
 
@@ -78,3 +92,6 @@ def block_matrix(matrices):
             R += P_list[im].h * matrices[im, jm] * Pp_list[jm]
     return R
     
+def gather_matrix(indices, nrows, ncols, name=None):
+    from .selection import GatherMatrix
+    return Matrix(GatherMatrix(indices, nrows, ncols), name)

@@ -292,6 +292,9 @@ class Matrix(object):
     def bracket(self):
         return Matrix(symbolic.BracketNode(self._expr, allowed_kinds=None))
 
+    def as_immutable(self):
+        return self
+
     #
     # array conversion
     #

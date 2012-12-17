@@ -65,3 +65,27 @@ for kind, order in [(Strided, 'C')]: #, (ColumnMajor, 'F'), (Strided, 'C')]:
         assert out.shape[1] == self.ncols
         #1/0 # transposes too!
         return kind(out)
+
+
+class GatherMatrix(Selection):
+    """
+    self * dense gathers the given columns to the output.
+    The transpose is a scatter matrix.
+    """
+    def __init__(self, indices, nrows, ncols):
+        self.indices = np.asarray(indices, dtype=int)
+        self.nrows = nrows
+        self.ncols = ncols
+        
+
+@computation(GatherMatrix * Strided, Strided, cost=0) # TODO cost
+def gather(self, dense):
+    return Strided(dense.array[self.indices, :])
+
+@computation(GatherMatrix.h * Strided, Strided, cost=0) # TODO cost
+def scatter(self, dense):
+    nrows = self.ncols # transpose
+    out = np.zeros((nrows, dense.ncols))
+    out[self.indices, :] = dense.array
+    return Strided(out)
+    

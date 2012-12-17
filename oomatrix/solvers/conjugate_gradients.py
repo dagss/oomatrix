@@ -23,11 +23,15 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
                         maxit=10**3, eps=10**-8,
                         relative_eps=True,
                         raise_error=True,
-                        norm_order=None, logger=None, compiler=None):
+                        norm_order=None, logger=None, compiler=None,
+                        stop_rule='residual'):
     """
    
 
     """
+
+    assert stop_rule in ('preconditioned_residual', 'residual')
+    
     b = np.asarray(b)
     if x0 is None:
         x0 = np.zeros(b.shape, dtype=b.dtype, order='F')
@@ -45,19 +49,27 @@ def conjugate_gradients(A, b, preconditioner=None, x0=None,
 
     d = compute_array(preconditioner * r, compiler=compiler).copy('F')
     delta_0 = delta_new = np.sum(r * d, axis=0)
-    delta_stop = eps**2 * delta_0
 
-    if logger is not None:
-        logger.info('Initial residual %e, stopping at %e', np.sqrt(delta_0), np.sqrt(delta_stop))
+    if stop_rule == 'preconditioned_residual':
+        stop_treshold = eps**2 * delta_0
+    elif stop_rule == 'residual':
+        stop_treshold = eps**2 * np.dot(r.T, r)[0, 0]
 
     info['residuals'] = residuals = [delta_0]
     info['error'] = None
 
     x = x0
     for k in xrange(maxit):
-        logger.info('Iteration %d: Residual %e (terminating at %e)', k,
-                    np.sqrt(delta_new), np.sqrt(delta_stop))
-        if delta_new < delta_stop:
+
+        if stop_rule == 'preconditioned_residual':
+            stop_measure = delta_new
+        elif stop_rule == 'residual':
+            stop_measure = np.dot(r.T, r)[0, 0]
+
+        logger.info('Iteration %d: %e (terminating at %e)', k,
+                    np.sqrt(stop_measure), np.sqrt(stop_treshold))
+            
+        if stop_measure < stop_treshold:
             info['iterations'] = k
             return (x, info)            
         

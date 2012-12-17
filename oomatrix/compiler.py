@@ -558,6 +558,7 @@ class GreedyCompilation():
         # We parenthize expression and compile each resulting part greedily, at least
         # for now. Considering the entire multiplication expression non-greedily should
         # be rather tractable though.
+
         if len(node.children) > 2:
             # Break up expression using associative rule, trying each split position
             best_cnode = None
@@ -700,35 +701,24 @@ def find_cost(computation, meta_args):
     return computation.get_cost(meta_args)
 
 
-class BaseCompiler(object):
-    def __init__(self):
-        self.cache = {}
-
-    def compile_as_task(self, expression):
-        meta_tree, args = transforms.metadata_transform(expression)
-        result = self.cache.get(meta_tree, None)
-        if result is None:
-            compilation = self.compilation_factory()
-            result = compilation.compile(meta_tree)
-            self.cache[meta_tree] = result
-            if hasattr(compilation, 'stats'):
-                self.stats = compilation.stats
-        return result, args
-
-class GreedyCompiler(BaseCompiler):
+class GreedyCompiler(object):
     compilation_factory = GreedyCompilation
+    
+    def __init__(self):
+        self.compiled_cache = {}
 
     def _compile(self, expression):
         meta_tree, args = transforms.metadata_transform(expression)
-        _, index_args = transforms.ImplToMetadataTransform().execute(meta_tree)
-        compiled_tree = self.cache.get(meta_tree, None)
+        compiled_tree = self.compiled_cache.get(meta_tree, None)
         if compiled_tree is None:
             compilation = self.compilation_factory()
-            self.cache[meta_tree] = compiled_tree = compilation.compile(meta_tree)
-        return compiled_tree, args, index_args
+            self.compiled_cache[meta_tree] = compiled_tree = compilation.compile(meta_tree)
+        return compiled_tree, args
+
+        program = BasicScheduler().schedule(compiled_tree, args)
 
     def compile(self, expression):
-        compiled_tree, args, index_args = self._compile(expression)
+        compiled_tree, args = self._compile(expression)
         return compiled_tree, args
 
 default_compiler_instance = GreedyCompiler()
