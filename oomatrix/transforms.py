@@ -1,4 +1,4 @@
-from . import metadata, symbolic, utils, task
+from . import metadata, symbolic, utils
 
 
 class ImplToMetadataTransform(object):

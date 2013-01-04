@@ -15,7 +15,6 @@ from . import formatter, symbolic, cost_value, transforms, utils, metadata, deco
 from .kind import lookup_computations, MatrixKind
 from .computation import ImpossibleOperationError
 from pprint import pprint
-from .task import Task
 from .symbolic import TaskLeaf
 from .metadata import MatrixMetadata
 from .cost_value import FLOP, INVOCATION
@@ -164,66 +163,6 @@ def get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas, c
         cost_scalars = [cost.weigh(cost_map) for cost in costs]
         i = np.argmin(cost_scalars)
         result[target_kind] = (cost_scalars[i], costs[i], computations[i])
-    return result
-
-def get_cheapest_computations(universe, match_expr, args, target_metadata, cost_map, symbolic_expr):
-    """
-    Returns the cheapest computation for each target kind, as
-    a list of Task.
-
-    match_expr: Kind-expression to match ("kind", "kind_a + kind_b", etc.)
-    args: List of Task arguments to the computation
-    target_meta: The metadata of the result, *except* that the kind is ignored/overwritten. This is
-      used as a template when constructing tasks. (TBD: refactor)
-    
-    """
-    arg_metadatas = [arg.metadata for arg in args]
-    d = get_cheapest_computations_by_metadata(universe, match_expr, arg_metadatas,
-                                              cost_map)
-    possible_tasks = []
-    for target_kind, (cost_scalar, cost, computation) in d.iteritems():
-        metadata = target_metadata.copy_with_kind(target_kind)
-        task = Task(computation, cost, args, metadata, symbolic_expr)
-        possible_tasks.append(task)
-    return possible_tasks
-
-def fill_in_conversions(options, cost_map):
-    """
-    The given task_options are supposed to be different possible
-    tasks for the *same* computation. Complete this list by adding
-    conversions to all possible kinds. The resulting list will contain
-    exactly one option for each kind (the cheapest one), and will be
-    sorted from cheapest to most expensive.
-    """
-    # For each option task, run a depth first search through all conversions
-    def dfs_insert(d, task):
-        meta = task.metadata
-        kind = meta.kind
-        # Abort if it is more expensive than existing task
-        old_cost, old_task = d.get(kind, (np.inf, None))
-        cost = task.get_total_cost().weigh(cost_map)
-        if cost >= old_cost:
-            return
-
-        # Insert new, cheaper task...
-        d[kind] = (cost, task)
-
-        # ...and recursively try all conversions from here
-        new_tasks = get_cheapest_computations(kind.universe, kind, [task], meta, cost_map, None)
-        for new_task in new_tasks:
-            dfs_insert(d, new_task)
-
-    # For each input option, run a dfs with that task as root to insert
-    # it with all conversions. Once the dfs encounters the result of an
-    # earlier inserted task with lower cost it aborts the branch.
-    d = {} # { kind : (cost, task) }
-    for task in options:
-        dfs_insert(d, task)
-
-    # Sort the result into a list and return it
-    pre_result = [(cost, task) for kind, (cost, task) in d.iteritems()]
-    pre_result.sort()
-    result = [task for cost, task in pre_result]
     return result
 
 class GreedyAdditionFinder(object):

@@ -24,7 +24,7 @@ from functools import total_ordering
 
 from .cost_value import FLOP, INVOCATION
 from .utils import argsort, invert_permutation
-from . import kind, cost_value, metadata, task
+from . import kind, cost_value, metadata
 
 from hashlib import sha256
 
@@ -424,9 +424,6 @@ class MatrixMetadataLeaf(ExpressionNode):
 
     def _repr(self, indent):
         return [indent + '<arg:%s, %r>' % (self.leaf_index, self.metadata)]
-
-    def as_task(self):
-        return task.Argument(self.leaf_index, self.metadata)
 
 class TaskLeaf(ExpressionNode):
     kind = universe = ncols = nrows = dtype = None # TODO remove these from symbolic tree
