@@ -5,6 +5,7 @@ from . import symbolic, decompositions
 from .kind import MatrixImpl
 from .symbolic import ExpressionNode, LeafNode
 from .formatter import default_formatter_factory
+from .computation import ImpossibleOperationError
 
 __all__ = ['Matrix']
 
@@ -109,15 +110,25 @@ class Matrix(object):
         if isinstance(self._expr, symbolic.LeafNode):
             return self
 
-        from .scheduler import BasicScheduler
-        if compiler is None:
-            from .compiler import default_compiler_instance as compiler
-        
-        compiled_tree, args = compiler.compile(self._expr)
-        program = BasicScheduler().schedule(compiled_tree, args)
-        result = program.execute()
-        result_matrix = Matrix(result, name=name)
-        return result_matrix
+        try:
+            from .scheduler import BasicScheduler
+            if compiler is None:
+                from .compiler import default_compiler_instance as compiler
+
+            compiled_tree, args = compiler.compile(self._expr)
+            program = BasicScheduler().schedule(compiled_tree, args)
+            result = program.execute()
+            result_matrix = Matrix(result, name=name)
+            return result_matrix
+        except ImpossibleOperationError:
+            # try vector by vector to create dense matrix
+            out = np.empty((self.nrows, self.ncols), self.dtype)
+            v = np.zeros((self.ncols, 1))
+            for i in range(self.ncols):
+                v[i] = 1
+                out[:, i:i + 1] = (self * v).compute().as_array()
+                v[i] = 0
+            return Matrix(out)
 
     def explain(self, compiler=None):
         from .scheduler import BasicScheduler
